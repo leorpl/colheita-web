@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NazcaTrack - Talhão</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      body{background:linear-gradient(180deg,var(--bg0),var(--bg1))}
+      .public{max-width:1180px;margin:0 auto;padding:18px}
+      .hero{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px}
+      .hero .title{font-family:var(--serif);font-size:22px;color:rgba(255,255,255,.96)}
+      .hero .sub{color:rgba(255,255,255,.72);font-size:12px;margin-top:4px}
+      .hero-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+      .card{border-radius:16px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.08);box-shadow:var(--shadow2);overflow:hidden}
+      .card-in{padding:14px}
+      .grid2{display:grid;grid-template-columns:.95fr 1.05fr;gap:14px}
+      @media (max-width: 920px){.grid2{grid-template-columns:1fr}}
+      .kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;margin-top:10px}
+      .kv .k{color:rgba(255,255,255,.70);font-size:12px}
+      .kv .v{color:rgba(255,255,255,.92);font-size:13px}
+      .mstat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+      .mstat{border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);padding:10px 10px}
+      .mstat-k{color:rgba(255,255,255,.70);font-size:12px}
+      .mstat-v{margin-top:6px;font-family:var(--serif);font-size:18px;color:rgba(255,255,255,.94)}
+      .note{margin-top:10px;color:rgba(255,255,255,.66);font-size:12px;line-height:1.35}
+      .photo{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:14px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06)}
+      .map-wrap{position:relative}
+      .map-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:14px;text-align:center;border-radius:14px;border:1px solid rgba(255,255,255,.14);background:rgba(10,12,16,.55);color:rgba(255,255,255,.78);font-size:12px}
+      .map-ph.hidden{display:none}
+      .badge{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:rgba(255,255,255,.84);font-size:12px}
+      .badge code{font-family:var(--mono);font-size:11px}
+      .section{margin-top:14px}
+      .section h2{margin:0;color:rgba(255,255,255,.92);font-family:var(--serif);font-size:16px}
+      .section .hint{color:rgba(255,255,255,.70)}
+      .table-wrap{border-color:rgba(255,255,255,.10)}
+      table{background:rgba(255,255,255,.82)}
+    </style>
+  </head>
+  <body>
+    <div class="bg"><div class="grain"></div><div class="halo"></div></div>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-logo" src="/logo.png" alt="Fazenda Nazca" />
+        <div>
+           <div class="brand-title">NazcaTrack</div>
+           <div class="brand-sub">Fazenda Nazca - Talhão</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <a class="btn ghost" href="/#/talhoes">Voltar</a>
+      </div>
+    </header>
+
+    <div class="public" id="root">
+      <div class="hero">
+        <div>
+           <div class="title" id="tTitle">Talhão</div>
+          <div class="sub" id="tSub">Carregando...</div>
+        </div>
+        <div class="hero-actions">
+          <span class="badge">Link: <code id="tLink">-</code></span>
+          <button class="btn ghost" id="btnCopy" type="button">Copiar link</button>
+          <button class="btn" id="btnPrint" type="button">Imprimir</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="grid2">
+          <div class="card"><div class="card-in" id="info">Carregando...</div></div>
+          <div class="card"><div class="card-in" id="media">Carregando...</div></div>
+        </div>
+      </div>
+
+      
+    </div>
+
+    <script src="/talhao.js" type="module"></script>
+  </body>
+</html>

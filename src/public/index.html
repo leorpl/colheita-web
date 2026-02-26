@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NazcaTrack - Fazenda Nazca</title>
+    <meta name="description" content="NazcaTrack Fazenda Nazca: controle interno de colheita (viagens, descontos, sacas, fretes e relatorios)." />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="bg">
+      <div class="grain"></div>
+      <div class="halo"></div>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-logo" src="/logo.png" alt="Fazenda Nazca" />
+        <div>
+          <div class="brand-title">NazcaTrack</div>
+          <div class="brand-sub">Fazenda Nazca - Colheita</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="btn ghost" id="btnRefresh">Atualizar</button>
+        <a class="btn" href="#/colheita">Nova colheita</a>
+      </div>
+    </header>
+
+    <div class="shell">
+      <aside class="nav">
+        <nav>
+          <a class="nav-item" href="#/painel" data-route="painel">Painel</a>
+          <div class="nav-section">Cadastros</div>
+          <a class="nav-item" href="#/safras" data-route="safras">Safras</a>
+          <a class="nav-item" href="#/talhoes" data-route="talhoes">Talhões</a>
+          <a class="nav-item" href="#/destinos" data-route="destinos">Destinos</a>
+          <a class="nav-item" href="#/tipos-plantio" data-route="tipos-plantio">Tipos de plantio</a>
+          <a class="nav-item" href="#/motoristas" data-route="motoristas">Motoristas</a>
+          <a class="nav-item" href="#/fretes" data-route="fretes">Fretes</a>
+          <a class="nav-item" href="#/regras-destino" data-route="regras-destino">Regras do destino</a>
+          <div class="nav-section">Operacao</div>
+          <a class="nav-item" href="#/colheita" data-route="colheita">Colheita</a>
+          <a class="nav-item" href="#/area-colhida" data-route="area-colhida">Area colhida</a>
+          <a class="nav-item" href="#/quitacao-motoristas" data-route="quitacao-motoristas">Quitação motoristas</a>
+          <div class="nav-section">Relatórios</div>
+          <a class="nav-item" href="#/relatorios" data-route="relatorios">Relatórios</a>
+
+          <div class="nav-section">Sobre</div>
+          <a class="nav-item" href="#/fazenda" data-route="fazenda">Fazenda Nazca</a>
+
+          <div class="nav-section">Config</div>
+          <a class="nav-item" href="#/usuarios" data-route="usuarios">Usuários</a>
+        </nav>
+        <div class="nav-foot">
+          <div class="mini">
+            <div class="mini-k">API</div>
+            <a class="mini-v" href="/api/health" target="_blank" rel="noreferrer">/api/health</a>
+          </div>
+          <div class="mini">
+            <div class="mini-k">Banco</div>
+            <div class="mini-v">SQLite (local)</div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+        <div id="view" class="view"></div>
+      </main>
+    </div>
+
+    <dialog id="dlg" class="dlg">
+      <form method="dialog" class="dlg-card" id="dlgForm">
+        <div class="dlg-head">
+          <div class="dlg-title" id="dlgTitle">Formulario</div>
+          <button class="icon" value="cancel" aria-label="Fechar">×</button>
+        </div>
+        <div class="dlg-body" id="dlgBody"></div>
+        <div class="dlg-actions" id="dlgActions">
+          <button class="btn ghost" value="cancel">Cancelar</button>
+          <button class="btn" id="dlgSubmit" value="default">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

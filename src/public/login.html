@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NazcaTrack - Login</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="bg"><div class="grain"></div><div class="halo"></div></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-logo" src="/logo.png" alt="Fazenda Nazca" />
+        <div>
+          <div class="brand-title">NazcaTrack</div>
+          <div class="brand-sub">Acesso</div>
+        </div>
+      </div>
+    </header>
+
+    <main class="shell" style="grid-template-columns:1fr">
+      <section class="panel" style="max-width:520px;margin:0 auto">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Login</div>
+            <div class="panel-sub">Entre para acessar o sistema.</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <form class="form-grid" id="loginForm">
+            <div class="field col12">
+              <div class="label">Usuario</div>
+              <input name="username" autocomplete="username" />
+            </div>
+            <div class="field col12">
+              <div class="label">Senha</div>
+              <input name="password" type="password" autocomplete="current-password" />
+            </div>
+            <div class="field col12" style="display:flex;justify-content:flex-end">
+              <button class="btn" type="submit">Entrar</button>
+            </div>
+            <div class="hint" id="msg"></div>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/login.js"></script>
+  </body>
+</html>
