@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { motoristaRepo } from '../../repositories/motoristaRepo.js'
 import { notFound } from '../../errors.js'
 import { validateBody } from '../../middleware/validate.js'
+import { requirePerm } from '../../middleware/auth.js'
+import { Permissions } from '../../auth/permissions.js'
 
 export const motoristasRouter = Router()
 
@@ -19,29 +21,39 @@ const MotoristaBody = z.object({
     .nullable(),
 })
 
-motoristasRouter.get('/', (_req, res) => {
+motoristasRouter.get('/', requirePerm(Permissions.CADASTROS_READ), (_req, res) => {
   res.json(motoristaRepo.list())
 })
 
-motoristasRouter.post('/', validateBody(MotoristaBody), (req, res) => {
+motoristasRouter.post(
+  '/',
+  requirePerm(Permissions.CADASTROS_WRITE),
+  validateBody(MotoristaBody),
+  (req, res) => {
   const row = motoristaRepo.create(req.body)
   res.status(201).json(row)
-})
+  },
+)
 
-motoristasRouter.get('/:id', (req, res) => {
+motoristasRouter.get('/:id', requirePerm(Permissions.CADASTROS_READ), (req, res) => {
   const row = motoristaRepo.get(Number(req.params.id))
   if (!row) throw notFound('Motorista nao encontrado')
   res.json(row)
 })
 
-motoristasRouter.put('/:id', validateBody(MotoristaBody), (req, res) => {
+motoristasRouter.put(
+  '/:id',
+  requirePerm(Permissions.CADASTROS_WRITE),
+  validateBody(MotoristaBody),
+  (req, res) => {
   const id = Number(req.params.id)
   const exists = motoristaRepo.get(id)
   if (!exists) throw notFound('Motorista nao encontrado')
   res.json(motoristaRepo.update(id, req.body))
-})
+  },
+)
 
-motoristasRouter.delete('/:id', (req, res) => {
+motoristasRouter.delete('/:id', requirePerm(Permissions.CADASTROS_WRITE), (req, res) => {
   const id = Number(req.params.id)
   const exists = motoristaRepo.get(id)
   if (!exists) throw notFound('Motorista nao encontrado')

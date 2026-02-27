@@ -56,13 +56,13 @@ export const destinoRegraRepo = {
   upsertPlantio(data) {
     db.prepare(
       `INSERT INTO destino_regra_plantio (
-         safra_id, destino_id, tipo_plantio, trava_sacas,
+         safra_id, destino_id, tipo_plantio, trava_sacas, valor_compra_por_saca,
          custo_silo_por_saca, custo_terceiros_por_saca,
          impureza_limite_pct, ardidos_limite_pct, queimados_limite_pct,
          avariados_limite_pct, esverdiados_limite_pct, quebrados_limite_pct,
          updated_at
        ) VALUES (
-         @safra_id, @destino_id, @tipo_plantio, @trava_sacas,
+         @safra_id, @destino_id, @tipo_plantio, @trava_sacas, @valor_compra_por_saca,
          @custo_silo_por_saca, @custo_terceiros_por_saca,
          @impureza_limite_pct, @ardidos_limite_pct, @queimados_limite_pct,
          @avariados_limite_pct, @esverdiados_limite_pct, @quebrados_limite_pct,
@@ -70,6 +70,7 @@ export const destinoRegraRepo = {
        )
        ON CONFLICT(safra_id, destino_id, tipo_plantio) DO UPDATE SET
          trava_sacas=excluded.trava_sacas,
+         valor_compra_por_saca=excluded.valor_compra_por_saca,
          custo_silo_por_saca=excluded.custo_silo_por_saca,
          custo_terceiros_por_saca=excluded.custo_terceiros_por_saca,
          impureza_limite_pct=excluded.impureza_limite_pct,
@@ -98,6 +99,69 @@ export const destinoRegraRepo = {
          ORDER BY d.local`,
       )
       .all(safra_id)
+  },
+
+  listPlantio({ safra_id } = {}) {
+    const where = []
+    const params = {}
+    if (safra_id) {
+      where.push('rp.safra_id = @safra_id')
+      params.safra_id = safra_id
+    }
+    const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+    return db
+      .prepare(
+        `SELECT
+           rp.*, s.safra as safra_nome,
+           d.local as destino_local, d.codigo as destino_codigo
+         FROM destino_regra_plantio rp
+         JOIN safra s ON s.id = rp.safra_id
+         JOIN destino d ON d.id = rp.destino_id
+         ${sqlWhere}
+         ORDER BY
+           CASE WHEN rp.updated_at IS NULL OR rp.updated_at='' THEN 1 ELSE 0 END,
+           rp.updated_at DESC,
+           rp.id DESC`,
+      )
+      .all(params)
+  },
+
+  listPlantioBySafraTipo({ safra_id, tipo_plantio }) {
+    const sid = Number(safra_id)
+    const tp = String(tipo_plantio || '').trim().toUpperCase()
+    if (!Number.isInteger(sid) || sid <= 0) return []
+    if (!tp) return []
+
+    return db
+      .prepare(
+        `SELECT
+           rp.*, s.safra as safra_nome,
+           d.local as destino_local, d.codigo as destino_codigo
+         FROM destino_regra_plantio rp
+         JOIN safra s ON s.id = rp.safra_id
+         JOIN destino d ON d.id = rp.destino_id
+         WHERE rp.safra_id = @safra_id
+           AND UPPER(rp.tipo_plantio) = @tipo_plantio
+         ORDER BY d.local`,
+      )
+      .all({ safra_id: sid, tipo_plantio: tp })
+  },
+
+  getPlantioById(id) {
+    return db
+      .prepare(
+        `SELECT rp.*, s.safra as safra_nome, d.local as destino_local, d.codigo as destino_codigo
+         FROM destino_regra_plantio rp
+         JOIN safra s ON s.id = rp.safra_id
+         JOIN destino d ON d.id = rp.destino_id
+         WHERE rp.id=?`,
+      )
+      .get(id)
+  },
+
+  removePlantio(id) {
+    return db.prepare('DELETE FROM destino_regra_plantio WHERE id=?').run(id)
   },
 
   getUmidadeFaixas(destino_regra_id) {
@@ -156,5 +220,37 @@ export const destinoRegraRepo = {
 
     tx()
     return this.getUmidadeFaixasPlantio(destino_regra_plantio_id)
+  },
+
+  getCompraFaixasPlantio(destino_regra_plantio_id) {
+    return db
+      .prepare(
+        `SELECT * FROM destino_compra_faixa_plantio
+         WHERE destino_regra_plantio_id=?
+         ORDER BY sacas_gt, COALESCE(sacas_lte, 1e18)`,
+      )
+      .all(destino_regra_plantio_id)
+  },
+
+  replaceCompraFaixasPlantio(destino_regra_plantio_id, faixas) {
+    const tx = db.transaction(() => {
+      db.prepare(
+        'DELETE FROM destino_compra_faixa_plantio WHERE destino_regra_plantio_id=?',
+      ).run(destino_regra_plantio_id)
+
+      const stmt = db.prepare(
+        `INSERT INTO destino_compra_faixa_plantio (
+           destino_regra_plantio_id, sacas_gt, sacas_lte, preco_por_saca, updated_at
+         ) VALUES (
+           @destino_regra_plantio_id, @sacas_gt, @sacas_lte, @preco_por_saca, datetime('now')
+         )`,
+      )
+      for (const f of faixas) {
+        stmt.run({ destino_regra_plantio_id, ...f })
+      }
+    })
+
+    tx()
+    return this.getCompraFaixasPlantio(destino_regra_plantio_id)
   },
 }

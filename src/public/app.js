@@ -1,6 +1,8 @@
 const view = document.querySelector('#view')
 const toastEl = document.querySelector('#toast')
 const btnRefresh = document.querySelector('#btnRefresh')
+const btnToggleNav = document.querySelector('#btnToggleNav')
+const btnAuth = document.querySelector('#btnAuth')
 
 const dlg = document.querySelector('#dlg')
 const dlgTitle = document.querySelector('#dlgTitle')
@@ -430,7 +432,8 @@ function helpTip(text) {
   return `<button class="help" type="button" aria-label="Ajuda" data-help="${t}" title="${t}">?</button>`
 }
 
-function openDialog({ title, bodyHtml, onSubmit, submitLabel = 'Salvar' }) {
+function openDialog({ title, bodyHtml, onSubmit, submitLabel = 'Salvar', size } = {}) {
+  dlg.dataset.size = size ? String(size) : ''
   dlgTitle.textContent = title
   dlgBody.innerHTML = bodyHtml
   dlgSubmit.textContent = submitLabel
@@ -446,8 +449,58 @@ function openDialog({ title, bodyHtml, onSubmit, submitLabel = 'Salvar' }) {
     e.preventDefault()
     const fd = new FormData(dlgForm)
     const obj = Object.fromEntries(fd.entries())
-    if (onSubmit) await onSubmit(obj)
-    dlg.close('default')
+    try {
+      if (onSubmit) await onSubmit(obj)
+      dlg.close('default')
+    } catch (err) {
+      const msg = String(err?.message || err)
+      const details = err?.details || null
+
+      // Erros "guiados" (exigem cadastro) -> abre overlay com atalho
+      if (msg.includes('Cadastre em Fretes')) {
+        const sid = details?.safra_id
+        const did = details?.destino_id
+        const mid = details?.motorista_id
+        const safraNome = (cache?.safras || []).find((s) => Number(s.id) === Number(sid))?.safra
+        const destNome = (cache?.destinos || []).find((d) => Number(d.id) === Number(did))?.local
+        const motNome = (cache?.motoristas || []).find((m) => Number(m.id) === Number(mid))?.nome
+        showDialogOverlay({
+          title: 'Nao foi possivel salvar',
+          primaryLabel: 'Ir para Fretes',
+          onPrimary: () => {
+            window.location.hash = '#/fretes'
+          },
+          bodyHtml: `
+            <div>${escapeHtml(msg)}</div>
+            <div class="hint" style="margin-top:10px">Chave: Safra <b>${escapeHtml(String(safraNome || sid || '-'))}</b> | Destino <b>${escapeHtml(String(destNome || did || '-'))}</b> | Motorista <b>${escapeHtml(String(motNome || mid || '-'))}</b></div>
+          `.trim(),
+        })
+        return
+      }
+
+      if (msg.includes('Cadastre em Regras do destino')) {
+        const sid = details?.safra_id
+        const did = details?.destino_id
+        const tp = details?.tipo_plantio
+        const safraNome = (cache?.safras || []).find((s) => Number(s.id) === Number(sid))?.safra
+        const destNome = (cache?.destinos || []).find((d) => Number(d.id) === Number(did))?.local
+        showDialogOverlay({
+          title: 'Nao foi possivel salvar',
+          primaryLabel: 'Ir para Regras do destino',
+          onPrimary: () => {
+            window.location.hash = '#/regras-destino'
+          },
+          bodyHtml: `
+            <div>${escapeHtml(msg)}</div>
+            <div class="hint" style="margin-top:10px">Chave: Safra <b>${escapeHtml(String(safraNome || sid || '-'))}</b> | Destino <b>${escapeHtml(String(destNome || did || '-'))}</b> | Plantio <b>${escapeHtml(String(tp || '-'))}</b></div>
+          `.trim(),
+        })
+        return
+      }
+
+      // fallback
+      toast('Erro', msg)
+    }
   }
 
   // ESC should behave like cancel
@@ -456,14 +509,24 @@ function openDialog({ title, bodyHtml, onSubmit, submitLabel = 'Salvar' }) {
     dlg.close('cancel')
   }
 
+  const clearSize = () => {
+    dlg.removeEventListener('close', clearSize)
+    if (dlg.dataset.size) dlg.dataset.size = ''
+  }
+  dlg.addEventListener('close', clearSize)
+
   dlg.showModal()
 }
 
 function confirmDanger(message) {
+  return confirmAction(message, { title: 'Confirmar', confirmLabel: 'Excluir' })
+}
+
+function confirmAction(message, { title = 'Confirmar', confirmLabel = 'Confirmar' } = {}) {
   return new Promise((resolve) => {
     openDialog({
-      title: 'Confirmar',
-      submitLabel: 'Excluir',
+      title,
+      submitLabel: confirmLabel,
       bodyHtml: `<div class="hint">${escapeHtml(message)}</div>`,
       onSubmit: async () => resolve(true),
     })
@@ -475,17 +538,95 @@ function confirmDanger(message) {
   })
 }
 
+function showDialogOverlay({
+  title = 'Atencao',
+  bodyHtml = '',
+  primaryLabel = 'OK',
+  onPrimary,
+} = {}) {
+  // Overlay dentro do <dialog> atual (mantem o formulario intacto)
+  if (!dlgForm) {
+    toast('Erro', String(title || 'Erro'))
+    return
+  }
+
+  dlgForm.querySelectorAll('.dlg-overlay').forEach((el) => el.remove())
+
+  const wrap = document.createElement('div')
+  wrap.className = 'dlg-overlay'
+  wrap.innerHTML = `
+    <div class="dlg-overlay-card" role="dialog" aria-modal="true">
+      <div class="dlg-overlay-title">${escapeHtml(title)}</div>
+      <div class="dlg-overlay-body">${bodyHtml}</div>
+      <div class="dlg-overlay-actions">
+        <button class="btn ghost" type="button" data-act="close">Fechar</button>
+        <button class="btn" type="button" data-act="primary">${escapeHtml(primaryLabel)}</button>
+      </div>
+    </div>
+  `.trim()
+
+  const close = () => wrap.remove()
+
+  wrap.addEventListener('click', (e) => {
+    const act = e.target?.closest?.('button')?.dataset?.act
+    if (act === 'close') return close()
+    if (act === 'primary') {
+      try {
+        if (onPrimary) onPrimary()
+      } finally {
+        close()
+      }
+    }
+  })
+
+  // click fora fecha
+  wrap.addEventListener('mousedown', (e) => {
+    if (e.target === wrap) close()
+  })
+
+  dlgForm.appendChild(wrap)
+  const btn = wrap.querySelector('button[data-act="primary"]')
+  if (btn) btn.focus()
+}
+
 function asNumberOrNull(v) {
   if (v === '' || v === null || v === undefined) return null
-  const n = Number(v)
+  const n = parseNumberPt(v)
   return Number.isFinite(n) ? n : null
 }
 
 function parseNumberPt(v) {
   if (v === null || v === undefined) return NaN
   if (typeof v === 'number') return v
-  const s = String(v).trim().replace(',', '.')
-  return Number(s)
+
+  // Aceita formatos comuns pt-BR:
+  // - 7000
+  // - 7.000
+  // - 7.000,50
+  // - 7000,50
+  const raw = String(v).trim()
+  if (!raw) return NaN
+  const s0 = raw.replace(/\s+/g, '')
+
+  // Se tiver ',' e '.', assume '.' como milhar e ',' como decimal.
+  if (s0.includes(',') && s0.includes('.')) {
+    const s1 = s0.replace(/\./g, '').replace(',', '.')
+    return Number(s1)
+  }
+
+  // Se tiver so ',', e decimal.
+  if (s0.includes(',')) {
+    return Number(s0.replace(',', '.'))
+  }
+
+  // Se tiver so '.', pode ser decimal (7000.5) ou milhar (7.000).
+  // Heuristica: se o ultimo grupo tem 3 digitos e nao ha outro separador, trata como milhar.
+  if (s0.includes('.')) {
+    const m = s0.match(/\.(\d{3})$/)
+    if (m) return Number(s0.replace(/\./g, ''))
+  }
+
+  return Number(s0)
 }
 
 function parseLatLngFromGoogleMapsUrl(url) {
@@ -652,6 +793,18 @@ function legendHtml(parts) {
 const DEFAULT_MAPS_URL =
   'https://www.google.com/maps/d/edit?mid=1I31t4h-O1Scw04_yJqcTAs8EqUid5IE&usp=sharing'
 
+function talhaoPublicUrl({ id, baseOrigin }) {
+  const origin = String(baseOrigin || '').trim().replace(/\/+$/, '')
+  const safeOrigin = origin || location.origin
+  return `${safeOrigin}/talhao.html?id=${encodeURIComponent(id)}`
+}
+
+function qrImageUrlForText(text) {
+  const data = encodeURIComponent(String(text || ''))
+  // Serviço simples (gera PNG). Mantemos via https e liberado pelo CSP (img-src https:).
+  return `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${data}`
+}
+
 async function renderPainel() {
   activeNav('painel')
   const p = await api('/api/relatorios/painel')
@@ -661,31 +814,40 @@ async function renderPainel() {
   const totalsUlt = p.totals_ultima_safra
   const safraLabel = atual?.safra ? String(atual.safra) : '-'
   const safraHint = p.safra_painel ? 'Definida em Safras' : 'Ultima safra cadastrada'
+
+  const areaPlantada = Number(p.area_plantada_ha || 0)
+  const areaColhida = Number(p.area_colhida_ultima_safra_ha || 0)
+  const areaPct = areaPlantada > 0 ? clamp01(areaColhida / areaPlantada) : 0
+
+  const perdasUlt = Number(p.perdas_ultima_safra_pct || 0)
+  const perdasGer = Number(p.perdas_geral_pct || 0)
+  const umidMedUlt = Number(p.umidade_media_ponderada_ultima_safra || 0)
+  const umidMedGer = Number(p.umidade_media_ponderada_geral || 0)
   setView(`
     <section class="panel">
       <div class="panel-head">
         <div>
           <div class="panel-title">Painel</div>
-          <div class="panel-sub">Safra selecionada: <b>${escapeHtml(safraLabel)}</b> <span style="opacity:.8">(${escapeHtml(safraHint)})</span> | Comparativo: total geral x total da safra.</div>
+          <div class="panel-sub">Safra selecionada: <b>${escapeHtml(safraLabel)}</b> <span style="opacity:.8">(${escapeHtml(safraHint)})</span></div>
         </div>
         <div class="pill"><span class="dot"></span><span>Online</span></div>
       </div>
       <div class="panel-body">
         <div class="grid">
           <div class="stat span4">
-            <div class="stat-k">Area plantada (ha)</div>
-            <div class="stat-v">${fmtNum(p.area_plantada_ha, 2)}</div>
-            <div class="stat-h">Soma dos talhões ATIVO (base geral)</div>
-          </div>
-          <div class="stat span4">
             <div class="stat-k">Safra selecionada</div>
             <div class="stat-v">${escapeHtml(atual?.safra || '-') }</div>
             <div class="stat-h">${escapeHtml(atual?.plantio || '')}</div>
           </div>
           <div class="stat span4">
-            <div class="stat-k">Base</div>
-            <div class="stat-v">Todas as safras</div>
-            <div class="stat-h">Comparativo geral x safra selecionada</div>
+            <div class="stat-k">Area plantada (ha)</div>
+            <div class="stat-v">${fmtNum(areaPlantada, 2)}</div>
+            <div class="stat-h">Soma dos talhões ATIVO</div>
+          </div>
+          <div class="stat span4">
+            <div class="stat-k">Area colhida (safra)</div>
+            <div class="stat-v">${fmtNum(areaColhida, 2)} ha</div>
+            <div class="stat-h">${fmtNum(areaPct * 100, 1)}% da area plantada</div>
           </div>
 
           <div class="span12">${sectionTitle('Graficos')}</div>
@@ -715,68 +877,80 @@ async function renderPainel() {
             </div>
           </div>
 
-          <div class="span12">${sectionTitle(`Safra selecionada (${escapeHtml(safraLabel)})`)}</div>
-          <div class="stat span4">
-            <div class="stat-k">Peso bruto</div>
-            <div class="stat-v">${fmtKg(totalsUlt?.peso_bruto_kg || 0)}</div>
-            <div class="stat-h">Totais filtrados por safra</div>
-          </div>
-          <div class="stat span4">
-            <div class="stat-k">Peso limpo e seco</div>
-            <div class="stat-v">${fmtKg(totalsUlt?.peso_limpo_seco_kg || 0)}</div>
-            <div class="stat-h">Totais filtrados por safra</div>
-          </div>
-          <div class="stat span4">
-            <div class="stat-k">Sacas</div>
-            <div class="stat-v">${fmtNum(totalsUlt?.sacas || 0, 2)}</div>
-            <div class="stat-h">Totais filtrados por safra</div>
-          </div>
-          <div class="stat span4">
-            <div class="stat-k">Umidade (kg)</div>
-            <div class="stat-v">${fmtKg(totalsUlt?.umidade_kg || 0)}</div>
-            <div class="stat-h">Totais filtrados por safra</div>
-          </div>
-          <div class="stat span4">
-            <div class="stat-k">Frete total</div>
-            <div class="stat-v">${fmtMoney(totalsUlt?.sub_total_frete || 0)}</div>
-            <div class="stat-h">Totais filtrados por safra</div>
-          </div>
-          <div class="stat span4">
-            <div class="stat-k">Produtividade ajustada</div>
-            <div class="stat-v">${fmtNum(p.produtividade_ultima_safra_ajustada_sacas_ha, 2)} sc/ha</div>
-            <div class="stat-h">Sacas / area colhida informada</div>
-          </div>
+          <div class="span12">
+            <div style="display:grid;grid-template-columns:1fr;gap:12px">
+              <div style="border:1px solid rgba(255,255,255,.10);border-radius:16px;padding:12px 12px 2px;background:rgba(15,26,22,.08)">
+                ${sectionTitle(`Safra selecionada (${escapeHtml(safraLabel)})`)}
+                <div class="grid">
+                  <div class="stat span4">
+                    <div class="stat-k">Peso bruto</div>
+                    <div class="stat-v">${fmtKg(totalsUlt?.peso_bruto_kg || 0)}</div>
+                    <div class="stat-h">Soma (carga - tara)</div>
+                  </div>
+                  <div class="stat span4">
+                    <div class="stat-k">Peso limpo e seco</div>
+                    <div class="stat-v">${fmtKg(totalsUlt?.peso_limpo_seco_kg || 0)}</div>
+                    <div class="stat-h">Apos descontos</div>
+                  </div>
+                  <div class="stat span4">
+                    <div class="stat-k">Perdas</div>
+                    <div class="stat-v">${fmtNum(clamp01(perdasUlt) * 100, 2)}%</div>
+                    <div class="stat-h">1 - (peso_limpo_seco / peso_bruto)</div>
+                  </div>
+                  <div class="stat span4">
+                    <div class="stat-k">Umidade media</div>
+                    <div class="stat-v">${fmtNum(clamp01(umidMedUlt) * 100, 2)}%</div>
+                    <div class="stat-h">Σ(peso_bruto * umidade) / Σ(peso_bruto)</div>
+                  </div>
+                  <div class="stat span4">
+                    <div class="stat-k">Sacas</div>
+                    <div class="stat-v">${fmtNum(totalsUlt?.sacas || 0, 2)}</div>
+                    <div class="stat-h">Peso limpo/seco / 60</div>
+                  </div>
+                  <div class="stat span4">
+                    <div class="stat-k">Produtividade ajustada</div>
+                    <div class="stat-v">${fmtNum(p.produtividade_ultima_safra_ajustada_sacas_ha, 2)} sc/ha</div>
+                    <div class="stat-h">Sacas / area colhida informada</div>
+                  </div>
+                </div>
+              </div>
 
-          <div class="span12">${sectionTitle('Total geral (todas as safras)')}</div>
-          <div class="stat span4">
-            <div class="stat-k">Peso bruto</div>
-            <div class="stat-v">${fmtKg(totals.peso_bruto_kg)}</div>
-            <div class="stat-h">Soma de (carga - tara)</div>
-          </div>
-          <div class="stat span4">
-            <div class="stat-k">Peso limpo e seco</div>
-            <div class="stat-v">${fmtKg(totals.peso_limpo_seco_kg)}</div>
-            <div class="stat-h">Descontos: umidade + defeitos</div>
-          </div>
-          <div class="stat span4">
-            <div class="stat-k">Sacas</div>
-            <div class="stat-v">${fmtNum(totals.sacas, 2)}</div>
-            <div class="stat-h">Base 60 kg</div>
-          </div>
-          <div class="stat span4">
-            <div class="stat-k">Umidade (kg)</div>
-            <div class="stat-v">${fmtKg(totals.umidade_kg)}</div>
-            <div class="stat-h">Umidade-base configurada</div>
-          </div>
-          <div class="stat span4">
-            <div class="stat-k">Frete total</div>
-            <div class="stat-v">${fmtMoney(totals.sub_total_frete)}</div>
-            <div class="stat-h">Peso bruto (em sacas) x tabela</div>
-          </div>
-          <div class="stat span4">
-            <div class="stat-k">Produtividade</div>
-            <div class="stat-v">${fmtNum(p.produtividade_geral_sacas_ha, 2)} sc/ha</div>
-            <div class="stat-h">Sacas / area plantada</div>
+              <div style="border:1px solid rgba(255,255,255,.10);border-radius:16px;padding:12px 12px 2px;background:rgba(15,26,22,.04)">
+                ${sectionTitle('Total geral (todas as safras)')}
+                <div class="grid">
+                  <div class="stat span4">
+                    <div class="stat-k">Peso bruto</div>
+                    <div class="stat-v">${fmtKg(totals.peso_bruto_kg)}</div>
+                    <div class="stat-h">Soma (carga - tara)</div>
+                  </div>
+                  <div class="stat span4">
+                    <div class="stat-k">Peso limpo e seco</div>
+                    <div class="stat-v">${fmtKg(totals.peso_limpo_seco_kg)}</div>
+                    <div class="stat-h">Apos descontos</div>
+                  </div>
+                  <div class="stat span4">
+                    <div class="stat-k">Perdas</div>
+                    <div class="stat-v">${fmtNum(clamp01(perdasGer) * 100, 2)}%</div>
+                    <div class="stat-h">1 - (peso_limpo_seco / peso_bruto)</div>
+                  </div>
+                  <div class="stat span4">
+                    <div class="stat-k">Umidade media</div>
+                    <div class="stat-v">${fmtNum(clamp01(umidMedGer) * 100, 2)}%</div>
+                    <div class="stat-h">Σ(peso_bruto * umidade) / Σ(peso_bruto)</div>
+                  </div>
+                  <div class="stat span4">
+                    <div class="stat-k">Sacas</div>
+                    <div class="stat-v">${fmtNum(totals.sacas, 2)}</div>
+                    <div class="stat-h">Peso limpo/seco / 60</div>
+                  </div>
+                  <div class="stat span4">
+                    <div class="stat-k">Produtividade</div>
+                    <div class="stat-v">${fmtNum(p.produtividade_geral_sacas_ha, 2)} sc/ha</div>
+                    <div class="stat-h">Sacas / area plantada</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -813,7 +987,10 @@ async function renderPainel() {
     }
 
     if (Number.isFinite(safra_id) && safra_id > 0) {
-      const des = await api(`/api/relatorios/entregas-por-destino?safra_id=${safra_id}`)
+      const tipoPlantio = String(atual?.plantio || '').trim()
+      const qs = new URLSearchParams({ safra_id: String(safra_id) })
+      if (tipoPlantio) qs.set('tipo_plantio', tipoPlantio)
+      const des = await api(`/api/relatorios/entregas-por-destino?${qs.toString()}`)
       const sorted = (des || [])
         .map((d) => ({ name: d.destino_local, sacas: Number(d.entrega_sacas || 0) }))
         .filter((d) => d.sacas > 0)
@@ -1106,10 +1283,83 @@ async function renderTalhoes() {
       },
       { key: 'situacao', label: 'Situacao' },
     ],
-    extraActions: [{ act: 'view', label: 'Visualizar', className: 'ghost' }],
+    extraActions: [
+      { act: 'view', label: 'Visualizar', className: 'ghost' },
+      { act: 'qr', label: 'QR Code', className: 'ghost' },
+    ],
     onAction: async (act, it) => {
-      if (act !== 'view') return
-      window.open(`/talhao.html?id=${encodeURIComponent(it.id)}`, '_blank', 'noopener')
+      if (act === 'view') {
+        window.open(
+          `/talhao.html?id=${encodeURIComponent(it.id)}`,
+          '_blank',
+          'noopener',
+        )
+        return
+      }
+
+      if (act !== 'qr') return
+
+      const baseKey = 'qr_base_origin'
+      const baseDefault =
+        String(localStorage.getItem(baseKey) || '').trim() || location.origin
+      const initialUrl = talhaoPublicUrl({ id: it.id, baseOrigin: baseDefault })
+
+      openDialog({
+        title: `QR Code - ${it.codigo}`,
+        submitLabel: 'Fechar',
+        bodyHtml: `
+          <div class="hint">Este QR Code abre a visualização pública do talhão.</div>
+
+          <div style="display:grid;grid-template-columns:240px 1fr;gap:14px;align-items:start;margin-top:12px">
+            <div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+              <img id="qrImg" alt="QR Code" width="240" height="240" style="border-radius:12px;border:1px solid rgba(255,255,255,.18);background:#fff" src="${escapeHtml(qrImageUrlForText(initialUrl))}" />
+              <a class="btn ghost" id="qrOpen" href="${escapeHtml(initialUrl)}" target="_blank" rel="noreferrer">Abrir link</a>
+            </div>
+
+            <div>
+              <div class="form-grid">
+                ${formField({ label: 'Base do site', name: 'qr_base', value: baseDefault, placeholder: 'https://seu-dominio.com', span: 'col12', type: 'text' })}
+              </div>
+
+              <div class="field" style="margin-top:10px">
+                <div class="label">Link</div>
+                <div class="hint mono" id="qrLink" style="word-break:break-all">${escapeHtml(initialUrl)}</div>
+                <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+                  <button class="btn ghost" id="qrCopy" type="button">Copiar link</button>
+                </div>
+                <div class="hint" style="margin-top:8px">Dica: em rede local, troque a base para o IP do PC (ex: <code class="mono">http://192.168.0.10:3000</code>).</div>
+              </div>
+            </div>
+          </div>
+        `.trim(),
+        onSubmit: async () => {},
+      })
+
+      const baseInput = dlgBody.querySelector('input[name="qr_base"]')
+      const qrImg = dlgBody.querySelector('#qrImg')
+      const qrLink = dlgBody.querySelector('#qrLink')
+      const qrOpen = dlgBody.querySelector('#qrOpen')
+      const btnCopy = dlgBody.querySelector('#qrCopy')
+
+      const refresh = () => {
+        const base = String(baseInput?.value || '').trim()
+        if (base) localStorage.setItem(baseKey, base)
+        const url = talhaoPublicUrl({ id: it.id, baseOrigin: base })
+        if (qrImg) qrImg.src = qrImageUrlForText(url)
+        if (qrLink) qrLink.textContent = url
+        if (qrOpen) qrOpen.href = url
+      }
+
+      if (baseInput) baseInput.addEventListener('input', refresh)
+      if (btnCopy) {
+        btnCopy.addEventListener('click', async () => {
+          const text = String(qrLink?.textContent || '').trim()
+          if (!text) return
+          await navigator.clipboard.writeText(text)
+          btnCopy.textContent = 'Copiado'
+          setTimeout(() => (btnCopy.textContent = 'Copiar link'), 1200)
+        })
+      }
     },
     onCreate: () => {
       openDialog({
@@ -1120,7 +1370,7 @@ async function renderTalhoes() {
             ${formField({ label: 'Local', name: 'local', placeholder: 'Nazca', span: 'col6' })}
             ${formField({ label: 'Nome', name: 'nome', placeholder: 'Morrinho', span: 'col6' })}
             ${formField({ label: 'Situacao', name: 'situacao', placeholder: 'ATIVO', span: 'col6' })}
-            ${formField({ label: 'Hectares', name: 'hectares', type: 'number', step: '0.01', value: '0', span: 'col6' })}
+            ${formField({ label: 'Hectares', name: 'hectares', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0', span: 'col6' })}
             ${formField({ label: 'Posse', name: 'posse', placeholder: 'PROPRIO / ARRENDADO', span: 'col6' })}
             ${formField({ label: 'Contrato', name: 'contrato', placeholder: 'Contrato', span: 'col6' })}
             ${formField({ label: 'Irrigacao', name: 'irrigacao', placeholder: 'SIM/NAO', span: 'col4' })}
@@ -1140,7 +1390,7 @@ async function renderTalhoes() {
               local: obj.local || null,
               nome: obj.nome || null,
               situacao: obj.situacao || null,
-              hectares: Number(obj.hectares),
+              hectares: asNumberOrNull(obj.hectares) ?? 0,
               posse: obj.posse || null,
               contrato: obj.contrato || null,
               irrigacao: obj.irrigacao || null,
@@ -1167,7 +1417,7 @@ async function renderTalhoes() {
             ${formField({ label: 'Local', name: 'local', value: it.local ?? '', span: 'col6' })}
             ${formField({ label: 'Nome', name: 'nome', value: it.nome ?? '', span: 'col6' })}
             ${formField({ label: 'Situacao', name: 'situacao', value: it.situacao ?? '', span: 'col6' })}
-            ${formField({ label: 'Hectares', name: 'hectares', type: 'number', step: '0.01', value: it.hectares, span: 'col6' })}
+            ${formField({ label: 'Hectares', name: 'hectares', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: String(it.hectares ?? ''), span: 'col6' })}
             ${formField({ label: 'Posse', name: 'posse', value: it.posse ?? '', span: 'col6' })}
             ${formField({ label: 'Contrato', name: 'contrato', value: it.contrato ?? '', span: 'col6' })}
             ${formField({ label: 'Irrigacao', name: 'irrigacao', value: it.irrigacao ?? '', span: 'col4' })}
@@ -1187,7 +1437,7 @@ async function renderTalhoes() {
               local: obj.local || null,
               nome: obj.nome || null,
               situacao: obj.situacao || null,
-              hectares: Number(obj.hectares),
+              hectares: asNumberOrNull(obj.hectares) ?? 0,
               posse: obj.posse || null,
               contrato: obj.contrato || null,
               irrigacao: obj.irrigacao || null,
@@ -1219,7 +1469,7 @@ async function renderDestinos() {
   await renderCrudPage({
     route: 'destinos',
     title: 'Destinos',
-    subtitle: 'Cadastre destino e opcionalmente a trava (sacas) e distancia (km).',
+    subtitle: 'Cadastre destino e distancia (km). A trava (sacas) fica nas Regras do destino.',
     fetchPath: '/api/destinos',
     columns: [
       { key: 'id', label: 'ID' },
@@ -1229,7 +1479,6 @@ async function renderDestinos() {
         sort: (_v, it) => `${it.local || ''} ${it.codigo || ''}`.trim(),
       },
       { key: 'codigo', label: 'Codigo' },
-      { key: 'trava_sacas', label: 'Trava (sacas)', format: (v) => (v === null ? '-' : fmtNum(v, 2)) },
       { key: 'distancia_km', label: 'Km', format: (v) => (v === null ? '-' : fmtNum(v, 1)) },
     ],
     onCreate: () => {
@@ -1246,8 +1495,7 @@ async function renderDestinos() {
               <div class="mini-map" id="destMapPrev" style="margin-top:8px;display:none"><iframe title="Mapa" loading="lazy"></iframe></div>
               <div class="hint" style="margin-top:8px">Distância sugerida (linha reta): <b id="destDistSug">-</b> km</div>
             </div>
-            ${formField({ label: 'Trava (sacas)', name: 'trava_sacas', type: 'number', step: '0.01', value: '', span: 'col6' })}
-            ${formField({ label: 'Distancia (km)', name: 'distancia_km', type: 'number', step: '0.1', value: '', span: 'col6' })}
+            ${formField({ label: 'Distancia (km)', name: 'distancia_km', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '', span: 'col6' })}
             ${textareaField({ label: 'Observacoes', name: 'observacoes' })}
           </div>`,
         onSubmit: async (obj) => {
@@ -1257,7 +1505,6 @@ async function renderDestinos() {
               codigo: obj.codigo,
               local: obj.local,
               maps_url: obj.maps_url || null,
-              trava_sacas: asNumberOrNull(obj.trava_sacas),
               distancia_km: asNumberOrNull(obj.distancia_km),
               observacoes: obj.observacoes || null,
             },
@@ -1298,7 +1545,7 @@ async function renderDestinos() {
         const km = haversineKm(NAZCA_COORDS, p)
         if (sugEl) sugEl.textContent = Number.isFinite(km) ? fmtNum(km, 1) : '-'
         if (distEl && (distEl.dataset.userEdited !== '1') && !String(distEl.value || '').trim()) {
-          if (Number.isFinite(km)) distEl.value = fmtNum(km, 1).replace(',', '.')
+          if (Number.isFinite(km)) distEl.value = fmtNum(km, 1)
         }
 
         if (prevWrap && prevFrame) {
@@ -1335,8 +1582,7 @@ async function renderDestinos() {
               <div class="mini-map" id="destMapPrev" style="margin-top:8px;display:none"><iframe title="Mapa" loading="lazy"></iframe></div>
               <div class="hint" style="margin-top:8px">Distância sugerida (linha reta): <b id="destDistSug">-</b> km</div>
             </div>
-            ${formField({ label: 'Trava (sacas)', name: 'trava_sacas', type: 'number', step: '0.01', value: it.trava_sacas ?? '', span: 'col6' })}
-            ${formField({ label: 'Distancia (km)', name: 'distancia_km', type: 'number', step: '0.1', value: it.distancia_km ?? '', span: 'col6' })}
+            ${formField({ label: 'Distancia (km)', name: 'distancia_km', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: String(it.distancia_km ?? ''), span: 'col6' })}
             ${textareaField({ label: 'Observacoes', name: 'observacoes', value: it.observacoes ?? '' })}
           </div>`,
         onSubmit: async (obj) => {
@@ -1346,7 +1592,6 @@ async function renderDestinos() {
               codigo: obj.codigo,
               local: obj.local,
               maps_url: obj.maps_url || null,
-              trava_sacas: asNumberOrNull(obj.trava_sacas),
               distancia_km: asNumberOrNull(obj.distancia_km),
               observacoes: obj.observacoes || null,
             },
@@ -1387,7 +1632,7 @@ async function renderDestinos() {
         const km = haversineKm(NAZCA_COORDS, p)
         if (sugEl) sugEl.textContent = Number.isFinite(km) ? fmtNum(km, 1) : '-'
         if (distEl && (distEl.dataset.userEdited !== '1') && !String(distEl.value || '').trim()) {
-          if (Number.isFinite(km)) distEl.value = fmtNum(km, 1).replace(',', '.')
+          if (Number.isFinite(km)) distEl.value = fmtNum(km, 1)
         }
 
         if (prevWrap && prevFrame) {
@@ -1447,7 +1692,7 @@ async function renderMotoristas() {
             ${formField({ label: 'Banco', name: 'banco', placeholder: 'Banco', span: 'col6' })}
             ${formField({ label: 'PIX/Conta', name: 'pix_conta', placeholder: 'Chave', span: 'col6' })}
             ${formField({ label: 'Tipo veiculo', name: 'tipo_veiculo', placeholder: 'Carreta', span: 'col6' })}
-            ${formField({ label: 'Capacidade (kg)', name: 'capacidade_kg', type: 'number', step: '1', value: '', span: 'col6' })}
+            ${formField({ label: 'Capacidade (kg)', name: 'capacidade_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: '', span: 'col6' })}
           </div>`,
         onSubmit: async (obj) => {
           await api('/api/motoristas', {
@@ -1478,7 +1723,7 @@ async function renderMotoristas() {
             ${formField({ label: 'Banco', name: 'banco', value: it.banco ?? '', span: 'col6' })}
             ${formField({ label: 'PIX/Conta', name: 'pix_conta', value: it.pix_conta ?? '', span: 'col6' })}
             ${formField({ label: 'Tipo veiculo', name: 'tipo_veiculo', value: it.tipo_veiculo ?? '', span: 'col6' })}
-            ${formField({ label: 'Capacidade (kg)', name: 'capacidade_kg', type: 'number', step: '1', value: it.capacidade_kg ?? '', span: 'col6' })}
+            ${formField({ label: 'Capacidade (kg)', name: 'capacidade_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: String(it.capacidade_kg ?? ''), span: 'col6' })}
           </div>`,
         onSubmit: async (obj) => {
           await api(`/api/motoristas/${it.id}`, {
@@ -1806,7 +2051,10 @@ async function renderFretes() {
 
   const safraOptions = cache.safras.map((s) => ({ value: s.id, label: `${s.safra} (#${s.id})` }))
   const motoristaOptions = cache.motoristas.map((m) => ({ value: m.id, label: `${m.nome} (#${m.id})` }))
-  const destinoOptions = cache.destinos.map((d) => ({ value: d.id, label: `${d.local}` }))
+  const destinoOptions = cache.destinos.map((d) => ({
+    value: d.id,
+    label: `${d.local}`,
+  }))
 
   const rows = items
     .map((it) => {
@@ -1857,16 +2105,21 @@ async function renderFretes() {
           ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safraOptions[0]?.value, span: 'col6' })}
           ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOptions, value: motoristaOptions[0]?.value, span: 'col6' })}
           ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: destinoOptions[0]?.value, span: 'col6' })}
-          ${formField({ label: 'Valor por saca (R$)', name: 'valor_por_saca', type: 'number', step: '0.01', value: '4.5', span: 'col6' })}
+          ${formField({ label: 'Valor por saca (R$)', name: 'valor_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '4,50', span: 'col6' })}
         </div>`,
       onSubmit: async (obj) => {
+        const valor = parseNumberPt(obj.valor_por_saca)
+        if (!Number.isFinite(valor) || valor < 0) {
+          toast('Erro', 'Valor por saca invalido.')
+          return
+        }
         await api('/api/fretes', {
           method: 'POST',
           body: {
             safra_id: Number(obj.safra_id),
             motorista_id: Number(obj.motorista_id),
             destino_id: Number(obj.destino_id),
-            valor_por_saca: Number(obj.valor_por_saca),
+            valor_por_saca: valor,
           },
         })
         toast('Salvo', 'Frete atualizado (viagens recalculadas).')
@@ -1888,7 +2141,7 @@ async function renderFretes() {
             <div class="hint" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
               <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="only_origin_motoristas" checked /> Somente motoristas com frete na origem</label>
               <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="only_origin_destinos" checked /> Somente destinos com frete na origem</label>
-              <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="only_destinos_trava" /> Somente destinos com trava</label>
+              <span style="opacity:.75">(Filtro por trava removido: trava fica nas regras do destino)</span>
             </div>
           </div>
           <div class="field col12">
@@ -1940,7 +2193,6 @@ async function renderFretes() {
     const previewEl = dlgBody.querySelector('#copyPreview')
     const ckOnlyMot = dlgForm.querySelector('input[name="only_origin_motoristas"]')
     const ckOnlyDes = dlgForm.querySelector('input[name="only_origin_destinos"]')
-    const ckOnlyTrava = dlgForm.querySelector('input[name="only_destinos_trava"]')
     const skipMot = new Set()
     if (previewEl) {
       previewEl.onclick = (e) => {
@@ -1968,15 +2220,14 @@ async function renderFretes() {
 
       const onlyMot = ckOnlyMot?.checked !== false
       const onlyDes = ckOnlyDes?.checked !== false
-      const onlyTrava = ckOnlyTrava?.checked === true
 
       const rows = (cache.motoristas || []).filter((m) =>
         onlyMot ? motIds.has(Number(m.id)) : true,
       )
 
-      const cols = (cache.destinos || [])
-        .filter((d) => (onlyDes ? desIds.has(Number(d.id)) : true))
-        .filter((d) => (onlyTrava ? Number(d.trava_sacas || 0) > 0 : true))
+      const cols = (cache.destinos || []).filter((d) =>
+        onlyDes ? desIds.has(Number(d.id)) : true,
+      )
 
       const head = `<thead><tr><th>Motorista</th>${cols
         .map((d) => `<th>${escapeHtml(d.local)}</th>`)
@@ -2009,7 +2260,7 @@ async function renderFretes() {
     if (fromEl) fromEl.onchange = renderPreview
     if (ckOnlyMot) ckOnlyMot.onchange = renderPreview
     if (ckOnlyDes) ckOnlyDes.onchange = renderPreview
-    if (ckOnlyTrava) ckOnlyTrava.onchange = renderPreview
+    // filtro por trava foi removido (trava agora fica nas regras do destino)
     renderPreview()
   }
 
@@ -2024,7 +2275,6 @@ async function renderFretes() {
             <div class="label">Filtro</div>
             <div class="hint" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
               <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="only_has_values" checked /> Somente motoristas/destinos com frete</label>
-              <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="only_destinos_trava" /> Somente destinos com trava</label>
             </div>
           </div>
           <div class="field col12">
@@ -2069,7 +2319,6 @@ async function renderFretes() {
 
     const selSafra = dlgForm.querySelector('select[name="safra_id"]')
     const ckOnlyHas = dlgForm.querySelector('input[name="only_has_values"]')
-    const ckOnlyTrava = dlgForm.querySelector('input[name="only_destinos_trava"]')
     const previewEl = dlgBody.querySelector('#gridPreview')
 
     const skipMot = new Set()
@@ -2097,14 +2346,13 @@ async function renderFretes() {
       const desIds = new Set(fretesS.map((f) => Number(f.destino_id)))
 
       const onlyHas = ckOnlyHas?.checked !== false
-      const onlyTrava = ckOnlyTrava?.checked === true
 
       const rows = (cache.motoristas || []).filter((m) =>
         onlyHas ? motIds.has(Number(m.id)) : true,
       )
-      const cols = (cache.destinos || [])
-        .filter((d) => (onlyHas ? desIds.has(Number(d.id)) : true))
-        .filter((d) => (onlyTrava ? Number(d.trava_sacas || 0) > 0 : true))
+      const cols = (cache.destinos || []).filter((d) =>
+        onlyHas ? desIds.has(Number(d.id)) : true,
+      )
 
       const head = `<thead><tr><th>Motorista</th>${cols
         .map((d) => `<th>${escapeHtml(d.local)}</th>`)
@@ -2136,7 +2384,6 @@ async function renderFretes() {
 
     if (selSafra) selSafra.onchange = renderGrid
     if (ckOnlyHas) ckOnlyHas.onchange = renderGrid
-    if (ckOnlyTrava) ckOnlyTrava.onchange = renderGrid
     renderGrid()
   }
 
@@ -2156,17 +2403,22 @@ async function renderFretes() {
               ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: item.safra_id, span: 'col6' })}
               ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOptions, value: item.motorista_id, span: 'col6' })}
               ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: item.destino_id, span: 'col6' })}
-              ${formField({ label: 'Valor por saca (R$)', name: 'valor_por_saca', type: 'number', step: '0.01', value: String(item.valor_por_saca ?? 0), span: 'col6' })}
+              ${formField({ label: 'Valor por saca (R$)', name: 'valor_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: fmtNum(Number(item.valor_por_saca ?? 0), 2), span: 'col6' })}
               <div class="field col12"><div class="hint">Ao salvar, o sistema recalcula o frete nas colheitas ja lancadas que baterem (safra, motorista, destino).</div></div>
             </div>`,
           onSubmit: async (obj) => {
+            const valor = parseNumberPt(obj.valor_por_saca)
+            if (!Number.isFinite(valor) || valor < 0) {
+              toast('Erro', 'Valor por saca invalido.')
+              return
+            }
             await api('/api/fretes', {
               method: 'POST',
               body: {
                 safra_id: Number(obj.safra_id),
                 motorista_id: Number(obj.motorista_id),
                 destino_id: Number(obj.destino_id),
-                valor_por_saca: Number(obj.valor_por_saca),
+                valor_por_saca: valor,
               },
             })
             toast('Atualizado', 'Frete atualizado (viagens recalculadas).')
@@ -2189,26 +2441,156 @@ async function renderRegrasDestino() {
   activeNav('regras-destino')
   await loadLookups()
 
+  const hash = window.location.hash || ''
+  const qs = hash.includes('?') ? hash.split('?')[1] : ''
+  const params = new URLSearchParams(qs)
+  const editId = Number(params.get('edit_id') || '')
+
+  if (!(Number.isFinite(editId) && editId > 0)) {
+    const rules = await api('/api/destino-regras/plantio')
+
+    setView(`
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Regras do destino</div>
+            <div class="panel-sub">Regras por safra + destino + plantio. Clique em editar para configurar tabelas.</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn" id="btnNovaRegra">Nova regra</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Safra</th>
+                  <th>Destino</th>
+                  <th>Plantio</th>
+                  <th>Alteracao</th>
+                  <th>Criacao</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="rulesBody">
+                ${Array.isArray(rules) && rules.length ? '' : '<tr><td colspan="7">Nenhuma regra cadastrada.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    `)
+
+    const body = view.querySelector('#rulesBody')
+    if (body && Array.isArray(rules) && rules.length) {
+      body.innerHTML = rules
+        .map((r) => {
+          const id = Number(r.id)
+          const safra = String(r.safra_nome || '')
+          const destino = String(r.destino_local || '')
+          const plantio = String(r.tipo_plantio || '')
+          const upd = String(r.updated_at || '')
+          const crt = String(r.created_at || '')
+          return `<tr>
+            <td data-sort="${id}">${escapeHtml(String(id))}</td>
+            <td data-sort="${escapeHtml(safra)}">${escapeHtml(safra)}</td>
+            <td data-sort="${escapeHtml(destino)}">${escapeHtml(destino)}</td>
+            <td data-sort="${escapeHtml(plantio)}"><code class="mono">${escapeHtml(plantio)}</code></td>
+            <td data-sort="${escapeHtml(upd)}">${escapeHtml(upd || '-')}</td>
+            <td data-sort="${escapeHtml(crt)}">${escapeHtml(crt || '-')}</td>
+            <td class="actions">
+              <button class="btn small ghost" data-act="edit" data-id="${id}">Editar</button>
+              <button class="btn small danger" data-act="del" data-id="${id}">Excluir</button>
+            </td>
+          </tr>`
+        })
+        .join('')
+    }
+
+    initTableSorting(view)
+
+    const btnNova = view.querySelector('#btnNovaRegra')
+    if (btnNova) {
+      btnNova.onclick = () => {
+        window.location.hash = '#/regras-destino?edit_id=1'
+      }
+    }
+
+    view.querySelectorAll('button[data-act="edit"]').forEach((b) => {
+      b.onclick = () => {
+        const id = Number(b.dataset.id)
+        const r = (rules || []).find((x) => Number(x.id) === id)
+        if (!r) return
+        const qp = new URLSearchParams({
+          edit_id: String(id),
+          safra_id: String(r.safra_id),
+          destino_id: String(r.destino_id),
+          tipo_plantio: String(r.tipo_plantio),
+        })
+        window.location.hash = `#/regras-destino?${qp.toString()}`
+      }
+    })
+
+    view.querySelectorAll('button[data-act="del"]').forEach((b) => {
+      b.onclick = async () => {
+        const id = Number(b.dataset.id)
+        const r = (rules || []).find((x) => Number(x.id) === id)
+        if (!r) return
+
+        const msg = `Excluir a regra?\n\nSafra: ${r.safra_nome}\nDestino: ${r.destino_local}\nPlantio: ${r.tipo_plantio}`
+        if (!(await confirmAction(msg, { title: 'Confirmar', confirmLabel: 'Excluir' }))) return
+
+        try {
+          await api(`/api/destino-regras/plantio/${id}`, { method: 'DELETE' })
+          toast('Excluído', 'Regra removida.')
+          renderRegrasDestino()
+        } catch (e) {
+          if (e?.details?.used_count) {
+            const msg2 = `Esta regra ja foi usada na colheita (${e.details.used_count} registros).\n\nExcluir nao apaga as colheitas, mas pode afetar preview/indicadores.\n\nExcluir mesmo assim?`
+            if (!(await confirmAction(msg2, { title: 'Atenção', confirmLabel: 'Excluir mesmo assim' }))) return
+            await api(`/api/destino-regras/plantio/${id}?force=1`, { method: 'DELETE' })
+            toast('Excluído', 'Regra removida.')
+            renderRegrasDestino()
+            return
+          }
+          throw e
+        }
+      }
+    })
+
+    return
+  }
+
   const safraOptions = cache.safras.map((s) => ({ value: s.id, label: s.safra }))
-  const destinoOptions = cache.destinos.map((d) => ({ value: d.id, label: `${d.local}` }))
+  const destinoOptions = cache.destinos.map((d) => ({
+    value: d.id,
+    label: `${d.local}`,
+  }))
   const plantioOptions = cache.tiposPlantio.map((p) => ({
     value: p.nome,
     label: p.nome,
   }))
 
   const prefer = cache.safras.find((s) => s.safra === '2025-2026')
-  const safraId = prefer?.id ?? safraOptions[0]?.value
-  const destinoId = destinoOptions[0]?.value
+  const safraId =
+    Number(params.get('safra_id') || '') || prefer?.id || safraOptions[0]?.value
+  const destinoId =
+    Number(params.get('destino_id') || '') || destinoOptions[0]?.value
+  const tipoDefault = String(params.get('tipo_plantio') || '').trim()
 
   setView(`
     <section class="panel">
       <div class="panel-head">
         <div>
           <div class="panel-title">Regras do destino (por safra)</div>
-          <div class="panel-sub">Limites de qualidade e tabela de desconto de umidade.</div>
+          <div class="panel-sub">Limites de qualidade e tabelas (umidade e compra do silo).</div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn ghost" id="btnBackRules">Voltar</button>
           <button class="btn ghost" id="btnCopyRule">Copiar regras</button>
+          <button class="btn ghost" id="btnRecalcCompra">Recalcular preços</button>
           <button class="btn" id="btnSalvar">Salvar regras</button>
         </div>
       </div>
@@ -2217,12 +2599,26 @@ async function renderRegrasDestino() {
           ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safraId, span: 'col6' })}
           ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: destinoId, span: 'col6' })}
 
-          ${selectField({ label: 'Tipo plantio', name: 'tipo_plantio', options: plantioOptions, value: plantioOptions[0]?.value || '', span: 'col6' })}
+           ${selectField({ label: 'Tipo plantio', name: 'tipo_plantio', options: plantioOptions, value: tipoDefault || plantioOptions[0]?.value || '', span: 'col6' })}
 
-          ${formField({ label: `Trava (sacas) ${helpTip('Quando a soma de sacas da safra para o destino ultrapassa a trava, o lancamento alerta (nao bloqueia).')}`, name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '', span: 'col4' })}
+           ${formField({ label: `Trava (sacas) ${helpTip('Quando a soma de sacas da safra para o destino ultrapassa a trava, o lancamento alerta (nao bloqueia).')}`, name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '', span: 'col4' })}
 
-          ${formField({ label: 'Custo p/ saca (Silo) R$/sc limpa', name: 'custo_silo_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
-          ${formField({ label: 'Custo p/ saca (Terceiros) R$/sc limpa', name: 'custo_terceiros_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
+           <div class="field col12">
+             <div class="label">Tabela de compra do silo (por volume de sacas)</div>
+             <div class="hint">O preco pode mudar conforme o acumulado de sacas vendidas no destino (na safra e tipo de plantio). Uma colheita pode pegar 2 faixas; o sistema usa a media.</div>
+             <div class="table-wrap rule-wrap" style="margin-top:8px">
+               <table>
+                 <thead><tr><th>Acumulado (&gt;)</th><th>Acumulado (&lt;=)</th><th>Preco (R$/sc)</th><th></th></tr></thead>
+                 <tbody id="compraFaixas"></tbody>
+               </table>
+             </div>
+             <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end">
+               <button class="btn ghost" type="button" id="btnAddCompra">Adicionar faixa</button>
+             </div>
+           </div>
+
+           ${formField({ label: 'Custo p/ saca (Silo) R$/sc limpa', name: 'custo_silo_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
+           ${formField({ label: 'Custo p/ saca (Terceiros) R$/sc limpa', name: 'custo_terceiros_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
 
           ${formField({ label: 'Impureza limite (%)', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
           ${formField({ label: 'Ardidos limite (%)', name: 'ardidos_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
@@ -2251,9 +2647,19 @@ async function renderRegrasDestino() {
 
   const form = view.querySelector('#ruleForm')
   const faixasEl = view.querySelector('#faixas')
+  const compraEl = view.querySelector('#compraFaixas')
   const btnSalvar = view.querySelector('#btnSalvar')
   const btnAddFaixa = view.querySelector('#btnAddFaixa')
+  const btnAddCompra = view.querySelector('#btnAddCompra')
   const btnCopyRule = view.querySelector('#btnCopyRule')
+  const btnRecalcCompra = view.querySelector('#btnRecalcCompra')
+  const btnBackRules = view.querySelector('#btnBackRules')
+
+  if (btnBackRules) {
+    btnBackRules.onclick = () => {
+      window.location.hash = '#/regras-destino'
+    }
+  }
 
   function faixaRow(f = { umid_gt: '', umid_lte: '', desconto_pct: '' }) {
     return `<tr>
@@ -2273,6 +2679,21 @@ async function renderRegrasDestino() {
     })
   }
 
+  function compraRow(f = { sacas_gt: '', sacas_lte: '', preco_por_saca: '' }) {
+    return `<tr>
+      <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="sacas_gt" value="${escapeHtml(f.sacas_gt)}" /></td>
+      <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="sacas_lte" value="${escapeHtml(f.sacas_lte)}" placeholder="(sem limite)" /></td>
+      <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="preco_por_saca" value="${escapeHtml(f.preco_por_saca)}" /></td>
+      <td class="actions"><button class="btn small danger" type="button" data-act="rm-compra">Remover</button></td>
+    </tr>`
+  }
+
+  function bindCompraRemove() {
+    compraEl?.querySelectorAll('[data-act="rm-compra"]').forEach((b) => {
+      b.onclick = () => b.closest('tr')?.remove()
+    })
+  }
+
   async function load() {
     const fd = new FormData(form)
     const safra_id = Number(fd.get('safra_id'))
@@ -2289,6 +2710,7 @@ async function renderRegrasDestino() {
       regra?.trava_sacas === null || regra?.trava_sacas === undefined
         ? ''
         : fmtNum(regra.trava_sacas, 2)
+
     form.custo_silo_por_saca.value = fmtNum(regra?.custo_silo_por_saca ?? 0, 2)
     form.custo_terceiros_por_saca.value = fmtNum(
       regra?.custo_terceiros_por_saca ?? 0,
@@ -2331,6 +2753,25 @@ async function renderRegrasDestino() {
             .join('')
         : `<tr><td colspan="5">Nenhuma faixa cadastrada.</td></tr>`
     bindFaixaRemove()
+
+    const compra = regra?.compra_faixas ?? []
+    if (compraEl) {
+      compraEl.innerHTML = compra.length
+        ? compra
+            .map((f) =>
+              compraRow({
+                sacas_gt: fmtNum(Number(f.sacas_gt || 0), 2),
+                sacas_lte:
+                  f.sacas_lte === null || f.sacas_lte === undefined
+                    ? ''
+                    : fmtNum(Number(f.sacas_lte || 0), 2),
+                preco_por_saca: fmtNum(Number(f.preco_por_saca || 0), 2),
+              }),
+            )
+            .join('')
+        : compraRow({ sacas_gt: '0,00', sacas_lte: '', preco_por_saca: '120,00' })
+      bindCompraRemove()
+    }
   }
 
   form.safra_id.onchange = load
@@ -2341,6 +2782,14 @@ async function renderRegrasDestino() {
     if (faixasEl.textContent.includes('Nenhuma faixa')) faixasEl.innerHTML = ''
     faixasEl.insertAdjacentHTML('beforeend', faixaRow())
     bindFaixaRemove()
+  }
+
+  if (btnAddCompra) {
+    btnAddCompra.onclick = () => {
+      if (!compraEl) return
+      compraEl.insertAdjacentHTML('beforeend', compraRow())
+      bindCompraRemove()
+    }
   }
 
   btnSalvar.onclick = async () => {
@@ -2374,6 +2823,27 @@ async function renderRegrasDestino() {
       })
     })
 
+    const compra_faixas = []
+    if (compraEl) {
+      compraEl.querySelectorAll('tr').forEach((tr) => {
+        const inputs = tr.querySelectorAll('input')
+        if (inputs.length < 3) return
+        const sacas_gt = parseNumberPt(inputs[0].value)
+        const lteRaw = String(inputs[1].value || '').trim()
+        const sacas_lte = lteRaw ? parseNumberPt(lteRaw) : null
+        const preco = parseNumberPt(inputs[2].value)
+        if (!Number.isFinite(sacas_gt) || !Number.isFinite(preco)) return
+        compra_faixas.push({
+          sacas_gt,
+          sacas_lte: Number.isFinite(sacas_lte) ? sacas_lte : null,
+          preco_por_saca: preco,
+        })
+      })
+    }
+    if (!compra_faixas.length) {
+      compra_faixas.push({ sacas_gt: 0, sacas_lte: null, preco_por_saca: 120 })
+    }
+
     await api('/api/destino-regras', {
       method: 'POST',
       body: {
@@ -2381,6 +2851,8 @@ async function renderRegrasDestino() {
         destino_id,
         tipo_plantio,
         trava_sacas: String(fd.get('trava_sacas') || '').trim() === '' ? null : numOr0(fd.get('trava_sacas')),
+        valor_compra_por_saca: Number(compra_faixas[0]?.preco_por_saca ?? 120),
+        compra_faixas,
         custo_silo_por_saca: numOr0(fd.get('custo_silo_por_saca')),
         custo_terceiros_por_saca: numOr0(fd.get('custo_terceiros_por_saca')),
         impureza_limite_pct: numOr0(fd.get('impureza_limite_pct')),
@@ -2394,6 +2866,33 @@ async function renderRegrasDestino() {
     })
     toast('Salvo', 'Regras do destino atualizadas.')
     load()
+  }
+
+  if (btnRecalcCompra) {
+    btnRecalcCompra.onclick = async () => {
+      const fd = new FormData(form)
+      const safra_id = Number(fd.get('safra_id'))
+      const destino_id = Number(fd.get('destino_id'))
+      const tipo_plantio = String(fd.get('tipo_plantio') || '').trim()
+      if (!tipo_plantio) {
+        toast('Erro', 'Tipo plantio obrigatorio para recalcular.')
+        return
+      }
+      if (
+        !(await confirmAction(
+            `Recalcular preços e custos (secagem/custos por saca) para todas as colheitas deste destino?\n\nSafra: ${safra_id}\nDestino: ${destino_id}\nTipo: ${tipo_plantio}`,
+            { title: 'Confirmar', confirmLabel: 'Recalcular' },
+          ))
+      ) {
+        return
+      }
+
+      const r = await api('/api/viagens/recalcular-compra', {
+        method: 'POST',
+        body: { safra_id, destino_id, tipo_plantio },
+      })
+      toast('OK', `Recalculado: ${r.updated} registros (${fmtNum(r.total_sacas || 0, 2)} sc).`)
+    }
   }
 
   await load()
@@ -2469,7 +2968,7 @@ async function renderRegrasDestino() {
           }
 
           const faixas = []
-          prev?.querySelectorAll('tbody tr').forEach((tr) => {
+          prev?.querySelectorAll('#copyUmidBody tr').forEach((tr) => {
             const ins = tr.querySelectorAll('input')
             if (ins.length < 4) return
             const umid_gt = parseNumberPt(ins[0].value)
@@ -2487,6 +2986,25 @@ async function renderRegrasDestino() {
             })
           })
 
+          const compra_faixas = []
+          prev?.querySelectorAll('#copyCompraBody tr').forEach((tr) => {
+            const ins = tr.querySelectorAll('input')
+            if (ins.length < 3) return
+            const sacas_gt = parseNumberPt(ins[0].value)
+            const lteRaw = String(ins[1].value || '').trim()
+            const sacas_lte = lteRaw ? parseNumberPt(lteRaw) : null
+            const preco_por_saca = parseNumberPt(ins[2].value)
+            if (!Number.isFinite(sacas_gt) || !Number.isFinite(preco_por_saca)) return
+            compra_faixas.push({
+              sacas_gt,
+              sacas_lte: Number.isFinite(sacas_lte) ? sacas_lte : null,
+              preco_por_saca,
+            })
+          })
+          if (!compra_faixas.length) {
+            compra_faixas.push({ sacas_gt: 0, sacas_lte: null, preco_por_saca: 120 })
+          }
+
           await api('/api/destino-regras', {
             method: 'POST',
             body: {
@@ -2494,6 +3012,8 @@ async function renderRegrasDestino() {
               destino_id: to_destino_id,
               tipo_plantio: to_tipo_plantio,
               trava_sacas: getVal('trava_sacas') ? numOr0(getVal('trava_sacas')) : null,
+              valor_compra_por_saca: Number(compra_faixas[0]?.preco_por_saca ?? 120),
+              compra_faixas,
               custo_silo_por_saca: numOr0(getVal('custo_silo_por_saca')),
               custo_terceiros_por_saca: numOr0(getVal('custo_terceiros_por_saca')),
               impureza_limite_pct: numOr0(getVal('impureza_limite_pct')),
@@ -2555,6 +3075,25 @@ async function renderRegrasDestino() {
               .join('')
           : `<tr><td colspan="4">Sem faixas.</td></tr>`
 
+        const compra = regra.compra_faixas || []
+        const compraRows = compra.length
+          ? compra
+              .map((f) => {
+                const gt = fmtNum(Number(f.sacas_gt || 0), 2)
+                const lte =
+                  f.sacas_lte === null || f.sacas_lte === undefined
+                    ? ''
+                    : fmtNum(Number(f.sacas_lte || 0), 2)
+                const preco = fmtNum(Number(f.preco_por_saca || 0), 2)
+                return `<tr>
+                  <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" value="${escapeHtml(gt)}" /></td>
+                  <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" value="${escapeHtml(lte)}" placeholder="(sem limite)" /></td>
+                  <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" value="${escapeHtml(preco)}" /></td>
+                </tr>`
+              })
+              .join('')
+          : `<tr><td colspan="3">Sem faixas.</td></tr>`
+
         prevEl.innerHTML = `
           <div class="form-grid" style="margin:0">
             ${formField({ label: 'Trava (sacas)', name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: regra.trava_sacas === null || regra.trava_sacas === undefined ? '' : fmtNum(regra.trava_sacas, 2), span: 'col4' })}
@@ -2570,8 +3109,15 @@ async function renderRegrasDestino() {
 
           <div class="table-wrap rule-wrap" style="margin-top:10px">
             <table>
+              <thead><tr><th>Acumulado (&gt;)</th><th>Acumulado (&lt;=)</th><th>Preco (R$/sc)</th></tr></thead>
+              <tbody id="copyCompraBody">${compraRows}</tbody>
+            </table>
+          </div>
+
+          <div class="table-wrap rule-wrap" style="margin-top:10px">
+            <table>
               <thead><tr><th>Umid (&gt;)</th><th>Umid (&lt;=)</th><th>Desconto (%)</th><th>Secagem (R$/sc)</th></tr></thead>
-              <tbody>${bodyRows}</tbody>
+              <tbody id="copyUmidBody">${bodyRows}</tbody>
             </table>
           </div>
         `
@@ -2680,6 +3226,7 @@ async function renderColheitaBase(variant) {
                 <th>Talhão</th>
                 <th>Local</th>
                 <th>Destino</th>
+                <th>Saída</th>
                 <th>Motorista</th>
                 <th>Umidade %</th>
                 <th>Peso bruto</th>
@@ -2687,10 +3234,13 @@ async function renderColheitaBase(variant) {
                 <th>Desconto %</th>
                 <th>Sacas</th>
                 <th>Frete</th>
+                <th>Compra (Silo)</th>
+                <th>Silo (líquida)</th>
+                <th>Terceiros (ideal)</th>
                 <th></th>
               </tr>
             </thead>
-                <tbody id="tbody"><tr><td colspan="13">Carregando...</td></tr></tbody>
+                <tbody id="tbody"><tr><td colspan="17">Carregando...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -2755,12 +3305,42 @@ async function renderColheitaBase(variant) {
           Number.isFinite(pb) && pb > 0 && Number.isFinite(pls)
             ? clamp01(1 - pls / pb) * 100
             : 0
+        const saida = String(v.data_saida || '').trim()
+
+        const valorCompraApplied = Number(v.valor_compra_por_saca_aplicado)
+        const valorCompraRule =
+          v.regra_valor_compra_por_saca === null ||
+          v.regra_valor_compra_por_saca === undefined
+            ? null
+            : Number(v.regra_valor_compra_por_saca)
+
+        const valorCompra = Number.isFinite(valorCompraApplied)
+          ? valorCompraApplied
+          : Number.isFinite(valorCompraRule)
+            ? valorCompraRule
+            : null
+        const sacas = Number(v.sacas || 0)
+        const fretePorSaca = sacas > 0 ? Number(v.sub_total_frete || 0) / sacas : 0
+        const secagemPorSaca = Number(v.secagem_custo_por_saca || 0)
+        const custoSiloPorSaca = Number(v.custo_silo_por_saca || 0)
+        const custoTercPorSaca = Number(v.custo_terceiros_por_saca || 0)
+
+        const compraSilo =
+          valorCompra !== null && Number.isFinite(valorCompra) ? valorCompra : null
+        const siloLiquida =
+          compraSilo === null
+            ? null
+            : compraSilo - (fretePorSaca + secagemPorSaca + custoSiloPorSaca)
+        const terceirosIdeal =
+          compraSilo === null ? null : compraSilo + custoTercPorSaca
+
         return `<tr class="${humClass}">
           <td><code class="mono">${escapeHtml(v.ficha)}</code></td>
           <td>${escapeHtml(v.safra_nome)}</td>
           <td data-sort="${escapeHtml(`${v.talhao_nome || ''} ${v.talhao_local || ''} ${v.ficha || ''}`.trim())}">${escapeHtml(v.talhao_nome || '')}</td>
           <td data-sort="${escapeHtml(`${v.talhao_local || ''} ${v.talhao_nome || ''} ${v.ficha || ''}`.trim())}">${escapeHtml(v.talhao_local || '')}</td>
           <td data-sort="${escapeHtml(`${v.destino_local || ''} ${v.talhao_nome || ''} ${v.motorista_nome || ''}`.trim())}">${escapeHtml(v.destino_local)}</td>
+          <td data-sort="${escapeHtml(saida)}">${escapeHtml(saida || '-')}</td>
           <td data-sort="${escapeHtml(`${v.motorista_nome || ''} ${v.destino_local || ''} ${v.talhao_nome || ''}`.trim())}">${escapeHtml(v.motorista_nome)}</td>
           <td>${Number.isFinite(umid) ? `${fmtNum(umid * 100, 2)}%` : '-'}</td>
           <td>${fmtKg(v.peso_bruto_kg)}</td>
@@ -2768,6 +3348,9 @@ async function renderColheitaBase(variant) {
           <td>${fmtNum(descPct, 2)}%</td>
           <td>${fmtNum(v.sacas, 2)}</td>
           <td>${fmtMoney(v.sub_total_frete)}</td>
+          <td>${compraSilo === null ? '-' : fmtMoney(compraSilo)}</td>
+          <td>${siloLiquida === null ? '-' : fmtMoney(siloLiquida)}</td>
+          <td>${terceirosIdeal === null ? '-' : fmtMoney(terceirosIdeal)}</td>
           <td class="actions">
             <button class="btn small ghost" data-act="edit" data-id="${v.id}">Editar</button>
             <button class="btn small danger" data-act="del" data-id="${v.id}">Excluir</button>
@@ -2776,7 +3359,7 @@ async function renderColheitaBase(variant) {
       })
       .join('')
 
-    if (!data.items.length) tbody.innerHTML = `<tr><td colspan="13">Nenhuma viagem.</td></tr>`
+    if (!data.items.length) tbody.innerHTML = `<tr><td colspan="17">Nenhuma viagem.</td></tr>`
 
     tbody.querySelectorAll('[data-act]').forEach((btn) => {
       btn.onclick = async () => {
@@ -2803,6 +3386,10 @@ async function renderColheitaBase(variant) {
 
   function openViagemDialog({ mode, viagem }) {
     dlg.dataset.variant = variant || ''
+    if (variant === 'rev01') {
+      // evitar "sumir" os calculos entre aberturas do dialog
+      dlg.dataset.previewCollapsed = '0'
+    }
     const clearVariant = () => {
       dlg.dataset.variant = ''
       dlg.removeEventListener('close', clearVariant)
@@ -2911,7 +3498,7 @@ async function renderColheitaBase(variant) {
       bodyHtml: `
         ${
           variant === 'rev01'
-            ? `<div id="preview" class="hint">Preencha os campos para ver o calculo (preview).</div>`
+            ? `<div id="preview"><div class="hint">Preencha os campos para ver o calculo (preview).</div></div>`
             : ''
         }
         <div class="form-grid" id="vForm">
@@ -2954,12 +3541,18 @@ async function renderColheitaBase(variant) {
            ${formField({ label: 'Hora entrega', name: 'hora_entrega', type: 'time', value: base.hora_entrega ?? '', span: 'col6' })}
 
           ${sectionTitle('Pesagem e umidade')}
-          ${formField({ label: 'Carga total (kg)', name: 'carga_total_kg', type: 'number', step: '1', value: base.carga_total_kg, span: 'col4' })}
-          ${formField({ label: 'Tara (kg)', name: 'tara_kg', type: 'number', step: '1', value: base.tara_kg, span: 'col4' })}
+          ${formField({ label: 'Carga total (kg)', name: 'carga_total_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.carga_total_kg, span: 'col4' })}
+          ${formField({ label: 'Tara (kg)', name: 'tara_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.tara_kg, span: 'col4' })}
           ${formField({ label: `Umidade % ${helpTip('Valor informado pela amostra do silo (laboratorio).')}`, name: 'umidade_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_pct, span: 'col4' })}
           ${formField({ label: `Desconto umidade % ${helpTip('Sugerido automaticamente pela tabela do destino (por safra) a partir da umidade informada. Voce pode ajustar; se ficar diferente da tabela, o campo fica amarelo.')}`, name: 'umidade_desc_pct_manual', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_desc_pct_manual ?? '', span: 'col4' })}
 
           ${sectionTitle('Qualidade (amostra do silo)')}
+          <div class="field col12" style="margin-top:-6px">
+            <div style="display:flex;justify-content:flex-end">
+              <button class="btn ghost small" type="button" id="btnCompareDest">Comparar destinos</button>
+            </div>
+            <div class="hint" style="margin-top:6px">Simula quantas sacas (limpa/seca) dariam em outros destinos com regras cadastradas para esta safra e plantio. Nao salva nada.</div>
+          </div>
           ${formField({ label: 'Impureza %', name: 'impureza_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.impureza_pct, span: 'col3' })}
           ${formField({ label: 'Ardidos %', name: 'ardidos_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.ardidos_pct, span: 'col3' })}
           ${formField({ label: 'Queimados %', name: 'queimados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.queimados_pct, span: 'col3' })}
@@ -2969,7 +3562,7 @@ async function renderColheitaBase(variant) {
         </div>
         ${
           variant !== 'rev01'
-            ? `<div class="hint" id="preview">Preencha os campos para ver o calculo (preview).</div>`
+            ? `<div id="preview"><div class="hint">Preencha os campos para ver o calculo (preview).</div></div>`
             : ''
         }
       `,
@@ -3239,7 +3832,7 @@ async function renderColheitaBase(variant) {
       if (m.placa) inputPlaca.value = m.placa
     }
 
-    function setDestinoRegraUi({ regra, preview } = {}) {
+    function setDestinoRegraUi({ regra, preview, error } = {}) {
       const travaDot = dlgForm.querySelector('#travaDot')
       const travaStatus = dlgForm.querySelector('#travaStatus')
       const travaEntregue = dlgForm.querySelector('#travaEntregue')
@@ -3247,6 +3840,15 @@ async function renderColheitaBase(variant) {
       const travaRestante = dlgForm.querySelector('#travaRestante')
       const regraDot = dlgForm.querySelector('#regraDot')
       const regraInfo = dlgForm.querySelector('#regraInfo')
+
+      // Quando o preview falha (ex: frete nao cadastrado), nao afirmar que "regra nao existe".
+      if (error) {
+        if (regraInfo) {
+          regraInfo.textContent = `Erro: ${String(error?.message || error)}`
+        }
+        if (regraDot) regraDot.className = 'dot bad'
+        // ainda tenta atualizar trava com o que tiver
+      }
 
       const trava = preview?.trava
       const limite =
@@ -3307,14 +3909,16 @@ async function renderColheitaBase(variant) {
             ? regra.umidade_faixas.length
             : null
 
-      if (regraInfo) {
-        if (!regraExiste) {
-          regraInfo.textContent = 'Regras do destino: NAO CADASTRADO'
-        } else {
-          regraInfo.textContent = `Regras do destino: OK${faixasQtd === null ? '' : ` (${faixasQtd} faixas)`}`
+      if (!error) {
+        if (regraInfo) {
+          if (!regraExiste) {
+            regraInfo.textContent = 'Regras do destino: NAO CADASTRADO (nao e possivel salvar)'
+          } else {
+            regraInfo.textContent = `Regras do destino: OK${faixasQtd === null ? '' : ` (${faixasQtd} faixas)`}`
+          }
         }
+        if (regraDot) regraDot.className = `dot ${regraExiste ? '' : 'bad'}`.trim()
       }
-      if (regraDot) regraDot.className = `dot ${regraExiste ? '' : 'bad'}`.trim()
     }
 
     async function applyDestinoDefaults() {
@@ -3353,21 +3957,173 @@ async function renderColheitaBase(variant) {
         updateLimitHighlight()
         setDestinoRegraUi({ regra })
       } catch {
-        // regras sao opcionais
+        setDestinoRegraUi({ error: { message: 'Nao foi possivel carregar as regras do destino.' } })
       }
     }
 
-    const previewEl = document.querySelector('#preview')
-    const vForm = document.querySelector('#vForm')
+    const previewEl = dlgBody.querySelector('#preview')
+    const vForm = dlgBody.querySelector('#vForm')
+
+    const btnCompareDest = dlgBody.querySelector('#btnCompareDest')
+    if (btnCompareDest) {
+      btnCompareDest.onclick = async () => {
+        const fd = new FormData(dlgForm)
+        const obj = Object.fromEntries(fd.entries())
+        if (!obj.carga_total_kg || !obj.tara_kg) {
+          toast('Erro', 'Preencha carga total e tara antes de comparar.')
+          return
+        }
+        const body = {
+          ...(isEdit && viagem?.id ? { id: Number(viagem.id) } : {}),
+          ficha: obj.ficha || '1',
+          safra_id: Number(obj.safra_id),
+          tipo_plantio: obj.tipo_plantio || null,
+          talhao_id: Number(obj.talhao_id),
+          local: obj.local || null,
+          destino_id: Number(obj.destino_id),
+          motorista_id: Number(obj.motorista_id),
+          placa: obj.placa || null,
+          data_saida: obj.data_saida || null,
+          hora_saida: obj.hora_saida || null,
+          data_entrega: obj.data_entrega || null,
+          hora_entrega: obj.hora_entrega || null,
+          carga_total_kg: parseNumberPt(obj.carga_total_kg),
+          tara_kg: parseNumberPt(obj.tara_kg),
+          umidade_pct: parsePercent100OrZero(obj.umidade_pct, 'umidade_pct'),
+          umidade_desc_pct_manual: null,
+          impureza_pct: parsePercent100OrZero(obj.impureza_pct, 'impureza_pct'),
+          ardidos_pct: parsePercent100OrZero(obj.ardidos_pct, 'ardidos_pct'),
+          queimados_pct: parsePercent100OrZero(obj.queimados_pct, 'queimados_pct'),
+          avariados_pct: parsePercent100OrZero(obj.avariados_pct, 'avariados_pct'),
+          esverdiados_pct: parsePercent100OrZero(obj.esverdiados_pct, 'esverdiados_pct'),
+          quebrados_pct: parsePercent100OrZero(obj.quebrados_pct, 'quebrados_pct'),
+          impureza_limite_pct: 0,
+          ardidos_limite_pct: 0,
+          queimados_limite_pct: 0,
+          avariados_limite_pct: 0,
+          esverdiados_limite_pct: 0,
+          quebrados_limite_pct: 0,
+        }
+
+        const r = await api('/api/viagens/comparar-destinos', { method: 'POST', body })
+        const items = Array.isArray(r?.items) ? r.items : []
+        if (!items.length) {
+          toast('Info', 'Nenhum destino com regras encontradas para esta safra/plantio.')
+          return
+        }
+
+        const rows = items
+          .map((it) => {
+            const delta = Number(it.delta_valor_final_total_com_frete)
+            const deltaTxt =
+              it.delta_valor_final_total_com_frete === null || !Number.isFinite(delta)
+                ? '-'
+                : `${delta >= 0 ? '+' : ''}${fmtMoney(delta)}`
+            const badge = it.is_atual ? ' <span class="hint">(atual)</span>' : ''
+
+            const freteTotal =
+              it.sub_total_frete === null || it.sub_total_frete === undefined
+                ? null
+                : Number(it.sub_total_frete)
+
+            const finalSemFrete = Number(it.valor_final_total_sem_frete)
+            const finalComFrete =
+              it.valor_final_total_com_frete === null ||
+              it.valor_final_total_com_frete === undefined
+                ? null
+                : Number(it.valor_final_total_com_frete)
+
+            return `<tr>
+              <td data-sort="${escapeHtml(String(it.destino_local || ''))}">${escapeHtml(it.destino_local || '')}${badge}</td>
+              <td data-sort="${escapeHtml(String(it.sacas || 0))}">${fmtNum(it.sacas || 0, 2)}</td>
+              <td>${fmtPctFromFrac(it.umidade_desc_pct || 0, 2)}</td>
+              <td data-sort="${escapeHtml(String(it.sub_total_secagem || 0))}">${fmtMoney(Number(it.sub_total_secagem || 0))}</td>
+              <td data-sort="${escapeHtml(String(it.sub_total_custo_silo || 0))}">${fmtMoney(Number(it.sub_total_custo_silo || 0))}</td>
+              <td data-sort="${escapeHtml(String(it.preco_compra_por_saca || 0))}">${fmtMoney(Number(it.preco_compra_por_saca || 0))}/sc</td>
+              <td data-sort="${escapeHtml(String(it.preco_liquido_sem_frete_por_saca || 0))}"><b>${fmtMoney(Number(it.preco_liquido_sem_frete_por_saca || 0))}</b>/sc</td>
+              <td data-sort="${escapeHtml(String(finalSemFrete || 0))}"><b>${fmtMoney(finalSemFrete || 0)}</b></td>
+              <td data-sort="${escapeHtml(String(finalComFrete || -1e18))}"><b>${finalComFrete === null ? '-' : fmtMoney(finalComFrete)}</b></td>
+              <td data-sort="${escapeHtml(String(delta || 0))}">${escapeHtml(deltaTxt)}</td>
+            </tr>`
+          })
+          .join('')
+
+        openDialog({
+          title: 'Comparar destinos (sacas)',
+          size: 'wide',
+          submitLabel: 'Fechar',
+          bodyHtml: `
+            <div class="hint">Compara quanto sobra no silo por destino (mesma safra/plantio). Sacas = (peso_limpo/seco / 60). “Liquido s/ frete” = compra - secagem - custos do silo. “Total c/ frete” desconta tambem o frete (motorista x destino).</div>
+            <div class="table-wrap" style="margin-top:12px">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Destino</th>
+                    <th>Sacas (sc)</th>
+                    <th>Desc. umidade</th>
+                    <th>Secagem (R$)</th>
+                    <th>Custos silo (R$)</th>
+                    <th>Preco compra (R$/sc)</th>
+                    <th>Liquido s/ frete (R$/sc)</th>
+                    <th>Total s/ frete (R$)</th>
+                    <th>Total c/ frete (R$)</th>
+                    <th>Delta vs atual (c/ frete)</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          `,
+          onSubmit: async () => {},
+        })
+      }
+    }
     const runPreview = debounce(async () => {
       try {
         const fd = new FormData(dlgForm)
         const obj = Object.fromEntries(fd.entries())
+
+        const renderPreviewShell = (innerHtml) => {
+          if (!previewEl) return
+          if (variant !== 'rev01') {
+            previewEl.innerHTML = innerHtml
+            return
+          }
+
+          if (!('previewCollapsed' in dlg.dataset)) dlg.dataset.previewCollapsed = '0'
+          const collapsed = dlg.dataset.previewCollapsed === '1'
+          const btnLabel = collapsed ? 'Exibir cálculos' : 'Recolher cálculos'
+
+          previewEl.innerHTML = `
+            <div class="prev-head">
+              <div class="prev-title">Cálculos</div>
+              <button class="btn ghost small" type="button" id="btnTogglePreview">${escapeHtml(btnLabel)}</button>
+            </div>
+            <div class="prev-body">${innerHtml}</div>
+          `.trim()
+        }
+
+        if (previewEl && variant === 'rev01' && previewEl.dataset.togglerBound !== '1') {
+          previewEl.dataset.togglerBound = '1'
+          previewEl.addEventListener('click', (e) => {
+            const btn = e.target?.closest?.('#btnTogglePreview')
+            if (!btn) return
+            e.preventDefault()
+            const collapsed = dlg.dataset.previewCollapsed === '1'
+            dlg.dataset.previewCollapsed = collapsed ? '0' : '1'
+            // Apenas alterna a visibilidade via CSS; o conteudo segue sendo atualizado pelo preview
+            btn.textContent = collapsed ? 'Recolher cálculos' : 'Exibir cálculos'
+          })
+        }
+
         if (!obj.carga_total_kg || !obj.tara_kg) {
-          previewEl.textContent = 'Preencha os campos para ver o calculo (preview).'
+          renderPreviewShell(
+            '<div class="hint">Preencha os campos para ver o cálculo (preview).</div>',
+          )
           return
         }
         const body = {
+          ...(isEdit && viagem?.id ? { id: Number(viagem.id) } : {}),
           ficha: obj.ficha || '1',
           safra_id: Number(obj.safra_id),
           tipo_plantio: obj.tipo_plantio || null,
@@ -3417,8 +4173,49 @@ async function renderColheitaBase(variant) {
 
         updateLimitHighlight()
 
-        previewEl.innerHTML = `
+        const calcHtml = `
           <span class="pill"><span class="dot"></span><span>Peso bruto: <b>${fmtKg(p.peso_bruto_kg)}</b></span></span>
+          ${
+            p.valor_compra_por_saca !== null && p.valor_compra_por_saca !== undefined
+              ? `<span class="pill"><span class="dot"></span><span>Compra (Silo): <b>${fmtMoney(p.valor_compra_por_saca)}</b>/sc</span></span>`
+              : ''
+          }
+          ${
+            p.valor_compra_por_saca !== null && p.valor_compra_por_saca !== undefined
+              ? `<span class="pill"><span class="dot"></span><span>Compra (Silo) liquida: <b>${fmtMoney(p.valor_compra_silo_liquida_por_saca)}</b>/sc</span></span>`
+              : ''
+          }
+          ${
+            p.valor_compra_por_saca !== null && p.valor_compra_por_saca !== undefined
+              ? `<span class="pill"><span class="dot"></span><span>Venda (Terceiros) bruto ideal: <b>${fmtMoney(p.valor_venda_terceiros_bruto_ideal_por_saca)}</b>/sc</span></span>`
+              : ''
+          }
+           ${
+             Array.isArray(p.valor_compra_detalhes) && p.valor_compra_detalhes.length
+               ? `<details class="prev-details" ${p.valor_compra_detalhes.length > 1 ? 'open' : ''}>
+                    <summary>
+                      Tratativa de precos (acumulado): antes <b>${fmtNum(p.valor_compra_entrega_antes || 0, 2)}</b> sc | depois <b>${fmtNum(p.valor_compra_entrega_depois || 0, 2)}</b> sc
+                    </summary>
+                    <div style="margin-top:8px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(15,26,22,.10)">
+                      <div class="table-wrap" style="margin:0">
+                        <table>
+                          <thead><tr><th>De (acum.)</th><th>Ate (acum.)</th><th>Sacas</th><th>Preco (R$/sc)</th></tr></thead>
+                          <tbody>
+                            ${p.valor_compra_detalhes
+                              .map((d) => `<tr>
+                                <td>${fmtNum(d.de_acumulado || 0, 2)}</td>
+                                <td>${fmtNum(d.ate_acumulado || 0, 2)}</td>
+                                <td>${fmtNum(d.sacas || 0, 2)}</td>
+                                <td>${fmtMoney(d.preco_por_saca || 0)}</td>
+                              </tr>`)
+                              .join('')}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </details>`
+               : ''
+           }
           ${
             p.secagem_custo_por_saca && Number(p.secagem_custo_por_saca) > 0
               ? `<span class="pill"><span class="dot warn"></span><span>Secagem: <b>${fmtMoney(p.sub_total_secagem)}</b> (R$ ${fmtNum(p.secagem_custo_por_saca, 2)}/sc)</span></span>`
@@ -3444,11 +4241,15 @@ async function renderColheitaBase(variant) {
           <span class="pill"><span class="dot"></span><span>Peso limpo/seco: <b>${fmtKg(p.peso_limpo_seco_kg)}</b></span></span>
           <span class="pill"><span class="dot"></span><span>Sacas: <b>${fmtNum(p.sacas, 2)}</b></span></span>
           <span class="pill"><span class="dot"></span><span>Frete: <b>${fmtMoney(p.sub_total_frete)}</b> (R$ ${fmtNum(p.frete_tabela, 2)}/sc)</span></span>
-        `
+        `.trim()
+
+        renderPreviewShell(calcHtml)
       } catch (e) {
         dlg.dataset.trava = ''
-        setDestinoRegraUi({})
-        previewEl.innerHTML = `<span class="pill"><span class="dot bad"></span><span>${escapeHtml(e.message)}</span></span>`
+        setDestinoRegraUi({ error: e })
+        renderPreviewShell(
+          `<span class="pill"><span class="dot bad"></span><span>${escapeHtml(e.message)}</span></span>`,
+        )
       }
     }, 250)
 
@@ -3546,6 +4347,7 @@ async function renderRelatorios() {
                 <button class="btn ghost" id="btnExpDes" type="button">Exportar destinos</button>
                 <button class="btn ghost" id="btnExpPay" type="button">Exportar motoristas</button>
                 <button class="btn" id="btnExpRaw" type="button">Dados brutos (CSV)</button>
+                <button class="btn" id="btnExpViagensAll" type="button">Colheitas completo (Excel)</button>
               </div>
             </div>
           </div>
@@ -3589,6 +4391,7 @@ async function renderRelatorios() {
   const btnExpDes = view.querySelector('#btnExpDes')
   const btnExpPay = view.querySelector('#btnExpPay')
   const btnExpRaw = view.querySelector('#btnExpRaw')
+  const btnExpViagensAll = view.querySelector('#btnExpViagensAll')
   const form = view.querySelector('#rFilters')
   const rTal = view.querySelector('#rtalhao')
   const rDes = view.querySelector('#rdest')
@@ -3792,6 +4595,219 @@ async function renderRelatorios() {
     )
   }
 
+  btnExpViagensAll.onclick = async () => {
+    const fd = new FormData(form)
+    const safra_id = fd.get('safra_id')
+    const de = fd.get('de') || null
+    const ate = fd.get('ate') || null
+    const qs = new URLSearchParams({
+      ...(safra_id ? { safra_id } : {}),
+      ...(de ? { de } : {}),
+      ...(ate ? { ate } : {}),
+    })
+    const r = await api(`/api/viagens?${qs}`)
+    const items = r.items || []
+
+    const headers = [
+      // Identificacao
+      'ID',
+      'Ficha',
+      'Safra',
+      'Safra ID',
+      'Plantio',
+      'Talhao',
+      'Talhao codigo',
+      'Talhao local',
+      'Talhao ID',
+      'Destino',
+      'Destino codigo',
+      'Destino ID',
+      'Motorista',
+      'Motorista ID',
+      'Placa',
+      'Local (colheita)',
+
+      // Datas
+      'Data saida',
+      'Hora saida',
+      'Data entrega',
+      'Hora entrega',
+
+      // Entradas (amostra)
+      'Umidade informada (%)',
+      'Impureza (%)',
+      'Ardidos (%)',
+      'Queimados (%)',
+      'Avariados (%)',
+      'Esverdiados (%)',
+      'Quebrados (%)',
+
+      // Limites usados
+      'Limite impureza (%)',
+      'Limite ardidos (%)',
+      'Limite queimados (%)',
+      'Limite avariados (%)',
+      'Limite esverdiados (%)',
+      'Limite quebrados (%)',
+
+      // Pesagens (entrada)
+      'Carga total (kg)',
+      'Tara (kg)',
+
+      // Calculados
+      'Peso bruto (kg)',
+      'Desc. umidade aplicado (%)',
+      'Desc. umidade manual (%)',
+      'Umidade (kg)',
+      'Impureza (kg)',
+      'Ardidos (kg)',
+      'Queimados (kg)',
+      'Avariados (kg)',
+      'Esverdiados (kg)',
+      'Quebrados (kg)',
+      'Peso limpo/seco (kg)',
+      'Sacas (sc)',
+
+      // Frete
+      'Sacas frete (sc)',
+      'Frete tabela (R$/sc)',
+      'Frete total (R$)',
+
+      // Secagem / custos
+      'Secagem (R$/sc)',
+      'Secagem total (R$)',
+      'Custos silo (R$/sc)',
+      'Custos silo total (R$)',
+      'Custos terceiros (R$/sc)',
+      'Custos terceiros total (R$)',
+
+      // Compra do silo (persistido)
+      'Compra silo aplicada (R$/sc)',
+      'Compra silo total (R$)',
+      'Compra entregue antes (sc)',
+      'Compra entregue depois (sc)',
+
+      // Derivados (nao persistidos diretamente)
+      'Frete por saca (R$/sc)',
+      'Despesas silo por saca (R$/sc)',
+      'Compra liquida silo (R$/sc)',
+      'Preco liquido silo (R$/sc)',
+      'Total liquido silo (R$)',
+
+      // Meta
+      'Criacao',
+      'Alteracao',
+    ]
+
+    const rows = items.map((v) => {
+      const sacas = Number(v.sacas || 0)
+      const freteTotal = Number(v.sub_total_frete || 0)
+      const fretePorSaca = sacas > 0 ? freteTotal / sacas : 0
+      const compraAplicada =
+        v.valor_compra_por_saca_aplicado === null || v.valor_compra_por_saca_aplicado === undefined
+          ? null
+          : Number(v.valor_compra_por_saca_aplicado)
+
+      const secagemPorSaca = Number(v.secagem_custo_por_saca || 0)
+      const custoSiloPorSaca = Number(v.custo_silo_por_saca || 0)
+      const despesasSiloPorSaca = secagemPorSaca + custoSiloPorSaca + fretePorSaca
+
+      const compraLiquidaSilo = compraAplicada === null ? null : compraAplicada - despesasSiloPorSaca
+      const precoLiquidoSilo =
+        compraAplicada === null ? null : compraAplicada - Number(v.abatimento_por_saca_silo || 0)
+      const totalLiquidoSilo =
+        precoLiquidoSilo === null ? null : sacas * Number(precoLiquidoSilo || 0)
+
+      const pct = (x) => (Number.isFinite(Number(x)) ? Number(x) * 100 : null)
+
+      return [
+        String(v.id ?? ''),
+        String(v.ficha ?? ''),
+        String(v.safra_nome ?? ''),
+        String(v.safra_id ?? ''),
+        String(v.tipo_plantio ?? ''),
+        String(v.talhao_nome ?? ''),
+        String(v.talhao_codigo ?? ''),
+        String(v.talhao_local ?? ''),
+        String(v.talhao_id ?? ''),
+        String(v.destino_local ?? ''),
+        String(v.destino_codigo ?? ''),
+        String(v.destino_id ?? ''),
+        String(v.motorista_nome ?? ''),
+        String(v.motorista_id ?? ''),
+        String(v.placa ?? ''),
+        String(v.local ?? ''),
+
+        String(v.data_saida ?? ''),
+        String(v.hora_saida ?? ''),
+        String(v.data_entrega ?? ''),
+        String(v.hora_entrega ?? ''),
+
+        csvNumber(pct(v.umidade_pct), 2),
+        csvNumber(pct(v.impureza_pct), 2),
+        csvNumber(pct(v.ardidos_pct), 2),
+        csvNumber(pct(v.queimados_pct), 2),
+        csvNumber(pct(v.avariados_pct), 2),
+        csvNumber(pct(v.esverdiados_pct), 2),
+        csvNumber(pct(v.quebrados_pct), 2),
+
+        csvNumber(pct(v.impureza_limite_pct), 2),
+        csvNumber(pct(v.ardidos_limite_pct), 2),
+        csvNumber(pct(v.queimados_limite_pct), 2),
+        csvNumber(pct(v.avariados_limite_pct), 2),
+        csvNumber(pct(v.esverdiados_limite_pct), 2),
+        csvNumber(pct(v.quebrados_limite_pct), 2),
+
+        csvNumber(v.carga_total_kg, 0),
+        csvNumber(v.tara_kg, 0),
+
+        csvNumber(v.peso_bruto_kg, 0),
+        csvNumber(pct(v.umidade_desc_pct), 2),
+        csvNumber(pct(v.umidade_desc_pct_manual), 2),
+        csvNumber(v.umidade_kg, 0),
+        csvNumber(v.impureza_kg, 0),
+        csvNumber(v.ardidos_kg, 0),
+        csvNumber(v.queimados_kg, 0),
+        csvNumber(v.avariados_kg, 0),
+        csvNumber(v.esverdiados_kg, 0),
+        csvNumber(v.quebrados_kg, 0),
+        csvNumber(v.peso_limpo_seco_kg, 0),
+        csvNumber(v.sacas, 2),
+
+        csvNumber(v.sacas_frete, 2),
+        csvNumber(v.frete_tabela, 2),
+        csvNumber(v.sub_total_frete, 2),
+
+        csvNumber(v.secagem_custo_por_saca, 2),
+        csvNumber(v.sub_total_secagem, 2),
+        csvNumber(v.custo_silo_por_saca, 2),
+        csvNumber(v.sub_total_custo_silo, 2),
+        csvNumber(v.custo_terceiros_por_saca, 2),
+        csvNumber(v.sub_total_custo_terceiros, 2),
+
+        compraAplicada === null ? '' : csvNumber(compraAplicada, 2),
+        csvNumber(v.valor_compra_total, 2),
+        csvNumber(v.valor_compra_entrega_antes, 2),
+        csvNumber(v.valor_compra_entrega_depois, 2),
+
+        csvNumber(fretePorSaca, 6),
+        csvNumber(despesasSiloPorSaca, 6),
+        compraLiquidaSilo === null ? '' : csvNumber(compraLiquidaSilo, 6),
+        precoLiquidoSilo === null ? '' : csvNumber(precoLiquidoSilo, 6),
+        totalLiquidoSilo === null ? '' : csvNumber(totalLiquidoSilo, 2),
+
+        String(v.created_at ?? ''),
+        String(v.updated_at ?? ''),
+      ]
+    })
+
+    downloadCsv(
+      `colheitas-completo${safra_id ? `-safra-${safra_id}` : ''}${de ? `-${de}` : ''}${ate ? `-${ate}` : ''}.csv`,
+      headers,
+      rows,
+    )
+  }
+
   await run()
 }
 
@@ -3799,8 +4815,41 @@ async function renderAreaColhida() {
   activeNav('area-colhida')
   await loadLookups()
 
+  function parseDateLike(s) {
+    const v = String(s || '').trim()
+    if (!v) return null
+    const t = Date.parse(v.replace(' ', 'T'))
+    return Number.isFinite(t) ? t : null
+  }
+
+  function pickDefaultSafraId() {
+    const key = 'area_colhida_safra_id'
+    const remembered = Number(localStorage.getItem(key) || '')
+    if (Number.isFinite(remembered) && remembered > 0) {
+      if (cache.safras.some((s) => Number(s.id) === remembered)) return remembered
+    }
+
+    const painel = cache.safras.find((s) => Number(s.painel) === 1)
+    if (painel?.id) return painel.id
+
+    const sorted = [...cache.safras].sort((a, b) => {
+      const ad =
+        parseDateLike(a.data_referencia) ??
+        parseDateLike(a.updated_at) ??
+        parseDateLike(a.created_at) ??
+        Number(a.id)
+      const bd =
+        parseDateLike(b.data_referencia) ??
+        parseDateLike(b.updated_at) ??
+        parseDateLike(b.created_at) ??
+        Number(b.id)
+      return bd - ad
+    })
+    return sorted[0]?.id ?? cache.safras[0]?.id
+  }
+
   const safraOpts = cache.safras.map((s) => ({ value: s.id, label: s.safra }))
-  const safraId = safraOpts[0]?.value
+  const safraId = pickDefaultSafraId()
 
   setView(`
     <section class="panel">
@@ -3827,9 +4876,18 @@ async function renderAreaColhida() {
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Nome</th><th>Local</th><th>Area (ha)</th><th>Area colhida (%)</th><th>Area colhida (ha)</th><th></th></tr>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Local</th>
+                    <th>Area (ha)</th>
+                    <th>Area colhida (%)</th>
+                    <th>Area colhida (ha)</th>
+                    <th>Sacas colhidas</th>
+                    <th>Prod. ajustada</th>
+                    <th></th>
+                  </tr>
                 </thead>
-                <tbody id="acBody"><tr><td colspan="6">Carregando...</td></tr></tbody>
+                <tbody id="acBody"><tr><td colspan="8">Carregando...</td></tr></tbody>
               </table>
             </div>
             <div class="hint">Se ainda nao foi informado, a area colhida inicia em 0%.</div>
@@ -3846,6 +4904,9 @@ async function renderAreaColhida() {
   async function run() {
     const fd = new FormData(form)
     const safra_id = Number(fd.get('safra_id'))
+    if (Number.isFinite(safra_id) && safra_id > 0) {
+      localStorage.setItem('area_colhida_safra_id', String(safra_id))
+    }
     const items = await api(`/api/relatorios/resumo-talhao?safra_id=${safra_id}`)
 
     body.innerHTML = items
@@ -3853,19 +4914,15 @@ async function renderAreaColhida() {
         const hectares = Number(t.hectares || 0)
         const pct = Number(t.pct_area_colhida ?? 0)
         const areaColhidaHa = hectares * pct
+        const sacas = Number(t.sacas || 0)
+        const prodAdj = Number(t.produtividade_ajustada_sacas_ha || 0)
         return `<tr>
           <td data-sort="${escapeHtml(String(t.talhao_nome || '').trim())}">${escapeHtml(t.talhao_nome || '')}</td>
           <td data-sort="${escapeHtml(String(t.talhao_local || '').trim())}">${escapeHtml(t.talhao_local || '')}</td>
           <td>${fmtNum(hectares, 2)}</td>
           <td>
             <div class="pct-row">
-              <input
-                class="pct-read"
-                type="text"
-                value="${fmtNum(pct * 100, 1)}%"
-                data-act="pct-read"
-                readonly
-              />
+              <span class="pct-read" data-act="pct-read">${fmtNum(pct * 100, 1)}%</span>
               <input
                 class="pct-range"
                 type="range"
@@ -3876,10 +4933,13 @@ async function renderAreaColhida() {
                 data-act="pct-range"
                 data-talhao="${t.talhao_id}"
                 data-hectares="${escapeHtml(String(hectares))}"
+                data-sacas="${escapeHtml(String(sacas))}"
               />
             </div>
           </td>
           <td><span data-act="area-ha">${fmtNum(areaColhidaHa, 2)}</span> ha</td>
+          <td data-sort="${escapeHtml(String(sacas))}">${fmtNum(sacas, 2)}</td>
+          <td><span data-act="prod-adj">${fmtNum(prodAdj, 2)}</span> sc/ha</td>
           <td></td>
         </tr>`
       })
@@ -3888,13 +4948,21 @@ async function renderAreaColhida() {
     function updateRowUi(rangeEl) {
       const tr = rangeEl.closest('tr')
       if (!tr) return
-      const read = tr.querySelector('input[data-act="pct-read"]')
+      const read = tr.querySelector('[data-act="pct-read"]')
       const area = tr.querySelector('[data-act="area-ha"]')
       const pct100 = Number(rangeEl.value)
       const hectares = Number(rangeEl.dataset.hectares || 0)
+      const sacas = Number(rangeEl.dataset.sacas || 0)
       const pct2 = Number.isFinite(pct100) ? Math.min(1, Math.max(0, pct100 / 100)) : 0
-      if (read) read.value = `${fmtNum(pct2 * 100, 1)}%`
+      if (read) read.textContent = `${fmtNum(pct2 * 100, 1)}%`
       if (area) area.textContent = fmtNum(hectares * pct2, 2)
+
+      const prodAdjEl = tr.querySelector('[data-act="prod-adj"]')
+      if (prodAdjEl) {
+        const denom = hectares * pct2
+        const prod = denom > 0 ? sacas / denom : 0
+        prodAdjEl.textContent = fmtNum(prod, 2)
+      }
 
       // color fill from red -> green as % increases
       const t = Math.max(0, Math.min(1, pct2))
@@ -3926,6 +4994,9 @@ async function renderAreaColhida() {
   }
 
   btn.onclick = run
+  if (form?.safra_id) {
+    form.safra_id.onchange = () => run()
+  }
   await run()
 }
 
@@ -4087,7 +5158,7 @@ async function renderQuitacaoMotoristas() {
               ${formField({ label: 'Periodo de', name: 'de', type: 'date', value: q.de, span: 'col3' })}
               ${formField({ label: 'Periodo ate', name: 'ate', type: 'date', value: q.ate, span: 'col3' })}
               ${formField({ label: 'Data pagamento', name: 'data_pagamento', type: 'date', value: q.data_pagamento, span: 'col4' })}
-              ${formField({ label: 'Valor', name: 'valor', type: 'number', step: '0.01', value: String(q.valor ?? ''), span: 'col4' })}
+              ${formField({ label: 'Valor', name: 'valor', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: q.valor === null || q.valor === undefined ? '' : fmtNum(Number(q.valor), 2), span: 'col4' })}
               ${selectField({
                 label: 'Forma',
                 name: 'forma_pagamento',
@@ -4101,6 +5172,16 @@ async function renderQuitacaoMotoristas() {
                 value: q.forma_pagamento || 'PIX',
                 span: 'col4',
               })}
+
+              <div class="field col12">
+                <div class="label">Dados do motorista</div>
+                <div class="hint" id="qMotInfo" style="word-break:break-word">-</div>
+                <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+                  <button class="btn small ghost" type="button" id="qCopyPix">Copiar PIX</button>
+                  <button class="btn small ghost" type="button" id="qCopyCpf">Copiar CPF</button>
+                </div>
+              </div>
+
               ${formField({ label: 'Observacoes', name: 'observacoes', value: q.observacoes || '', span: 'col12' })}
             </div>
           `,
@@ -4121,6 +5202,44 @@ async function renderQuitacaoMotoristas() {
             run()
           },
         })
+
+        const selMot = dlgForm.querySelector('select[name="motorista_id"]')
+        const infoEl = dlgBody.querySelector('#qMotInfo')
+        const btnPix = dlgBody.querySelector('#qCopyPix')
+        const btnCpf = dlgBody.querySelector('#qCopyCpf')
+
+        const refreshMot = () => {
+          const mid = Number(selMot?.value)
+          const m = (cache.motoristas || []).find((x) => Number(x.id) === mid)
+          const pix = String(m?.pix_conta || '').trim()
+          const cpf = String(m?.cpf || '').trim()
+          const banco = String(m?.banco || '').trim()
+          const placa = String(m?.placa || '').trim()
+          if (infoEl) {
+            infoEl.innerHTML = `Banco: <b>${escapeHtml(banco || '-')}</b> | PIX/Conta: <b>${escapeHtml(pix || '-')}</b> | CPF: <b>${escapeHtml(cpf || '-')}</b> | Placa: <b>${escapeHtml(placa || '-')}</b>`
+          }
+          if (btnPix) btnPix.disabled = !pix
+          if (btnCpf) btnCpf.disabled = !cpf
+          if (btnPix) {
+            btnPix.onclick = async () => {
+              if (!pix) return
+              await navigator.clipboard.writeText(pix)
+              btnPix.textContent = 'Copiado'
+              setTimeout(() => (btnPix.textContent = 'Copiar PIX'), 1200)
+            }
+          }
+          if (btnCpf) {
+            btnCpf.onclick = async () => {
+              if (!cpf) return
+              await navigator.clipboard.writeText(cpf)
+              btnCpf.textContent = 'Copiado'
+              setTimeout(() => (btnCpf.textContent = 'Copiar CPF'), 1200)
+            }
+          }
+        }
+
+        if (selMot) selMot.onchange = refreshMot
+        refreshMot()
       }
     })
 
@@ -4139,13 +5258,26 @@ async function renderQuitacaoMotoristas() {
         const motorista_id = Number(b.dataset.id)
         const nome = b.dataset.nome || ''
         const falta = Number(b.dataset.falta || 0)
+
+        const m = (cache.motoristas || []).find((x) => Number(x.id) === motorista_id)
+        const motInfo = m
+          ? {
+              placa: m.placa || '',
+              cpf: m.cpf || '',
+              banco: m.banco || '',
+              pix: m.pix_conta || '',
+              tipo: m.tipo_veiculo || '',
+              cap: m.capacidade_kg || '',
+            }
+          : null
+
         openDialog({
           title: `Quitar motorista: ${nome}`,
           submitLabel: 'Registrar',
           bodyHtml: `
             <div class="form-grid">
               ${formField({ label: 'Data pagamento', name: 'data_pagamento', type: 'date', value: today, span: 'col4' })}
-              ${formField({ label: 'Valor', name: 'valor', type: 'number', step: '0.01', value: falta > 0 ? fmtNum(falta, 2).replace('.', '').replace(',', '.') : '', span: 'col4' })}
+              ${formField({ label: 'Valor', name: 'valor', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: falta > 0 ? fmtNum(falta, 2) : '', span: 'col4' })}
               ${selectField({ label: 'Forma', name: 'forma_pagamento', options: [
                 { value: 'PIX', label: 'PIX' },
                 { value: 'TED', label: 'TED' },
@@ -4153,6 +5285,31 @@ async function renderQuitacaoMotoristas() {
                 { value: 'CHEQUE', label: 'Cheque' },
                 { value: 'OUTROS', label: 'Outros' },
               ], value: 'PIX', span: 'col4' })}
+
+              <div class="field col12">
+                <div class="label">Dados para pagamento</div>
+                <div class="hint" id="motPayHint" style="word-break:break-word">
+                  ${
+                    motInfo
+                      ? `Banco: <b>${escapeHtml(motInfo.banco || '-')}</b> | PIX/Conta: <b>${escapeHtml(motInfo.pix || '-')}</b> | CPF: <b>${escapeHtml(motInfo.cpf || '-')}</b> | Placa: <b>${escapeHtml(motInfo.placa || '-')}</b>`
+                      : 'Motorista nao encontrado no cadastro.'
+                  }
+                </div>
+                ${
+                  motInfo
+                    ? `<div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+                         <button class="btn small ghost" type="button" id="btnCopyPix" ${motInfo.pix ? '' : 'disabled'}>Copiar PIX</button>
+                         <button class="btn small ghost" type="button" id="btnCopyCpf" ${motInfo.cpf ? '' : 'disabled'}>Copiar CPF</button>
+                       </div>`
+                    : ''
+                }
+                ${
+                  motInfo && (motInfo.tipo || motInfo.cap)
+                    ? `<div class="hint" style="margin-top:8px">Veiculo: ${escapeHtml(motInfo.tipo || '-')}${motInfo.cap ? ` | Capacidade: ${escapeHtml(String(motInfo.cap))} kg` : ''}</div>`
+                    : ''
+                }
+              </div>
+
               ${formField({ label: 'Observacoes', name: 'observacoes', value: '', span: 'col12' })}
               <div class="field col12"><div class="hint">Periodo: ${escapeHtml(de)} a ${escapeHtml(ate)}.</div></div>
             </div>
@@ -4174,6 +5331,23 @@ async function renderQuitacaoMotoristas() {
             run()
           },
         })
+
+        const btnCopyPix = dlgBody.querySelector('#btnCopyPix')
+        const btnCopyCpf = dlgBody.querySelector('#btnCopyCpf')
+        if (btnCopyPix && motInfo?.pix) {
+          btnCopyPix.onclick = async () => {
+            await navigator.clipboard.writeText(String(motInfo.pix))
+            btnCopyPix.textContent = 'Copiado'
+            setTimeout(() => (btnCopyPix.textContent = 'Copiar PIX'), 1200)
+          }
+        }
+        if (btnCopyCpf && motInfo?.cpf) {
+          btnCopyCpf.onclick = async () => {
+            await navigator.clipboard.writeText(String(motInfo.cpf))
+            btnCopyCpf.textContent = 'Copiado'
+            setTimeout(() => (btnCopyCpf.textContent = 'Copiar CPF'), 1200)
+          }
+        }
       }
     })
   }
@@ -4279,33 +5453,74 @@ async function applyMenuAccess() {
   try {
     const r = await fetch('/api/auth/me', { method: 'GET' })
     const data = await r.json().catch(() => null)
-    const menus = data?.user?.menus
-    if (!Array.isArray(menus) || !menus.length) return
+    const user = data?.user || null
+    window.__me = user
 
-    const set = new Set(menus.map((x) => String(x)))
-    document
-      .querySelectorAll('.nav-item[data-route]')
-      .forEach((a) => {
-        const k = String(a.dataset.route || '')
-        if (!k) return
-        if (!set.has(k)) a.style.display = 'none'
-      })
+    const menus = user?.menus
+    const allowed =
+      Array.isArray(menus) && menus.length
+        ? new Set(menus.map((x) => String(x)))
+        : new Set(['fazenda'])
 
-    window.__allowedRoutes = set
+    // nav
+    document.querySelectorAll('.nav-item[data-route]').forEach((a) => {
+      const k = String(a.dataset.route || '')
+      if (!k) return
+      a.style.display = allowed.has(k) ? '' : 'none'
+    })
+    // esconder secoes vazias
+    document.querySelectorAll('.nav-section').forEach((sec) => {
+      const nav = sec.closest('nav')
+      if (!nav) return
+      // se nao existe nenhum nav-item visivel ate a proxima secao, esconde o titulo
+      let el = sec.nextElementSibling
+      let hasVisible = false
+      while (el && !el.classList.contains('nav-section')) {
+        if (el.classList.contains('nav-item') && el.style.display !== 'none') {
+          hasVisible = true
+          break
+        }
+        el = el.nextElementSibling
+      }
+      sec.style.display = hasVisible ? '' : 'none'
+    })
+
+    window.__allowedRoutes = allowed
+
+    // topbar auth button
+    if (btnAuth) {
+      if (!user) {
+        btnAuth.textContent = 'Entrar'
+        btnAuth.setAttribute('href', '/login')
+        btnAuth.onclick = null
+      } else {
+        btnAuth.textContent = 'Sair'
+        btnAuth.setAttribute('href', '#')
+        btnAuth.onclick = async (e) => {
+          e.preventDefault()
+          try {
+            await fetch('/api/auth/logout', { method: 'POST' })
+          } catch {
+            // ignore
+          }
+          location.href = '/login'
+        }
+      }
+    }
   } catch {
     // ignore
   }
 }
 
 async function navigate() {
-  const hash = window.location.hash || '#/painel'
-  const route = hash.replace('#/', '').split('?')[0] || 'painel'
+  const hash = window.location.hash || '#/fazenda'
+  const route = hash.replace('#/', '').split('?')[0] || 'fazenda'
   const allowed = window.__allowedRoutes
   if (allowed && allowed.size && !allowed.has(route)) {
-    window.location.hash = '#/painel'
+    window.location.hash = allowed.has('fazenda') ? '#/fazenda' : `#/${Array.from(allowed)[0] || 'fazenda'}`
     return
   }
-  const fn = routes[route] || routes.painel
+  const fn = routes[route] || routes.fazenda
   try {
     await fn()
   } catch (e) {
@@ -4314,6 +5529,42 @@ async function navigate() {
 }
 
 btnRefresh.onclick = () => navigate()
+
+function setNavCollapsed(collapsed) {
+  document.body.classList.toggle('nav-collapsed', collapsed)
+  try {
+    localStorage.setItem('nav_collapsed', collapsed ? '1' : '0')
+  } catch {
+    // ignore
+  }
+  if (btnToggleNav) {
+    btnToggleNav.textContent = collapsed ? 'Menu' : 'Recolher'
+    btnToggleNav.title = collapsed ? 'Expandir menu' : 'Recolher menu'
+  }
+}
+
+if (btnToggleNav) {
+  btnToggleNav.onclick = () => {
+    const collapsed = document.body.classList.contains('nav-collapsed')
+    setNavCollapsed(!collapsed)
+  }
+  let initial = false
+  try {
+    initial = localStorage.getItem('nav_collapsed') === '1'
+  } catch {
+    initial = false
+  }
+  setNavCollapsed(initial)
+}
 window.addEventListener('hashchange', navigate)
 
-applyMenuAccess().finally(() => navigate())
+applyMenuAccess().finally(() => {
+  // se nao tiver sessao, inicia sempre em Sobre
+  if (!window.__me) {
+    if (!window.location.hash || window.location.hash === '#/painel') {
+      window.location.hash = '#/fazenda'
+      return
+    }
+  }
+  navigate()
+})

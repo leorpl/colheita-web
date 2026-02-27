@@ -10,8 +10,8 @@ export const destinoRepo = {
   create(data) {
     const info = db
       .prepare(
-        `INSERT INTO destino (codigo, local, maps_url, trava_sacas, distancia_km, observacoes, updated_at)
-         VALUES (@codigo, @local, @maps_url, @trava_sacas, @distancia_km, @observacoes, datetime('now'))`,
+        `INSERT INTO destino (codigo, local, maps_url, distancia_km, observacoes, updated_at)
+         VALUES (@codigo, @local, @maps_url, @distancia_km, @observacoes, datetime('now'))`,
       )
       .run(data)
     return this.get(info.lastInsertRowid)
@@ -19,7 +19,7 @@ export const destinoRepo = {
   update(id, data) {
     db.prepare(
       `UPDATE destino
-       SET codigo=@codigo, local=@local, maps_url=@maps_url, trava_sacas=@trava_sacas, distancia_km=@distancia_km,
+       SET codigo=@codigo, local=@local, maps_url=@maps_url, distancia_km=@distancia_km,
            observacoes=@observacoes, updated_at=datetime('now')
        WHERE id=@id`,
     ).run({ ...data, id })

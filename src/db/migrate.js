@@ -1,4 +1,5 @@
 import { db } from './db.js'
+import { hashPassword } from '../auth/password.js'
 
 function hasColumn(table, column) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all()
@@ -44,7 +45,6 @@ export function migrate() {
       codigo TEXT NOT NULL UNIQUE,
       local TEXT NOT NULL,
       maps_url TEXT,
-      trava_sacas REAL,
       distancia_km REAL,
       observacoes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -110,6 +110,8 @@ export function migrate() {
       tipo_plantio TEXT NOT NULL,
       trava_sacas REAL,
 
+      valor_compra_por_saca REAL NOT NULL DEFAULT 120,
+
       custo_silo_por_saca REAL NOT NULL DEFAULT 0,
       custo_terceiros_por_saca REAL NOT NULL DEFAULT 0,
 
@@ -135,6 +137,18 @@ export function migrate() {
       umid_lte REAL NOT NULL,
       desconto_pct REAL NOT NULL,
       custo_secagem_por_saca REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      FOREIGN KEY (destino_regra_plantio_id) REFERENCES destino_regra_plantio(id) ON DELETE CASCADE
+    );
+
+    -- Preco de compra do silo por faixas de volume (sacas acumuladas)
+    CREATE TABLE IF NOT EXISTS destino_compra_faixa_plantio (
+      id INTEGER PRIMARY KEY,
+      destino_regra_plantio_id INTEGER NOT NULL,
+      sacas_gt REAL NOT NULL,
+      sacas_lte REAL,
+      preco_por_saca REAL NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT,
       FOREIGN KEY (destino_regra_plantio_id) REFERENCES destino_regra_plantio(id) ON DELETE CASCADE
@@ -217,6 +231,12 @@ export function migrate() {
 
       secagem_custo_por_saca REAL NOT NULL DEFAULT 0,
       sub_total_secagem REAL NOT NULL DEFAULT 0,
+
+      valor_compra_por_saca_aplicado REAL,
+      valor_compra_total REAL,
+      valor_compra_detalhe_json TEXT,
+      valor_compra_entrega_antes REAL,
+      valor_compra_entrega_depois REAL,
 
       custo_silo_por_saca REAL NOT NULL DEFAULT 0,
       sub_total_custo_silo REAL NOT NULL DEFAULT 0,
@@ -306,6 +326,43 @@ export function migrate() {
     stmt.run('MILHO')
   }
 
+  // Seed de usuarios para testes (nao altera usuarios existentes)
+  // Obs: as senhas sao informadas no terminal/assistente para uso local.
+  try {
+    const existing = db.prepare('SELECT COUNT(*) as c FROM usuario').get()?.c
+    // Mesmo se ja houver usuario, garantir alguns perfis para testar permissoes.
+    if (Number(existing) >= 0) {
+      const seeds = [
+        { username: 'admin_test', nome: 'Admin Teste', role: 'admin', password: 'Nazca@2026' },
+        { username: 'gestor_test', nome: 'Gestor Teste', role: 'gestor', password: 'Nazca@2026' },
+        { username: 'operador_test', nome: 'Operador Teste', role: 'operador', password: 'Nazca@2026' },
+        { username: 'leitura_test', nome: 'Leitura Teste', role: 'leitura', password: 'Nazca@2026' },
+        { username: 'motorista_test', nome: 'Motorista Teste', role: 'motorista', password: 'Nazca@2026' },
+      ]
+
+      const sel = db.prepare('SELECT id FROM usuario WHERE username=? LIMIT 1')
+      const ins = db.prepare(
+        `INSERT INTO usuario (username, nome, role, motorista_id, menus_json, password_hash, password_salt, active, updated_at)
+         VALUES (@username, @nome, @role, NULL, NULL, @password_hash, @password_salt, 1, datetime('now'))`,
+      )
+
+      for (const u of seeds) {
+        const exists = sel.get(u.username)
+        if (exists) continue
+        const { salt, hash } = hashPassword(u.password)
+        ins.run({
+          username: u.username,
+          nome: u.nome,
+          role: u.role,
+          password_hash: hash,
+          password_salt: salt,
+        })
+      }
+    }
+  } catch {
+    // seed e opcional
+  }
+
   // incremental columns for talhao
   if (!hasColumn('talhao', 'irrigacao')) {
     db.exec("ALTER TABLE talhao ADD COLUMN irrigacao TEXT")
@@ -334,6 +391,42 @@ export function migrate() {
     db.exec("ALTER TABLE destino ADD COLUMN maps_url TEXT")
   }
 
+  // destino: remover trava_sacas (agora fica nas regras por safra+plantio)
+  if (hasColumn('destino', 'trava_sacas')) {
+    // Se existirem regras plantio sem trava, aproveitar o valor antigo do destino.
+    db.exec(`
+      UPDATE destino_regra_plantio
+      SET trava_sacas = COALESCE(trava_sacas, (SELECT d.trava_sacas FROM destino d WHERE d.id = destino_id))
+      WHERE (SELECT d.trava_sacas FROM destino d WHERE d.id = destino_id) IS NOT NULL;
+    `)
+
+    db.exec(`
+      PRAGMA foreign_keys=off;
+      BEGIN;
+
+      CREATE TABLE IF NOT EXISTS destino_new (
+        id INTEGER PRIMARY KEY,
+        codigo TEXT NOT NULL UNIQUE,
+        local TEXT NOT NULL,
+        maps_url TEXT,
+        distancia_km REAL,
+        observacoes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT
+      );
+
+      INSERT INTO destino_new (id, codigo, local, maps_url, distancia_km, observacoes, created_at, updated_at)
+      SELECT id, codigo, local, maps_url, distancia_km, observacoes, created_at, updated_at
+      FROM destino;
+
+      DROP TABLE destino;
+      ALTER TABLE destino_new RENAME TO destino;
+
+      COMMIT;
+      PRAGMA foreign_keys=on;
+    `)
+  }
+
   // incremental columns for umidade_faixa
   if (!hasColumn('umidade_faixa', 'custo_secagem_por_saca')) {
     db.exec(
@@ -360,6 +453,45 @@ export function migrate() {
   db.exec(
     'CREATE INDEX IF NOT EXISTS idx_umidade_faixa_plantio_regra ON umidade_faixa_plantio(destino_regra_plantio_id)',
   )
+
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS idx_destino_compra_faixa_plantio_regra ON destino_compra_faixa_plantio(destino_regra_plantio_id)',
+  )
+
+  // incremental columns for destino_regra_plantio
+  if (!hasColumn('destino_regra_plantio', 'valor_compra_por_saca')) {
+    db.exec(
+      'ALTER TABLE destino_regra_plantio ADD COLUMN valor_compra_por_saca REAL NOT NULL DEFAULT 120',
+    )
+  }
+
+  // Seed: para cada regra, garantir pelo menos 1 faixa de compra
+  // (mantem compatibilidade com campo valor_compra_por_saca)
+  db.exec(`
+    INSERT INTO destino_compra_faixa_plantio (destino_regra_plantio_id, sacas_gt, sacas_lte, preco_por_saca, updated_at)
+    SELECT rp.id, 0, NULL, rp.valor_compra_por_saca, datetime('now')
+    FROM destino_regra_plantio rp
+    WHERE NOT EXISTS (
+      SELECT 1 FROM destino_compra_faixa_plantio f WHERE f.destino_regra_plantio_id = rp.id
+    );
+  `)
+
+  // incremental columns for viagem (compra por faixa)
+  if (!hasColumn('viagem', 'valor_compra_por_saca_aplicado')) {
+    db.exec('ALTER TABLE viagem ADD COLUMN valor_compra_por_saca_aplicado REAL')
+  }
+  if (!hasColumn('viagem', 'valor_compra_total')) {
+    db.exec('ALTER TABLE viagem ADD COLUMN valor_compra_total REAL')
+  }
+  if (!hasColumn('viagem', 'valor_compra_detalhe_json')) {
+    db.exec('ALTER TABLE viagem ADD COLUMN valor_compra_detalhe_json TEXT')
+  }
+  if (!hasColumn('viagem', 'valor_compra_entrega_antes')) {
+    db.exec('ALTER TABLE viagem ADD COLUMN valor_compra_entrega_antes REAL')
+  }
+  if (!hasColumn('viagem', 'valor_compra_entrega_depois')) {
+    db.exec('ALTER TABLE viagem ADD COLUMN valor_compra_entrega_depois REAL')
+  }
 
   // incremental columns for viagem
   if (!hasColumn('viagem', 'custo_silo_por_saca')) {
@@ -462,5 +594,36 @@ export function migrate() {
   // add manual umidade column if db already existed
   if (!hasColumn('viagem', 'umidade_desc_pct_manual')) {
     db.exec('ALTER TABLE viagem ADD COLUMN umidade_desc_pct_manual REAL')
+  }
+
+  // recalc: secagem + abatimentos por saca (secagem acompanha sacas limpa/seca)
+  if (hasColumn('viagem', 'secagem_custo_por_saca') && hasColumn('viagem', 'sub_total_secagem')) {
+    db.exec(`
+      UPDATE viagem
+      SET
+        sub_total_secagem = COALESCE(secagem_custo_por_saca, 0) * COALESCE(sacas, 0),
+        abatimento_total_silo = COALESCE(sub_total_frete, 0)
+          + (COALESCE(secagem_custo_por_saca, 0) * COALESCE(sacas, 0))
+          + COALESCE(sub_total_custo_silo, 0),
+        abatimento_por_saca_silo = CASE
+          WHEN COALESCE(sacas, 0) > 0 THEN (
+            COALESCE(sub_total_frete, 0)
+            + (COALESCE(secagem_custo_por_saca, 0) * COALESCE(sacas, 0))
+            + COALESCE(sub_total_custo_silo, 0)
+          ) / sacas
+          ELSE 0
+        END,
+        abatimento_total_terceiros = COALESCE(sub_total_frete, 0)
+          + (COALESCE(secagem_custo_por_saca, 0) * COALESCE(sacas, 0))
+          + COALESCE(sub_total_custo_terceiros, 0),
+        abatimento_por_saca_terceiros = CASE
+          WHEN COALESCE(sacas, 0) > 0 THEN (
+            COALESCE(sub_total_frete, 0)
+            + (COALESCE(secagem_custo_por_saca, 0) * COALESCE(sacas, 0))
+            + COALESCE(sub_total_custo_terceiros, 0)
+          ) / sacas
+          ELSE 0
+        END
+    `)
   }
 }

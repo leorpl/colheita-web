@@ -4,6 +4,8 @@ import { viagemRepo } from '../../repositories/viagemRepo.js'
 import { notFound } from '../../errors.js'
 import { validateBody, validateQuery } from '../../middleware/validate.js'
 import { viagemService } from '../../services/viagemService.js'
+import { requirePerm } from '../../middleware/auth.js'
+import { Permissions } from '../../auth/permissions.js'
 
 export const viagensRouter = Router()
 
@@ -45,15 +47,43 @@ const ViagemBody = z.object({
   quebrados_limite_pct: z.coerce.number().min(0).optional().nullable(),
 })
 
-viagensRouter.post('/preview', validateBody(ViagemBody), (req, res) => {
-  const payload = viagemService.buildPayload(req.body)
+const PreviewBody = ViagemBody.extend({
+  id: z.coerce.number().int().positive().optional(),
+})
+
+viagensRouter.post(
+  '/preview',
+  requirePerm(Permissions.COLHEITA_READ),
+  validateBody(PreviewBody),
+  (req, res) => {
+  const id = req.body.id ? Number(req.body.id) : null
+  const payload = id
+    ? viagemService.buildPayload(req.body, { current_id: id, exclude_id: id })
+    : viagemService.buildPayload(req.body)
   const trava = viagemService.getTravaStatus({
     destino_id: payload.destino_id,
     safra_id: payload.safra_id,
+    tipo_plantio: payload.tipo_plantio,
     sacas: payload.sacas,
   })
   res.json({ ...payload, trava })
+  },
+)
+
+// Comparar sacas por destino (mesma safra + tipo de plantio)
+const CompareBody = ViagemBody.extend({
+  // quando estiver editando uma colheita, evita contar ela mesma no acumulado
+  id: z.coerce.number().int().positive().optional(),
 })
+
+viagensRouter.post(
+  '/comparar-destinos',
+  requirePerm(Permissions.COLHEITA_READ),
+  validateBody(CompareBody),
+  (req, res) => {
+    res.json(viagemService.compararDestinos(req.body))
+  },
+)
 
 const ListQuery = z.object({
   safra_id: z.coerce.number().int().positive().optional(),
@@ -64,39 +94,75 @@ const ListQuery = z.object({
   ate: z.string().optional(),
 })
 
-viagensRouter.get('/', validateQuery(ListQuery), (req, res) => {
+viagensRouter.get(
+  '/',
+  requirePerm(Permissions.COLHEITA_READ),
+  validateQuery(ListQuery),
+  (req, res) => {
   const items = viagemRepo.list(req.query)
   const totals = viagemRepo.totals(req.query)
   res.json({ items, totals })
-})
+  },
+)
 
 const NextFichaQuery = z.object({
   safra_id: z.coerce.number().int().positive(),
 })
 
-viagensRouter.get('/next-ficha', validateQuery(NextFichaQuery), (req, res) => {
+viagensRouter.get(
+  '/next-ficha',
+  requirePerm(Permissions.COLHEITA_READ),
+  validateQuery(NextFichaQuery),
+  (req, res) => {
   res.json(viagemService.nextFicha(Number(req.query.safra_id)))
-})
+  },
+)
 
-viagensRouter.post('/', validateBody(ViagemBody), (req, res) => {
+viagensRouter.post(
+  '/',
+  requirePerm(Permissions.COLHEITA_WRITE),
+  validateBody(ViagemBody),
+  (req, res) => {
   const row = viagemService.create(req.body)
   res.status(201).json(row)
+  },
+)
+
+const RecalcCompraBody = z.object({
+  safra_id: z.coerce.number().int().positive(),
+  destino_id: z.coerce.number().int().positive(),
+  tipo_plantio: z.string().trim().min(1),
 })
 
-viagensRouter.get('/:id', (req, res) => {
+viagensRouter.post(
+  '/recalcular-compra',
+  requirePerm(Permissions.CONFIG_WRITE),
+  validateBody(RecalcCompraBody),
+  (req, res) => {
+    const r = viagemService.recalcularPrecosCompraSilo(req.body)
+    res.status(201).json(r)
+  },
+)
+
+viagensRouter.get('/:id', requirePerm(Permissions.COLHEITA_READ), (req, res) => {
   const row = viagemRepo.get(Number(req.params.id))
   if (!row) throw notFound('Viagem nao encontrada')
   res.json(row)
 })
 
-viagensRouter.put('/:id', validateBody(ViagemBody), (req, res) => {
+viagensRouter.put(
+  '/:id',
+  requirePerm(Permissions.COLHEITA_WRITE),
+  validateBody(ViagemBody),
+  (req, res) => {
   const id = Number(req.params.id)
   const exists = viagemRepo.get(id)
   if (!exists) throw notFound('Viagem nao encontrada')
   res.json(viagemService.update(id, req.body))
-})
+  },
+)
 
-viagensRouter.delete('/:id', (req, res) => {
+viagensRouter.delete('/:id', requirePerm(Permissions.COLHEITA_WRITE), (req, res) => {
   const id = Number(req.params.id)
   const exists = viagemRepo.get(id)
   if (!exists) throw notFound('Viagem nao encontrada')

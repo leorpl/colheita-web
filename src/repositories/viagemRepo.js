@@ -1,19 +1,53 @@
 import { db } from '../db/db.js'
 
+function recalcDerived(v) {
+  if (!v) return v
+  const sacas = Number(v.sacas || 0)
+  const frete = Number(v.sub_total_frete || 0)
+  const custoSilo = Number(v.sub_total_custo_silo || 0)
+  const custoTerc = Number(v.sub_total_custo_terceiros || 0)
+  const secagemPorSaca = Number(v.secagem_custo_por_saca || 0)
+
+  // Secagem deve acompanhar a base de sacas (limpa/seca)
+  const sub_total_secagem = sacas > 0 ? secagemPorSaca * sacas : 0
+
+  const abatimento_total_silo = frete + sub_total_secagem + custoSilo
+  const abatimento_total_terceiros = frete + sub_total_secagem + custoTerc
+
+  const abatimento_por_saca_silo = sacas > 0 ? abatimento_total_silo / sacas : 0
+  const abatimento_por_saca_terceiros = sacas > 0 ? abatimento_total_terceiros / sacas : 0
+
+  return {
+    ...v,
+    sub_total_secagem,
+    abatimento_total_silo,
+    abatimento_por_saca_silo,
+    abatimento_total_terceiros,
+    abatimento_por_saca_terceiros,
+  }
+}
+
 export const viagemRepo = {
   get(id) {
-    return db
+    const row = db
       .prepare(
         `SELECT v.*, s.safra as safra_nome, t.codigo as talhao_codigo, t.local as talhao_local, t.nome as talhao_nome,
-                d.codigo as destino_codigo, d.local as destino_local, m.nome as motorista_nome
+                d.codigo as destino_codigo, d.local as destino_local, m.nome as motorista_nome,
+                rp.trava_sacas as regra_trava_sacas,
+                rp.valor_compra_por_saca as regra_valor_compra_por_saca
          FROM viagem v
          JOIN safra s ON s.id = v.safra_id
          JOIN talhao t ON t.id = v.talhao_id
          JOIN destino d ON d.id = v.destino_id
          JOIN motorista m ON m.id = v.motorista_id
+         LEFT JOIN destino_regra_plantio rp
+           ON rp.safra_id = v.safra_id
+          AND rp.destino_id = v.destino_id
+          AND rp.tipo_plantio = UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, '')))
          WHERE v.id = ?`,
       )
       .get(id)
+    return recalcDerived(row)
   },
 
   list(filters) {
@@ -47,19 +81,35 @@ export const viagemRepo = {
 
     const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
-    return db
+    const rows = db
       .prepare(
         `SELECT v.*, s.safra as safra_nome, t.codigo as talhao_codigo, t.local as talhao_local, t.nome as talhao_nome,
-                d.codigo as destino_codigo, d.local as destino_local, m.nome as motorista_nome
+                d.codigo as destino_codigo, d.local as destino_local, m.nome as motorista_nome,
+                rp.trava_sacas as regra_trava_sacas,
+                rp.valor_compra_por_saca as regra_valor_compra_por_saca,
+                (
+                  SELECT COALESCE(SUM(v2.sacas), 0)
+                  FROM viagem v2
+                  WHERE v2.safra_id = v.safra_id
+                    AND v2.destino_id = v.destino_id
+                    AND UPPER(COALESCE(NULLIF(v2.tipo_plantio, ''), NULLIF(s.plantio, ''))) = UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, '')))
+                    AND v2.id <> v.id
+                ) as entrega_atual_sacas
          FROM viagem v
          JOIN safra s ON s.id = v.safra_id
          JOIN talhao t ON t.id = v.talhao_id
          JOIN destino d ON d.id = v.destino_id
          JOIN motorista m ON m.id = v.motorista_id
+         LEFT JOIN destino_regra_plantio rp
+           ON rp.safra_id = v.safra_id
+          AND rp.destino_id = v.destino_id
+          AND rp.tipo_plantio = UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, '')))
          ${sqlWhere}
          ORDER BY v.id DESC`,
       )
       .all(params)
+
+    return rows.map(recalcDerived)
   },
 
   totals(filters) {
@@ -130,6 +180,9 @@ export const viagemRepo = {
           peso_limpo_seco_kg, sacas,
            sacas_frete, frete_tabela, sub_total_frete,
            secagem_custo_por_saca, sub_total_secagem,
+
+           valor_compra_por_saca_aplicado, valor_compra_total, valor_compra_detalhe_json,
+           valor_compra_entrega_antes, valor_compra_entrega_depois,
            custo_silo_por_saca, sub_total_custo_silo, abatimento_total_silo, abatimento_por_saca_silo,
            custo_terceiros_por_saca, sub_total_custo_terceiros, abatimento_total_terceiros, abatimento_por_saca_terceiros,
            updated_at
@@ -145,6 +198,8 @@ export const viagemRepo = {
           @peso_limpo_seco_kg, @sacas,
            @sacas_frete, @frete_tabela, @sub_total_frete,
            @secagem_custo_por_saca, @sub_total_secagem,
+           @valor_compra_por_saca_aplicado, @valor_compra_total, @valor_compra_detalhe_json,
+           @valor_compra_entrega_antes, @valor_compra_entrega_depois,
            @custo_silo_por_saca, @sub_total_custo_silo, @abatimento_total_silo, @abatimento_por_saca_silo,
            @custo_terceiros_por_saca, @sub_total_custo_terceiros, @abatimento_total_terceiros, @abatimento_por_saca_terceiros,
            datetime('now')
@@ -173,6 +228,12 @@ export const viagemRepo = {
           peso_limpo_seco_kg=@peso_limpo_seco_kg, sacas=@sacas,
           sacas_frete=@sacas_frete, frete_tabela=@frete_tabela, sub_total_frete=@sub_total_frete,
           secagem_custo_por_saca=@secagem_custo_por_saca, sub_total_secagem=@sub_total_secagem,
+
+          valor_compra_por_saca_aplicado=@valor_compra_por_saca_aplicado,
+          valor_compra_total=@valor_compra_total,
+          valor_compra_detalhe_json=@valor_compra_detalhe_json,
+          valor_compra_entrega_antes=@valor_compra_entrega_antes,
+          valor_compra_entrega_depois=@valor_compra_entrega_depois,
           custo_silo_por_saca=@custo_silo_por_saca, sub_total_custo_silo=@sub_total_custo_silo, abatimento_total_silo=@abatimento_total_silo, abatimento_por_saca_silo=@abatimento_por_saca_silo,
           custo_terceiros_por_saca=@custo_terceiros_por_saca, sub_total_custo_terceiros=@sub_total_custo_terceiros, abatimento_total_terceiros=@abatimento_total_terceiros, abatimento_por_saca_terceiros=@abatimento_por_saca_terceiros,
           updated_at=datetime('now')

@@ -5,6 +5,17 @@ export const relatoriosService = {
   painel() {
     const totalsGeral = viagemRepo.totals({})
 
+    const umidadeMediaPonderadaGeral = db
+      .prepare(
+        `SELECT
+           CASE WHEN COALESCE(SUM(peso_bruto_kg), 0) > 0
+             THEN COALESCE(SUM(peso_bruto_kg * umidade_pct), 0) / SUM(peso_bruto_kg)
+             ELSE 0
+           END as umidade_media
+         FROM viagem`,
+      )
+      .get().umidade_media
+
     const orderSafra = `
       ORDER BY
         CASE WHEN data_referencia IS NULL OR data_referencia='' THEN 1 ELSE 0 END,
@@ -32,6 +43,20 @@ export const relatoriosService = {
       ? viagemRepo.totals({ safra_id: safraAtual.id })
       : viagemRepo.totals({})
 
+    const umidadeMediaPonderadaUltimaSafra = safraAtual
+      ? db
+          .prepare(
+            `SELECT
+               CASE WHEN COALESCE(SUM(peso_bruto_kg), 0) > 0
+                 THEN COALESCE(SUM(peso_bruto_kg * umidade_pct), 0) / SUM(peso_bruto_kg)
+                 ELSE 0
+               END as umidade_media
+             FROM viagem
+             WHERE safra_id = @safra_id`,
+          )
+          .get({ safra_id: safraAtual.id }).umidade_media
+      : 0
+
     const areaColhidaUltimaSafra = safraAtual
       ? db
            .prepare(
@@ -52,8 +77,22 @@ export const relatoriosService = {
         ? totalsUltimaSafra.sacas / areaColhidaUltimaSafra
         : 0
 
+    const perdasGeralPct =
+      totalsGeral.peso_bruto_kg > 0
+        ? 1 - totalsGeral.peso_limpo_seco_kg / totalsGeral.peso_bruto_kg
+        : 0
+
+    const perdasUltimaSafraPct =
+      (totalsUltimaSafra?.peso_bruto_kg || 0) > 0
+        ? 1 -
+          (totalsUltimaSafra?.peso_limpo_seco_kg || 0) /
+            totalsUltimaSafra.peso_bruto_kg
+        : 0
+
     return {
       totals_geral: totalsGeral,
+      umidade_media_ponderada_geral: umidadeMediaPonderadaGeral,
+      perdas_geral_pct: perdasGeralPct,
       area_plantada_ha: areaPlantada,
       produtividade_geral_sacas_ha: produtividadeGeral,
       ultima_safra: ultimaSafra
@@ -78,6 +117,8 @@ export const relatoriosService = {
           }
         : null,
       totals_ultima_safra: totalsUltimaSafra,
+      umidade_media_ponderada_ultima_safra: umidadeMediaPonderadaUltimaSafra,
+      perdas_ultima_safra_pct: perdasUltimaSafraPct,
       area_colhida_ultima_safra_ha: areaColhidaUltimaSafra,
       produtividade_ultima_safra_sacas_ha: produtividadeUltimaSafra,
       produtividade_ultima_safra_ajustada_sacas_ha: produtividadeUltimaSafraAjustada,
@@ -136,22 +177,30 @@ export const relatoriosService = {
       .all({ de: de ?? null, ate: ate ?? null })
   },
 
-  entregasPorDestino({ safra_id }) {
+  entregasPorDestino({ safra_id, tipo_plantio }) {
+    const tp = String(tipo_plantio || '').trim().toUpperCase()
     return db
       .prepare(
         `SELECT
            d.id as destino_id,
            d.codigo as destino_codigo,
            d.local as destino_local,
-           d.trava_sacas as trava_sacas,
+           r.trava_sacas as trava_sacas,
            d.distancia_km as distancia_km,
            COALESCE(SUM(v.sacas), 0) as entrega_sacas,
            COALESCE(SUM(v.peso_limpo_seco_kg), 0) as peso_limpo_seco_kg
          FROM destino d
+         LEFT JOIN (
+           SELECT destino_id, MAX(trava_sacas) as trava_sacas
+           FROM destino_regra_plantio
+           WHERE safra_id = @safra_id
+             AND (@tipo_plantio = '' OR tipo_plantio = @tipo_plantio)
+           GROUP BY destino_id
+         ) r ON r.destino_id = d.id
          LEFT JOIN viagem v ON v.destino_id = d.id AND v.safra_id = @safra_id
-         GROUP BY d.id
+         GROUP BY d.id, r.trava_sacas
          ORDER BY d.local`,
       )
-      .all({ safra_id })
+      .all({ safra_id, tipo_plantio: tp })
   },
 }
