@@ -1,63 +1,35 @@
-import { prismaClient } from '../db/prisma.js'
-import { nowDbText } from '../util/time.js'
-
-function prisma(p) {
-  return p ?? prismaClient()
-}
+import { db } from '../db/db.js'
 
 export const talhaoRepo = {
-  async list() {
-    return prisma().talhao.findMany({ orderBy: [{ id: 'desc' }] })
+  list() {
+    return db.prepare('SELECT * FROM talhao ORDER BY id DESC').all()
   },
-  async get(id) {
-    return prisma().talhao.findUnique({ where: { id } })
+  get(id) {
+    return db.prepare('SELECT * FROM talhao WHERE id = ?').get(id)
   },
-  async create(data) {
-    return prisma().talhao.create({
-      data: {
-        codigo: data.codigo,
-        local: data.local ?? null,
-        nome: data.nome ?? null,
-        situacao: data.situacao ?? null,
-        hectares: Number(data.hectares ?? 0),
-        posse: data.posse ?? null,
-        contrato: data.contrato ?? null,
-        observacoes: data.observacoes ?? null,
-        irrigacao: data.irrigacao ?? null,
-        foto_url: data.foto_url ?? null,
-        maps_url: data.maps_url ?? null,
-        tipo_solo: data.tipo_solo ?? null,
-        calagem: data.calagem ?? null,
-        gessagem: data.gessagem ?? null,
-        fosforo_corretivo: data.fosforo_corretivo ?? null,
-        updated_at: nowDbText(),
-      },
-    })
+  create(data) {
+    const info = db
+      .prepare(
+        `INSERT INTO talhao (codigo, local, nome, situacao, hectares, posse, contrato, observacoes,
+                             irrigacao, foto_url, maps_url, tipo_solo, calagem, gessagem, fosforo_corretivo, updated_at)
+         VALUES (@codigo, @local, @nome, @situacao, @hectares, @posse, @contrato, @observacoes,
+                 @irrigacao, @foto_url, @maps_url, @tipo_solo, @calagem, @gessagem, @fosforo_corretivo, datetime('now'))`,
+      )
+      .run(data)
+    return this.get(info.lastInsertRowid)
   },
-  async update(id, data) {
-    return prisma().talhao.update({
-      where: { id },
-      data: {
-        codigo: data.codigo,
-        local: data.local ?? null,
-        nome: data.nome ?? null,
-        situacao: data.situacao ?? null,
-        hectares: Number(data.hectares ?? 0),
-        posse: data.posse ?? null,
-        contrato: data.contrato ?? null,
-        observacoes: data.observacoes ?? null,
-        irrigacao: data.irrigacao ?? null,
-        foto_url: data.foto_url ?? null,
-        maps_url: data.maps_url ?? null,
-        tipo_solo: data.tipo_solo ?? null,
-        calagem: data.calagem ?? null,
-        gessagem: data.gessagem ?? null,
-        fosforo_corretivo: data.fosforo_corretivo ?? null,
-        updated_at: nowDbText(),
-      },
-    })
+  update(id, data) {
+    db.prepare(
+      `UPDATE talhao
+       SET codigo=@codigo, local=@local, nome=@nome, situacao=@situacao, hectares=@hectares,
+            posse=@posse, contrato=@contrato, observacoes=@observacoes,
+            irrigacao=@irrigacao, foto_url=@foto_url, maps_url=@maps_url, tipo_solo=@tipo_solo, calagem=@calagem, gessagem=@gessagem, fosforo_corretivo=@fosforo_corretivo,
+            updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({ ...data, id })
+    return this.get(id)
   },
-  async remove(id) {
-    return prisma().talhao.delete({ where: { id } })
+  remove(id) {
+    return db.prepare('DELETE FROM talhao WHERE id=?').run(id)
   },
 }

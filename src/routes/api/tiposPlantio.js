@@ -10,26 +10,26 @@ const Body = z.object({
   nome: z.string().trim().min(1),
 })
 
-tiposPlantioRouter.get('/', async (_req, res) => {
-  res.json(await plantioTipoRepo.list())
+tiposPlantioRouter.get('/', (_req, res) => {
+  res.json(plantioTipoRepo.list())
 })
 
-tiposPlantioRouter.post('/', validateBody(Body), async (req, res) => {
-  const row = await plantioTipoRepo.create(req.body)
+tiposPlantioRouter.post('/', validateBody(Body), (req, res) => {
+  const row = plantioTipoRepo.create(req.body)
   res.status(201).json(row)
 })
 
-tiposPlantioRouter.put('/:id', validateBody(Body), async (req, res) => {
+tiposPlantioRouter.put('/:id', validateBody(Body), (req, res) => {
   const id = Number(req.params.id)
-  const exists = await plantioTipoRepo.get(id)
+  const exists = plantioTipoRepo.get(id)
   if (!exists) throw notFound('Tipo de plantio nao encontrado')
-  res.json(await plantioTipoRepo.update(id, req.body))
+  res.json(plantioTipoRepo.update(id, req.body))
 })
 
-tiposPlantioRouter.delete('/:id', async (req, res) => {
+tiposPlantioRouter.delete('/:id', (req, res) => {
   const id = Number(req.params.id)
-  const exists = await plantioTipoRepo.get(id)
+  const exists = plantioTipoRepo.get(id)
   if (!exists) throw notFound('Tipo de plantio nao encontrado')
-  await plantioTipoRepo.remove(id)
+  plantioTipoRepo.remove(id)
   res.status(204).send()
 })

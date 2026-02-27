@@ -1,47 +1,31 @@
-import { prismaClient } from '../db/prisma.js'
-import { nowDbText } from '../util/time.js'
-
-function prisma(p) {
-  return p ?? prismaClient()
-}
+import { db } from '../db/db.js'
 
 export const motoristaRepo = {
-  async list() {
-    return prisma().motorista.findMany({ orderBy: [{ id: 'desc' }] })
+  list() {
+    return db.prepare('SELECT * FROM motorista ORDER BY id DESC').all()
   },
-  async get(id) {
-    return prisma().motorista.findUnique({ where: { id } })
+  get(id) {
+    return db.prepare('SELECT * FROM motorista WHERE id = ?').get(id)
   },
-  async create(data) {
-    return prisma().motorista.create({
-      data: {
-        nome: data.nome,
-        placa: data.placa ?? null,
-        cpf: data.cpf ?? null,
-        banco: data.banco ?? null,
-        pix_conta: data.pix_conta ?? null,
-        tipo_veiculo: data.tipo_veiculo ?? null,
-        capacidade_kg: data.capacidade_kg === '' ? null : (data.capacidade_kg ?? null),
-        updated_at: nowDbText(),
-      },
-    })
+  create(data) {
+    const info = db
+      .prepare(
+        `INSERT INTO motorista (nome, placa, cpf, banco, pix_conta, tipo_veiculo, capacidade_kg, updated_at)
+         VALUES (@nome, @placa, @cpf, @banco, @pix_conta, @tipo_veiculo, @capacidade_kg, datetime('now'))`,
+      )
+      .run(data)
+    return this.get(info.lastInsertRowid)
   },
-  async update(id, data) {
-    return prisma().motorista.update({
-      where: { id },
-      data: {
-        nome: data.nome,
-        placa: data.placa ?? null,
-        cpf: data.cpf ?? null,
-        banco: data.banco ?? null,
-        pix_conta: data.pix_conta ?? null,
-        tipo_veiculo: data.tipo_veiculo ?? null,
-        capacidade_kg: data.capacidade_kg === '' ? null : (data.capacidade_kg ?? null),
-        updated_at: nowDbText(),
-      },
-    })
+  update(id, data) {
+    db.prepare(
+      `UPDATE motorista
+       SET nome=@nome, placa=@placa, cpf=@cpf, banco=@banco, pix_conta=@pix_conta,
+           tipo_veiculo=@tipo_veiculo, capacidade_kg=@capacidade_kg, updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({ ...data, id })
+    return this.get(id)
   },
-  async remove(id) {
-    return prisma().motorista.delete({ where: { id } })
+  remove(id) {
+    return db.prepare('DELETE FROM motorista WHERE id=?').run(id)
   },
 }

@@ -1,3 +1,5 @@
+import { migrate } from '../src/db/migrate.js'
+import { db } from '../src/db/db.js'
 import { usuarioRepo } from '../src/repositories/usuarioRepo.js'
 import { hashPassword } from '../src/auth/password.js'
 
@@ -23,14 +25,18 @@ if (!username || !password) {
   process.exit(2)
 }
 
-const exists = await usuarioRepo.getAuthByUsername(username)
+migrate()
+
+const exists = db
+  .prepare('SELECT id FROM usuario WHERE username=?')
+  .get(username)
 if (exists?.id) {
   console.error('Usuario ja existe:', username)
   process.exit(1)
 }
 
 const { salt, hash } = hashPassword(password)
-const row = await usuarioRepo.create({
+const row = usuarioRepo.create({
   username,
   nome: nome || null,
   role: 'admin',

@@ -17,13 +17,13 @@ const LoginBody = z.object({
   password: z.string().min(1),
 })
 
-authRouter.post('/login', validateBody(LoginBody), async (req, res) => {
+authRouter.post('/login', validateBody(LoginBody), (req, res) => {
   if (Number(env.AUTH_ENABLED) !== 1) {
     // Se auth nao estiver habilitado, ainda permite login para teste.
   }
 
   const { username, password } = req.body
-  const u = await usuarioRepo.getAuthByUsername(username)
+  const u = usuarioRepo.getAuthByUsername(username)
   if (!u || Number(u.active) !== 1) throw unauthorized('Usuario/senha invalidos')
 
   const ok = verifyPassword(password, u.password_salt, u.password_hash)
@@ -35,7 +35,7 @@ authRouter.post('/login', validateBody(LoginBody), async (req, res) => {
   const ttlDays = Number(env.SESSION_TTL_DAYS || 30)
   const expires = new Date(Date.now() + ttlDays * 86400 * 1000)
   const expires_at = expires.toISOString().slice(0, 19).replace('T', ' ')
-  await usuarioSessaoRepo.create({ usuario_id: u.id, token_hash, expires_at })
+  usuarioSessaoRepo.create({ usuario_id: u.id, token_hash, expires_at })
 
   res.setHeader(
     'Set-Cookie',
@@ -59,12 +59,12 @@ authRouter.post('/login', validateBody(LoginBody), async (req, res) => {
   })
 })
 
-authRouter.post('/logout', async (req, res) => {
+authRouter.post('/logout', (req, res) => {
   const cookie = String(req.headers.cookie || '')
   const m = cookie.match(new RegExp(`${env.SESSION_COOKIE_NAME}=([^;]+)`))
   const token = m ? decodeURIComponent(m[1]) : ''
   if (token) {
-    await usuarioSessaoRepo.deleteByTokenHash(sha256Hex(token))
+    usuarioSessaoRepo.deleteByTokenHash(sha256Hex(token))
   }
   res.setHeader(
     'Set-Cookie',

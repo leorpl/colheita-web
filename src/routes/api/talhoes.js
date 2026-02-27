@@ -24,32 +24,32 @@ const TalhaoBody = z.object({
   fosforo_corretivo: z.string().optional().nullable(),
 })
 
-talhoesRouter.get('/', async (_req, res) => {
-  res.json(await talhaoRepo.list())
+talhoesRouter.get('/', (_req, res) => {
+  res.json(talhaoRepo.list())
 })
 
-talhoesRouter.post('/', validateBody(TalhaoBody), async (req, res) => {
-  const row = await talhaoRepo.create(req.body)
+talhoesRouter.post('/', validateBody(TalhaoBody), (req, res) => {
+  const row = talhaoRepo.create(req.body)
   res.status(201).json(row)
 })
 
-talhoesRouter.get('/:id', async (req, res) => {
-  const row = await talhaoRepo.get(Number(req.params.id))
+talhoesRouter.get('/:id', (req, res) => {
+  const row = talhaoRepo.get(Number(req.params.id))
   if (!row) throw notFound('Talhao nao encontrado')
   res.json(row)
 })
 
-talhoesRouter.put('/:id', validateBody(TalhaoBody), async (req, res) => {
+talhoesRouter.put('/:id', validateBody(TalhaoBody), (req, res) => {
   const id = Number(req.params.id)
-  const exists = await talhaoRepo.get(id)
+  const exists = talhaoRepo.get(id)
   if (!exists) throw notFound('Talhao nao encontrado')
-  res.json(await talhaoRepo.update(id, req.body))
+  res.json(talhaoRepo.update(id, req.body))
 })
 
-talhoesRouter.delete('/:id', async (req, res) => {
+talhoesRouter.delete('/:id', (req, res) => {
   const id = Number(req.params.id)
-  const exists = await talhaoRepo.get(id)
+  const exists = talhaoRepo.get(id)
   if (!exists) throw notFound('Talhao nao encontrado')
-  await talhaoRepo.remove(id)
+  talhaoRepo.remove(id)
   res.status(204).send()
 })

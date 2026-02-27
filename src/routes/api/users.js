@@ -12,8 +12,8 @@ export const usersRouter = Router()
 
 usersRouter.use(requirePerm(Permissions.USERS_MANAGE))
 
-usersRouter.get('/', async (_req, res) => {
-  res.json(await usuarioRepo.list())
+usersRouter.get('/', (_req, res) => {
+  res.json(usuarioRepo.list())
 })
 
 const CreateBody = z.object({
@@ -25,9 +25,9 @@ const CreateBody = z.object({
   password: z.string().min(8),
 })
 
-usersRouter.post('/', validateBody(CreateBody), async (req, res) => {
+usersRouter.post('/', validateBody(CreateBody), (req, res) => {
   const { salt, hash } = hashPassword(req.body.password)
-  const row = await usuarioRepo.create({
+  const row = usuarioRepo.create({
     username: req.body.username,
     nome: req.body.nome || null,
     role: req.body.role,
@@ -37,7 +37,7 @@ usersRouter.post('/', validateBody(CreateBody), async (req, res) => {
   })
 
   if (req.body.menus && Array.isArray(req.body.menus)) {
-    await usuarioRepo.update(row.id, {
+    usuarioRepo.update(row.id, {
       username: row.username,
       nome: row.nome,
       role: row.role,
@@ -58,11 +58,11 @@ const UpdateBody = z.object({
   active: z.coerce.boolean().optional().default(true),
 })
 
-usersRouter.put('/:id', validateBody(UpdateBody), async (req, res) => {
+usersRouter.put('/:id', validateBody(UpdateBody), (req, res) => {
   const id = Number(req.params.id)
-  const exists = await usuarioRepo.get(id)
+  const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')
-  const row = await usuarioRepo.update(id, {
+  const row = usuarioRepo.update(id, {
     username: req.body.username,
     nome: req.body.nome || null,
     role: req.body.role,
@@ -77,19 +77,19 @@ const PasswordBody = z.object({
   password: z.string().min(8),
 })
 
-usersRouter.put('/:id/password', validateBody(PasswordBody), async (req, res) => {
+usersRouter.put('/:id/password', validateBody(PasswordBody), (req, res) => {
   const id = Number(req.params.id)
-  const exists = await usuarioRepo.get(id)
+  const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')
   const { salt, hash } = hashPassword(req.body.password)
-  const row = await usuarioRepo.setPassword(id, { password_hash: hash, password_salt: salt })
+  const row = usuarioRepo.setPassword(id, { password_hash: hash, password_salt: salt })
   res.json(row)
 })
 
-usersRouter.delete('/:id', async (req, res) => {
+usersRouter.delete('/:id', (req, res) => {
   const id = Number(req.params.id)
-  const exists = await usuarioRepo.get(id)
+  const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')
-  await usuarioRepo.remove(id)
+  usuarioRepo.remove(id)
   res.status(204).send()
 })

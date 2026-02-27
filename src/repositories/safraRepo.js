@@ -1,54 +1,50 @@
-import { prismaClient } from '../db/prisma.js'
-import { nowDbText } from '../util/time.js'
-
-function prisma(p) {
-  return p ?? prismaClient()
-}
+import { db } from '../db/db.js'
 
 export const safraRepo = {
-  async list() {
-    return prisma().safra.findMany({
-      orderBy: [
-        { data_referencia: { sort: 'desc', nulls: 'last' } },
-        { id: 'desc' },
-      ],
-    })
+  list() {
+    return db
+      .prepare(
+        `SELECT * FROM safra
+         ORDER BY
+           CASE WHEN data_referencia IS NULL OR data_referencia='' THEN 1 ELSE 0 END,
+           data_referencia DESC,
+           id DESC`,
+      )
+      .all()
   },
-  async get(id) {
-    return prisma().safra.findUnique({ where: { id } })
+  get(id) {
+    return db.prepare('SELECT * FROM safra WHERE id = ?').get(id)
   },
-  async create(data) {
-    return prisma().safra.create({
-      data: {
-        safra: data.safra,
-        plantio: data.plantio ?? null,
-        data_referencia: data.data_referencia ?? null,
-        area_ha: Number(data.area_ha ?? 0),
-        updated_at: nowDbText(),
-      },
-    })
+  create(data) {
+    const stmt = db.prepare(
+      `INSERT INTO safra (safra, plantio, data_referencia, area_ha, updated_at)
+       VALUES (@safra, @plantio, @data_referencia, @area_ha, datetime('now'))`,
+    )
+    const info = stmt.run(data)
+    return this.get(info.lastInsertRowid)
   },
-  async update(id, data) {
-    return prisma().safra.update({
-      where: { id },
-      data: {
-        safra: data.safra,
-        plantio: data.plantio ?? null,
-        data_referencia: data.data_referencia ?? null,
-        area_ha: Number(data.area_ha ?? 0),
-        updated_at: nowDbText(),
-      },
-    })
+  update(id, data) {
+    db.prepare(
+      `UPDATE safra
+       SET safra=@safra, plantio=@plantio, data_referencia=@data_referencia, area_ha=@area_ha, updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({ ...data, id })
+    return this.get(id)
   },
-  async remove(id) {
-    return prisma().safra.delete({ where: { id } })
+  remove(id) {
+    return db.prepare('DELETE FROM safra WHERE id=?').run(id)
   },
 
-  async setPainel(id) {
-    await prisma().$transaction(async (tx) => {
-      await tx.safra.updateMany({ data: { painel: 0 } })
-      await tx.safra.update({ where: { id }, data: { painel: 1, updated_at: nowDbText() } })
-    })
+  setPainel(id) {
+    db.exec('BEGIN')
+    try {
+      db.prepare('UPDATE safra SET painel=0').run()
+      db.prepare('UPDATE safra SET painel=1, updated_at=datetime(\'now\') WHERE id=?').run(id)
+      db.exec('COMMIT')
+    } catch (e) {
+      db.exec('ROLLBACK')
+      throw e
+    }
     return this.get(id)
   },
 }

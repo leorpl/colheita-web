@@ -21,32 +21,32 @@ const DestinoBody = z.object({
   observacoes: z.string().optional().nullable(),
 })
 
-destinosRouter.get('/', async (_req, res) => {
-  res.json(await destinoRepo.list())
+destinosRouter.get('/', (_req, res) => {
+  res.json(destinoRepo.list())
 })
 
-destinosRouter.post('/', validateBody(DestinoBody), async (req, res) => {
-  const row = await destinoRepo.create(req.body)
+destinosRouter.post('/', validateBody(DestinoBody), (req, res) => {
+  const row = destinoRepo.create(req.body)
   res.status(201).json(row)
 })
 
-destinosRouter.get('/:id', async (req, res) => {
-  const row = await destinoRepo.get(Number(req.params.id))
+destinosRouter.get('/:id', (req, res) => {
+  const row = destinoRepo.get(Number(req.params.id))
   if (!row) throw notFound('Destino nao encontrado')
   res.json(row)
 })
 
-destinosRouter.put('/:id', validateBody(DestinoBody), async (req, res) => {
+destinosRouter.put('/:id', validateBody(DestinoBody), (req, res) => {
   const id = Number(req.params.id)
-  const exists = await destinoRepo.get(id)
+  const exists = destinoRepo.get(id)
   if (!exists) throw notFound('Destino nao encontrado')
-  res.json(await destinoRepo.update(id, req.body))
+  res.json(destinoRepo.update(id, req.body))
 })
 
-destinosRouter.delete('/:id', async (req, res) => {
+destinosRouter.delete('/:id', (req, res) => {
   const id = Number(req.params.id)
-  const exists = await destinoRepo.get(id)
+  const exists = destinoRepo.get(id)
   if (!exists) throw notFound('Destino nao encontrado')
-  await destinoRepo.remove(id)
+  destinoRepo.remove(id)
   res.status(204).send()
 })

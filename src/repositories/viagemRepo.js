@@ -1,135 +1,202 @@
-import { prismaClient } from '../db/prisma.js'
-import { nowDbText } from '../util/time.js'
-
-function prisma(p) {
-  return p ?? prismaClient()
-}
-
-function withJoins(v) {
-  if (!v) return null
-  return {
-    ...v,
-    safra_nome: v.safra?.safra ?? null,
-    talhao_codigo: v.talhao?.codigo ?? null,
-    talhao_local: v.talhao?.local ?? null,
-    talhao_nome: v.talhao?.nome ?? null,
-    destino_codigo: v.destino?.codigo ?? null,
-    destino_local: v.destino?.local ?? null,
-    motorista_nome: v.motorista?.nome ?? null,
-  }
-}
+import { db } from '../db/db.js'
 
 export const viagemRepo = {
-  async get(id) {
-    const row = await prisma().viagem.findUnique({
-      where: { id },
-      include: { safra: true, talhao: true, destino: true, motorista: true },
-    })
-    return withJoins(row)
+  get(id) {
+    return db
+      .prepare(
+        `SELECT v.*, s.safra as safra_nome, t.codigo as talhao_codigo, t.local as talhao_local, t.nome as talhao_nome,
+                d.codigo as destino_codigo, d.local as destino_local, m.nome as motorista_nome
+         FROM viagem v
+         JOIN safra s ON s.id = v.safra_id
+         JOIN talhao t ON t.id = v.talhao_id
+         JOIN destino d ON d.id = v.destino_id
+         JOIN motorista m ON m.id = v.motorista_id
+         WHERE v.id = ?`,
+      )
+      .get(id)
   },
 
-  async list(filters) {
-    const where = {}
+  list(filters) {
+    const where = []
+    const params = {}
 
-    if (filters.safra_id) where.safra_id = Number(filters.safra_id)
-    if (filters.talhao_id) where.talhao_id = Number(filters.talhao_id)
-    if (filters.destino_id) where.destino_id = Number(filters.destino_id)
-    if (filters.motorista_id) where.motorista_id = Number(filters.motorista_id)
-    if (filters.de || filters.ate) {
-      where.data_saida = {
-        ...(filters.de ? { gte: String(filters.de) } : {}),
-        ...(filters.ate ? { lte: String(filters.ate) } : {}),
-      }
+    if (filters.safra_id) {
+      where.push('v.safra_id = @safra_id')
+      params.safra_id = filters.safra_id
+    }
+    if (filters.talhao_id) {
+      where.push('v.talhao_id = @talhao_id')
+      params.talhao_id = filters.talhao_id
+    }
+    if (filters.destino_id) {
+      where.push('v.destino_id = @destino_id')
+      params.destino_id = filters.destino_id
+    }
+    if (filters.motorista_id) {
+      where.push('v.motorista_id = @motorista_id')
+      params.motorista_id = filters.motorista_id
+    }
+    if (filters.de) {
+      where.push('v.data_saida >= @de')
+      params.de = filters.de
+    }
+    if (filters.ate) {
+      where.push('v.data_saida <= @ate')
+      params.ate = filters.ate
     }
 
-    const rows = await prisma().viagem.findMany({
-      where,
-      include: { safra: true, talhao: true, destino: true, motorista: true },
-      orderBy: [{ id: 'desc' }],
-    })
-    return rows.map(withJoins)
+    const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+    return db
+      .prepare(
+        `SELECT v.*, s.safra as safra_nome, t.codigo as talhao_codigo, t.local as talhao_local, t.nome as talhao_nome,
+                d.codigo as destino_codigo, d.local as destino_local, m.nome as motorista_nome
+         FROM viagem v
+         JOIN safra s ON s.id = v.safra_id
+         JOIN talhao t ON t.id = v.talhao_id
+         JOIN destino d ON d.id = v.destino_id
+         JOIN motorista m ON m.id = v.motorista_id
+         ${sqlWhere}
+         ORDER BY v.id DESC`,
+      )
+      .all(params)
   },
 
-  async totals(filters) {
-    const where = {}
+  totals(filters) {
+    const where = []
+    const params = {}
 
-    if (filters.safra_id) where.safra_id = Number(filters.safra_id)
-    if (filters.talhao_id) where.talhao_id = Number(filters.talhao_id)
-    if (filters.destino_id) where.destino_id = Number(filters.destino_id)
-    if (filters.motorista_id) where.motorista_id = Number(filters.motorista_id)
-    if (filters.de || filters.ate) {
-      where.data_saida = {
-        ...(filters.de ? { gte: String(filters.de) } : {}),
-        ...(filters.ate ? { lte: String(filters.ate) } : {}),
-      }
+    if (filters.safra_id) {
+      where.push('safra_id = @safra_id')
+      params.safra_id = filters.safra_id
+    }
+    if (filters.talhao_id) {
+      where.push('talhao_id = @talhao_id')
+      params.talhao_id = filters.talhao_id
+    }
+    if (filters.destino_id) {
+      where.push('destino_id = @destino_id')
+      params.destino_id = filters.destino_id
+    }
+    if (filters.motorista_id) {
+      where.push('motorista_id = @motorista_id')
+      params.motorista_id = filters.motorista_id
+    }
+    if (filters.de) {
+      where.push('data_saida >= @de')
+      params.de = filters.de
+    }
+    if (filters.ate) {
+      where.push('data_saida <= @ate')
+      params.ate = filters.ate
     }
 
-    const agg = await prisma().viagem.aggregate({
-      where,
-      _sum: {
-        carga_total_kg: true,
-        tara_kg: true,
-        peso_bruto_kg: true,
-        umidade_kg: true,
-        impureza_kg: true,
-        ardidos_kg: true,
-        queimados_kg: true,
-        avariados_kg: true,
-        esverdiados_kg: true,
-        quebrados_kg: true,
-        peso_limpo_seco_kg: true,
-        sub_total_frete: true,
-        sacas: true,
-      },
-    })
+    const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
-    const s = agg._sum || {}
-    return {
-      carga_total_kg: Number(s.carga_total_kg || 0),
-      tara_kg: Number(s.tara_kg || 0),
-      peso_bruto_kg: Number(s.peso_bruto_kg || 0),
-      umidade_kg: Number(s.umidade_kg || 0),
-      impureza_kg: Number(s.impureza_kg || 0),
-      ardidos_kg: Number(s.ardidos_kg || 0),
-      queimados_kg: Number(s.queimados_kg || 0),
-      avariados_kg: Number(s.avariados_kg || 0),
-      esverdiados_kg: Number(s.esverdiados_kg || 0),
-      quebrados_kg: Number(s.quebrados_kg || 0),
-      peso_limpo_seco_kg: Number(s.peso_limpo_seco_kg || 0),
-      sub_total_frete: Number(s.sub_total_frete || 0),
-      sacas: Number(s.sacas || 0),
+    return db
+      .prepare(
+        `SELECT
+           COALESCE(SUM(carga_total_kg), 0) as carga_total_kg,
+           COALESCE(SUM(tara_kg), 0) as tara_kg,
+           COALESCE(SUM(peso_bruto_kg), 0) as peso_bruto_kg,
+           COALESCE(SUM(umidade_kg), 0) as umidade_kg,
+           COALESCE(SUM(impureza_kg), 0) as impureza_kg,
+           COALESCE(SUM(ardidos_kg), 0) as ardidos_kg,
+           COALESCE(SUM(queimados_kg), 0) as queimados_kg,
+           COALESCE(SUM(avariados_kg), 0) as avariados_kg,
+           COALESCE(SUM(esverdiados_kg), 0) as esverdiados_kg,
+           COALESCE(SUM(quebrados_kg), 0) as quebrados_kg,
+           COALESCE(SUM(peso_limpo_seco_kg), 0) as peso_limpo_seco_kg,
+           COALESCE(SUM(sub_total_frete), 0) as sub_total_frete,
+           COALESCE(SUM(sacas), 0) as sacas
+         FROM viagem
+         ${sqlWhere}`,
+      )
+      .get(params)
+  },
+
+  create(data) {
+    const info = db
+      .prepare(
+        `INSERT INTO viagem (
+          ficha, safra_id, tipo_plantio, talhao_id, local, destino_id, motorista_id, placa,
+          data_saida, hora_saida, data_entrega, hora_entrega,
+          carga_total_kg, tara_kg,
+          umidade_pct,
+          impureza_pct, ardidos_pct, queimados_pct, avariados_pct, esverdiados_pct, quebrados_pct,
+          impureza_limite_pct, ardidos_limite_pct, queimados_limite_pct, avariados_limite_pct, esverdiados_limite_pct, quebrados_limite_pct,
+          peso_bruto_kg, umidade_desc_pct, umidade_desc_pct_manual, umidade_kg,
+          impureza_kg, ardidos_kg, queimados_kg, avariados_kg, esverdiados_kg, quebrados_kg,
+          peso_limpo_seco_kg, sacas,
+           sacas_frete, frete_tabela, sub_total_frete,
+           secagem_custo_por_saca, sub_total_secagem,
+           custo_silo_por_saca, sub_total_custo_silo, abatimento_total_silo, abatimento_por_saca_silo,
+           custo_terceiros_por_saca, sub_total_custo_terceiros, abatimento_total_terceiros, abatimento_por_saca_terceiros,
+           updated_at
+         ) VALUES (
+          @ficha, @safra_id, @tipo_plantio, @talhao_id, @local, @destino_id, @motorista_id, @placa,
+          @data_saida, @hora_saida, @data_entrega, @hora_entrega,
+          @carga_total_kg, @tara_kg,
+          @umidade_pct,
+          @impureza_pct, @ardidos_pct, @queimados_pct, @avariados_pct, @esverdiados_pct, @quebrados_pct,
+          @impureza_limite_pct, @ardidos_limite_pct, @queimados_limite_pct, @avariados_limite_pct, @esverdiados_limite_pct, @quebrados_limite_pct,
+          @peso_bruto_kg, @umidade_desc_pct, @umidade_desc_pct_manual, @umidade_kg,
+          @impureza_kg, @ardidos_kg, @queimados_kg, @avariados_kg, @esverdiados_kg, @quebrados_kg,
+          @peso_limpo_seco_kg, @sacas,
+           @sacas_frete, @frete_tabela, @sub_total_frete,
+           @secagem_custo_por_saca, @sub_total_secagem,
+           @custo_silo_por_saca, @sub_total_custo_silo, @abatimento_total_silo, @abatimento_por_saca_silo,
+           @custo_terceiros_por_saca, @sub_total_custo_terceiros, @abatimento_total_terceiros, @abatimento_por_saca_terceiros,
+           datetime('now')
+         )`,
+      )
+      .run(data)
+    return this.get(info.lastInsertRowid)
+  },
+
+  update(id, data) {
+    db.prepare(
+      `UPDATE viagem SET
+          ficha=@ficha, safra_id=@safra_id, tipo_plantio=@tipo_plantio, talhao_id=@talhao_id, local=@local,
+          destino_id=@destino_id, motorista_id=@motorista_id, placa=@placa,
+          data_saida=@data_saida, hora_saida=@hora_saida, data_entrega=@data_entrega, hora_entrega=@hora_entrega,
+          carga_total_kg=@carga_total_kg, tara_kg=@tara_kg,
+          umidade_pct=@umidade_pct,
+          impureza_pct=@impureza_pct, ardidos_pct=@ardidos_pct, queimados_pct=@queimados_pct, avariados_pct=@avariados_pct,
+          esverdiados_pct=@esverdiados_pct, quebrados_pct=@quebrados_pct,
+          impureza_limite_pct=@impureza_limite_pct, ardidos_limite_pct=@ardidos_limite_pct, queimados_limite_pct=@queimados_limite_pct,
+          avariados_limite_pct=@avariados_limite_pct, esverdiados_limite_pct=@esverdiados_limite_pct, quebrados_limite_pct=@quebrados_limite_pct,
+          peso_bruto_kg=@peso_bruto_kg, umidade_desc_pct=@umidade_desc_pct, umidade_kg=@umidade_kg,
+          umidade_desc_pct_manual=@umidade_desc_pct_manual,
+          impureza_kg=@impureza_kg, ardidos_kg=@ardidos_kg, queimados_kg=@queimados_kg, avariados_kg=@avariados_kg,
+          esverdiados_kg=@esverdiados_kg, quebrados_kg=@quebrados_kg,
+          peso_limpo_seco_kg=@peso_limpo_seco_kg, sacas=@sacas,
+          sacas_frete=@sacas_frete, frete_tabela=@frete_tabela, sub_total_frete=@sub_total_frete,
+          secagem_custo_por_saca=@secagem_custo_por_saca, sub_total_secagem=@sub_total_secagem,
+          custo_silo_por_saca=@custo_silo_por_saca, sub_total_custo_silo=@sub_total_custo_silo, abatimento_total_silo=@abatimento_total_silo, abatimento_por_saca_silo=@abatimento_por_saca_silo,
+          custo_terceiros_por_saca=@custo_terceiros_por_saca, sub_total_custo_terceiros=@sub_total_custo_terceiros, abatimento_total_terceiros=@abatimento_total_terceiros, abatimento_por_saca_terceiros=@abatimento_por_saca_terceiros,
+          updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({ ...data, id })
+
+    return this.get(id)
+  },
+
+  remove(id) {
+    return db.prepare('DELETE FROM viagem WHERE id=?').run(id)
+  },
+
+  fichaStatsBySafra({ safra_id, exclude_id } = {}) {
+    const where = ['safra_id = @safra_id']
+    const params = { safra_id }
+    if (exclude_id) {
+      where.push('id <> @exclude_id')
+      params.exclude_id = exclude_id
     }
-  },
 
-  async create(data) {
-    const row = await prisma().viagem.create({
-      data: { ...data, updated_at: nowDbText() },
-      include: { safra: true, talhao: true, destino: true, motorista: true },
-    })
-    return withJoins(row)
-  },
-
-  async update(id, data) {
-    const row = await prisma().viagem.update({
-      where: { id },
-      data: { ...data, updated_at: nowDbText() },
-      include: { safra: true, talhao: true, destino: true, motorista: true },
-    })
-    return withJoins(row)
-  },
-
-  async remove(id) {
-    return prisma().viagem.delete({ where: { id } })
-  },
-
-  async fichaStatsBySafra({ safra_id, exclude_id } = {}) {
-    const rows = await prisma().viagem.findMany({
-      where: {
-        safra_id,
-        ...(exclude_id ? { id: { not: exclude_id } } : {}),
-      },
-      select: { ficha: true },
-    })
+    const rows = db
+      .prepare(`SELECT ficha FROM viagem WHERE ${where.join(' AND ')}`)
+      .all(params)
 
     let maxNum = 0
     let maxLen = 0

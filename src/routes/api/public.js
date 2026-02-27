@@ -6,13 +6,13 @@ import { validateQuery } from '../../middleware/validate.js'
 import { talhaoRepo } from '../../repositories/talhaoRepo.js'
 import { viagemRepo } from '../../repositories/viagemRepo.js'
 import { talhaoSafraRepo } from '../../repositories/talhaoSafraRepo.js'
-import { prismaClient } from '../../db/prisma.js'
+import { db } from '../../db/db.js'
 
 export const publicRouter = Router()
 
-publicRouter.get('/talhoes/:id', async (req, res) => {
+publicRouter.get('/talhoes/:id', (req, res) => {
   const id = Number(req.params.id)
-  const t = await talhaoRepo.get(id)
+  const t = talhaoRepo.get(id)
   if (!t) throw notFound('Talhao nao encontrado')
 
   res.json({
@@ -38,38 +38,33 @@ const ResumoQuery = z.object({
 publicRouter.get(
   '/talhoes/:id/resumo',
   validateQuery(ResumoQuery),
-  async (req, res) => {
+  (req, res) => {
     const talhao_id = Number(req.params.id)
-    const t = await talhaoRepo.get(talhao_id)
+    const t = talhaoRepo.get(talhao_id)
     if (!t) throw notFound('Talhao nao encontrado')
-
-    const prisma = prismaClient()
 
     let safra
     let safra_id = req.query.safra_id
     if (!safra_id) {
-      const rows = await prisma.$queryRaw`
-        SELECT s.id, s.safra
-        FROM "viagem" v
-        JOIN "safra" s ON s.id = v.safra_id
-        WHERE v.talhao_id = ${talhao_id}
-        GROUP BY s.id, s.safra, s.data_referencia
-        ORDER BY
-          CASE WHEN s.data_referencia IS NULL OR s.data_referencia='' THEN 1 ELSE 0 END,
-          s.data_referencia DESC,
-          s.id DESC
-        LIMIT 1
-      `
-      safra = rows?.[0] ?? null
+      safra = db
+        .prepare(
+          `SELECT s.id, s.safra
+           FROM viagem v
+           JOIN safra s ON s.id = v.safra_id
+           WHERE v.talhao_id = @talhao_id
+           GROUP BY s.id
+           ORDER BY (s.data_referencia IS NULL) ASC, s.data_referencia DESC, s.id DESC
+           LIMIT 1`,
+        )
+        .get({ talhao_id })
       safra_id = safra?.id
     } else {
-      safra = await prisma.safra.findUnique({
-        where: { id: Number(safra_id) },
-        select: { id: true, safra: true },
-      })
+      safra = db
+        .prepare('SELECT id, safra FROM safra WHERE id=?')
+        .get(Number(safra_id))
     }
 
-    const totals = await viagemRepo.totals({
+    const totals = viagemRepo.totals({
       talhao_id,
       safra_id,
       de: req.query.de,
@@ -79,7 +74,7 @@ publicRouter.get(
     let pct_area_colhida = null
     let hectares_colhidos = null
     if (safra_id) {
-      const ts = await talhaoSafraRepo.get({
+      const ts = talhaoSafraRepo.get({
         safra_id,
         talhao_id,
       })

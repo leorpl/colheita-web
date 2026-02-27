@@ -1,29 +1,27 @@
-import { prismaClient } from '../db/prisma.js'
-import { nowDbText } from '../util/time.js'
-
-function prisma(p) {
-  return p ?? prismaClient()
-}
+import { db } from '../db/db.js'
 
 export const plantioTipoRepo = {
-  async list() {
-    return prisma().plantioTipo.findMany({ orderBy: [{ nome: 'asc' }] })
+  list() {
+    return db.prepare('SELECT * FROM plantio_tipo ORDER BY nome').all()
   },
-  async get(id) {
-    return prisma().plantioTipo.findUnique({ where: { id } })
+  get(id) {
+    return db.prepare('SELECT * FROM plantio_tipo WHERE id=?').get(id)
   },
-  async create({ nome }) {
-    return prisma().plantioTipo.create({
-      data: { nome, updated_at: nowDbText() },
-    })
+  create({ nome }) {
+    const info = db
+      .prepare(
+        `INSERT INTO plantio_tipo (nome, updated_at) VALUES (@nome, datetime('now'))`,
+      )
+      .run({ nome })
+    return this.get(info.lastInsertRowid)
   },
-  async update(id, { nome }) {
-    return prisma().plantioTipo.update({
-      where: { id },
-      data: { nome, updated_at: nowDbText() },
-    })
+  update(id, { nome }) {
+    db.prepare(
+      `UPDATE plantio_tipo SET nome=@nome, updated_at=datetime('now') WHERE id=@id`,
+    ).run({ id, nome })
+    return this.get(id)
   },
-  async remove(id) {
-    return prisma().plantioTipo.delete({ where: { id } })
+  remove(id) {
+    return db.prepare('DELETE FROM plantio_tipo WHERE id=?').run(id)
   },
 }

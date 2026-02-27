@@ -1,91 +1,79 @@
-import { prismaClient } from '../db/prisma.js'
-import { nowDbText } from '../util/time.js'
-
-function prisma(p) {
-  return p ?? prismaClient()
-}
+import { db } from '../db/db.js'
 
 export const usuarioRepo = {
-  async list() {
-    return prisma().usuario.findMany({
-      select: {
-        id: true,
-        username: true,
-        nome: true,
-        role: true,
-        motorista_id: true,
-        menus_json: true,
-        active: true,
-        created_at: true,
-        updated_at: true,
-      },
-      orderBy: [{ id: 'desc' }],
-    })
+  list() {
+    return db
+      .prepare(
+        `SELECT id, username, nome, role, motorista_id, menus_json, active, created_at, updated_at
+         FROM usuario
+         ORDER BY id DESC`,
+      )
+      .all()
   },
 
-  async get(id) {
-    return prisma().usuario.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        username: true,
-        nome: true,
-        role: true,
-        motorista_id: true,
-        menus_json: true,
-        active: true,
-        created_at: true,
-        updated_at: true,
-      },
-    })
+  get(id) {
+    return db
+      .prepare(
+        `SELECT id, username, nome, role, motorista_id, menus_json, active, created_at, updated_at
+         FROM usuario WHERE id=?`,
+      )
+      .get(id)
   },
 
-  async getAuthByUsername(username) {
-    return prisma().usuario.findFirst({ where: { username }, take: 1 })
+  getAuthByUsername(username) {
+    return db
+      .prepare(
+        `SELECT * FROM usuario WHERE username=? LIMIT 1`,
+      )
+      .get(username)
   },
 
-  async create({ username, nome, role, motorista_id, password_hash, password_salt }) {
-    const row = await prisma().usuario.create({
-      data: {
+  create({ username, nome, role, motorista_id, password_hash, password_salt }) {
+    const info = db
+      .prepare(
+        `INSERT INTO usuario (username, nome, role, motorista_id, menus_json, password_hash, password_salt, active, updated_at)
+         VALUES (@username, @nome, @role, @motorista_id, @menus_json, @password_hash, @password_salt, 1, datetime('now'))`,
+      )
+      .run({
         username,
-        nome: nome ?? null,
+        nome,
         role,
         motorista_id: motorista_id || null,
         menus_json: null,
         password_hash,
         password_salt,
-        active: 1,
-        updated_at: nowDbText(),
-      },
-    })
-    return this.get(row.id)
+      })
+    return this.get(info.lastInsertRowid)
   },
 
-  async update(id, { username, nome, role, motorista_id, active, menus_json }) {
-    await prisma().usuario.update({
-      where: { id },
-      data: {
-        username,
-        nome: nome ?? null,
-        role,
-        motorista_id: motorista_id || null,
-        active: active ? 1 : 0,
-        menus_json: menus_json ?? null,
-        updated_at: nowDbText(),
-      },
-    })
-    return this.get(id)
-  },
-
-  async setPassword(id, { password_hash, password_salt }) {
-    await prisma().usuario.update({
-      where: { id },
-      data: { password_hash, password_salt, updated_at: nowDbText() },
+  update(id, { username, nome, role, motorista_id, active, menus_json }) {
+    db.prepare(
+      `UPDATE usuario
+       SET username=@username, nome=@nome, role=@role, motorista_id=@motorista_id, active=@active, menus_json=@menus_json,
+           updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({
+      id,
+      username,
+      nome,
+      role,
+      motorista_id: motorista_id || null,
+      active: active ? 1 : 0,
+      menus_json: menus_json ?? null,
     })
     return this.get(id)
   },
 
-  async remove(id) {
-    return prisma().usuario.delete({ where: { id } })
+  setPassword(id, { password_hash, password_salt }) {
+    db.prepare(
+      `UPDATE usuario
+       SET password_hash=@password_hash, password_salt=@password_salt, updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({ id, password_hash, password_salt })
+    return this.get(id)
+  },
+
+  remove(id) {
+    return db.prepare('DELETE FROM usuario WHERE id=?').run(id)
   },
 }

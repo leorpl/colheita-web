@@ -4,14 +4,14 @@ import { parseCookies, sha256Hex } from '../auth/cookies.js'
 import { usuarioSessaoRepo } from '../repositories/usuarioSessaoRepo.js'
 import { hasPerm, permsForRole, menusForRole } from '../auth/permissions.js'
 
-async function getUserFromRequest(req) {
+function getUserFromRequest(req) {
   const cookies = parseCookies(req.headers.cookie)
   const token = cookies[env.SESSION_COOKIE_NAME]
   if (!token) return null
 
-  await usuarioSessaoRepo.purgeExpired()
+  usuarioSessaoRepo.purgeExpired()
   const token_hash = sha256Hex(token)
-  const sess = await usuarioSessaoRepo.getByTokenHash(token_hash)
+  const sess = usuarioSessaoRepo.getByTokenHash(token_hash)
   if (!sess) return null
   if (Number(sess.active) !== 1) return null
 
@@ -38,13 +38,9 @@ async function getUserFromRequest(req) {
 
 export function optionalAuth(req, _res, next) {
   if (Number(env.AUTH_ENABLED) !== 1) return next()
-  Promise.resolve()
-    .then(async () => {
-      const u = await getUserFromRequest(req)
-      if (u) req.user = u
-    })
-    .then(() => next())
-    .catch(next)
+  const u = getUserFromRequest(req)
+  if (u) req.user = u
+  next()
 }
 
 export function authGate(req, res, next) {
@@ -56,24 +52,16 @@ export function authGate(req, res, next) {
 
   // auth endpoints: allow without session, but attach user if present
   if (p.startsWith('/auth/')) {
-    Promise.resolve()
-      .then(async () => {
-        const u = await getUserFromRequest(req)
-        if (u) req.user = u
-      })
-      .then(() => next())
-      .catch(next)
-    return
+    const u = getUserFromRequest(req)
+    if (u) req.user = u
+    return next()
   }
 
-  Promise.resolve()
-    .then(async () => {
-      const u = await getUserFromRequest(req)
-      if (!u) throw unauthorized('Nao autenticado')
-      req.user = u
-    })
-    .then(() => next())
-    .catch(next)
+  const u = getUserFromRequest(req)
+  if (!u) throw unauthorized('Nao autenticado')
+  req.user = u
+
+  next()
 }
 
 export function requirePerm(perm) {

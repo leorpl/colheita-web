@@ -15,8 +15,8 @@ const ResumoQuery = z.object({
 quitacoesMotoristasRouter.get(
   '/resumo',
   validateQuery(ResumoQuery),
-  async (req, res) => {
-    res.json(await quitacaoMotoristasService.resumo(req.query))
+  (req, res) => {
+    res.json(quitacaoMotoristasService.resumo(req.query))
   },
 )
 
@@ -30,23 +30,23 @@ const CreateBody = z.object({
   observacoes: z.string().optional().nullable(),
 })
 
-quitacoesMotoristasRouter.post('/', validateBody(CreateBody), async (req, res) => {
-  const row = await quitacaoMotoristasService.create(req.body)
+quitacoesMotoristasRouter.post('/', validateBody(CreateBody), (req, res) => {
+  const row = quitacaoMotoristasService.create(req.body)
   res.status(201).json(row)
 })
 
-quitacoesMotoristasRouter.put('/:id', validateBody(CreateBody), async (req, res) => {
+quitacoesMotoristasRouter.put('/:id', validateBody(CreateBody), (req, res) => {
   const id = Number(req.params.id)
-  const exists = await motoristaQuitacaoRepo.get(id)
+  const exists = motoristaQuitacaoRepo.get(id)
   if (!exists) throw notFound('Quitacao nao encontrada')
-  const row = await quitacaoMotoristasService.create({ ...req.body, id })
+  const row = quitacaoMotoristasService.create({ ...req.body, id })
   res.json(row)
 })
 
-quitacoesMotoristasRouter.delete('/:id', async (req, res) => {
+quitacoesMotoristasRouter.delete('/:id', (req, res) => {
   const id = Number(req.params.id)
-  const exists = await motoristaQuitacaoRepo.get(id)
+  const exists = motoristaQuitacaoRepo.get(id)
   if (!exists) throw notFound('Quitacao nao encontrada')
-  await motoristaQuitacaoRepo.remove(id)
+  motoristaQuitacaoRepo.remove(id)
   res.status(204).send()
 })

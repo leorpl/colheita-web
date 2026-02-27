@@ -1,45 +1,31 @@
-import { prismaClient } from '../db/prisma.js'
-import { nowDbText } from '../util/time.js'
-
-function prisma(p) {
-  return p ?? prismaClient()
-}
+import { db } from '../db/db.js'
 
 export const destinoRepo = {
-  async list() {
-    return prisma().destino.findMany({ orderBy: [{ id: 'desc' }] })
+  list() {
+    return db.prepare('SELECT * FROM destino ORDER BY id DESC').all()
   },
-  async get(id) {
-    return prisma().destino.findUnique({ where: { id } })
+  get(id) {
+    return db.prepare('SELECT * FROM destino WHERE id = ?').get(id)
   },
-  async create(data) {
-    return prisma().destino.create({
-      data: {
-        codigo: data.codigo,
-        local: data.local,
-        maps_url: data.maps_url ?? null,
-        trava_sacas: data.trava_sacas === '' ? null : (data.trava_sacas ?? null),
-        distancia_km: data.distancia_km === '' ? null : (data.distancia_km ?? null),
-        observacoes: data.observacoes ?? null,
-        updated_at: nowDbText(),
-      },
-    })
+  create(data) {
+    const info = db
+      .prepare(
+        `INSERT INTO destino (codigo, local, maps_url, trava_sacas, distancia_km, observacoes, updated_at)
+         VALUES (@codigo, @local, @maps_url, @trava_sacas, @distancia_km, @observacoes, datetime('now'))`,
+      )
+      .run(data)
+    return this.get(info.lastInsertRowid)
   },
-  async update(id, data) {
-    return prisma().destino.update({
-      where: { id },
-      data: {
-        codigo: data.codigo,
-        local: data.local,
-        maps_url: data.maps_url ?? null,
-        trava_sacas: data.trava_sacas === '' ? null : (data.trava_sacas ?? null),
-        distancia_km: data.distancia_km === '' ? null : (data.distancia_km ?? null),
-        observacoes: data.observacoes ?? null,
-        updated_at: nowDbText(),
-      },
-    })
+  update(id, data) {
+    db.prepare(
+      `UPDATE destino
+       SET codigo=@codigo, local=@local, maps_url=@maps_url, trava_sacas=@trava_sacas, distancia_km=@distancia_km,
+           observacoes=@observacoes, updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({ ...data, id })
+    return this.get(id)
   },
-  async remove(id) {
-    return prisma().destino.delete({ where: { id } })
+  remove(id) {
+    return db.prepare('DELETE FROM destino WHERE id=?').run(id)
   },
 }

@@ -13,12 +13,12 @@ const FreteUpsertBody = z.object({
   valor_por_saca: z.coerce.number().nonnegative(),
 })
 
-fretesRouter.get('/', async (_req, res) => {
-  res.json(await freteRepo.list())
+fretesRouter.get('/', (_req, res) => {
+  res.json(freteRepo.list())
 })
 
-fretesRouter.post('/', validateBody(FreteUpsertBody), async (req, res) => {
-  const row = await freteRepo.upsert(req.body)
+fretesRouter.post('/', validateBody(FreteUpsertBody), (req, res) => {
+  const row = freteRepo.upsert(req.body)
   res.status(201).json(row)
 })
 
@@ -27,9 +27,9 @@ const CopySafraBody = z.object({
   to_safra_id: z.coerce.number().int().positive(),
 })
 
-fretesRouter.post('/copiar-safra', validateBody(CopySafraBody), async (req, res) => {
+fretesRouter.post('/copiar-safra', validateBody(CopySafraBody), (req, res) => {
   const { from_safra_id, to_safra_id } = req.body
-  const r = await freteRepo.copySafra({ from_safra_id, to_safra_id })
+  const r = freteRepo.copySafra({ from_safra_id, to_safra_id })
   res.status(201).json(r)
 })
 
@@ -46,16 +46,16 @@ const BulkUpsertBody = z.object({
     .default([]),
 })
 
-fretesRouter.post('/bulk-upsert', validateBody(BulkUpsertBody), async (req, res) => {
+fretesRouter.post('/bulk-upsert', validateBody(BulkUpsertBody), (req, res) => {
   const { safra_id, items } = req.body
-  const r = await freteRepo.bulkUpsert({ safra_id, items })
+  const r = freteRepo.bulkUpsert({ safra_id, items })
   res.status(201).json(r)
 })
 
-fretesRouter.delete('/:id', async (req, res) => {
+fretesRouter.delete('/:id', (req, res) => {
   const id = Number(req.params.id)
-  const exists = await freteRepo.get(id)
+  const exists = freteRepo.get(id)
   if (!exists) throw notFound('Frete nao encontrado')
-  await freteRepo.remove(id)
+  freteRepo.remove(id)
   res.status(204).send()
 })

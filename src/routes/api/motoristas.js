@@ -19,32 +19,32 @@ const MotoristaBody = z.object({
     .nullable(),
 })
 
-motoristasRouter.get('/', async (_req, res) => {
-  res.json(await motoristaRepo.list())
+motoristasRouter.get('/', (_req, res) => {
+  res.json(motoristaRepo.list())
 })
 
-motoristasRouter.post('/', validateBody(MotoristaBody), async (req, res) => {
-  const row = await motoristaRepo.create(req.body)
+motoristasRouter.post('/', validateBody(MotoristaBody), (req, res) => {
+  const row = motoristaRepo.create(req.body)
   res.status(201).json(row)
 })
 
-motoristasRouter.get('/:id', async (req, res) => {
-  const row = await motoristaRepo.get(Number(req.params.id))
+motoristasRouter.get('/:id', (req, res) => {
+  const row = motoristaRepo.get(Number(req.params.id))
   if (!row) throw notFound('Motorista nao encontrado')
   res.json(row)
 })
 
-motoristasRouter.put('/:id', validateBody(MotoristaBody), async (req, res) => {
+motoristasRouter.put('/:id', validateBody(MotoristaBody), (req, res) => {
   const id = Number(req.params.id)
-  const exists = await motoristaRepo.get(id)
+  const exists = motoristaRepo.get(id)
   if (!exists) throw notFound('Motorista nao encontrado')
-  res.json(await motoristaRepo.update(id, req.body))
+  res.json(motoristaRepo.update(id, req.body))
 })
 
-motoristasRouter.delete('/:id', async (req, res) => {
+motoristasRouter.delete('/:id', (req, res) => {
   const id = Number(req.params.id)
-  const exists = await motoristaRepo.get(id)
+  const exists = motoristaRepo.get(id)
   if (!exists) throw notFound('Motorista nao encontrado')
-  await motoristaRepo.remove(id)
+  motoristaRepo.remove(id)
   res.status(204).send()
 })

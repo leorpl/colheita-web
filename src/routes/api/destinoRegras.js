@@ -11,8 +11,8 @@ const ListQuery = z.object({
   safra_id: z.coerce.number().int().positive(),
 })
 
-destinoRegrasRouter.get('/', validateQuery(ListQuery), async (req, res) => {
-  res.json(await destinoRegraRepo.listBySafra({ safra_id: req.query.safra_id }))
+destinoRegrasRouter.get('/', validateQuery(ListQuery), (req, res) => {
+  res.json(destinoRegraRepo.listBySafra({ safra_id: req.query.safra_id }))
 })
 
 const UpsertBody = z.object({
@@ -43,7 +43,7 @@ const UpsertBody = z.object({
     .optional(),
 })
 
-destinoRegrasRouter.post('/', validateBody(UpsertBody), async (req, res) => {
+destinoRegrasRouter.post('/', validateBody(UpsertBody), (req, res) => {
   const body = req.body
   const tipo_plantio = String(body.tipo_plantio)
 
@@ -79,7 +79,7 @@ destinoRegrasRouter.post('/', validateBody(UpsertBody), async (req, res) => {
     ),
   }
 
-  const regra = await destinoRegraRepo.upsertPlantio({ ...base, tipo_plantio })
+  const regra = destinoRegraRepo.upsertPlantio({ ...base, tipo_plantio })
 
   if (body.umidade_faixas) {
     const faixasNorm = body.umidade_faixas.map((f) => ({
@@ -88,10 +88,10 @@ destinoRegrasRouter.post('/', validateBody(UpsertBody), async (req, res) => {
       desconto_pct: normalizePercent100(f.desconto_pct, 'desconto_pct'),
       custo_secagem_por_saca: Number(f.custo_secagem_por_saca || 0),
     }))
-    await destinoRegraRepo.replaceUmidadeFaixasPlantio(regra.id, faixasNorm)
+    destinoRegraRepo.replaceUmidadeFaixasPlantio(regra.id, faixasNorm)
   }
 
-  const faixas = await destinoRegraRepo.getUmidadeFaixasPlantio(regra.id)
+  const faixas = destinoRegraRepo.getUmidadeFaixasPlantio(regra.id)
   res.status(201).json({ ...regra, umidade_faixas: faixas })
 })
 
@@ -101,10 +101,10 @@ const GetQuery = z.object({
   tipo_plantio: z.string().trim().min(1),
 })
 
-destinoRegrasRouter.get('/one', validateQuery(GetQuery), async (req, res) => {
+destinoRegrasRouter.get('/one', validateQuery(GetQuery), (req, res) => {
   const tipo_plantio = String(req.query.tipo_plantio)
 
-  const regra = await destinoRegraRepo.getBySafraDestinoPlantio({
+  const regra = destinoRegraRepo.getBySafraDestinoPlantio({
     safra_id: req.query.safra_id,
     destino_id: req.query.destino_id,
     tipo_plantio,
@@ -112,7 +112,7 @@ destinoRegrasRouter.get('/one', validateQuery(GetQuery), async (req, res) => {
 
   if (!regra) return res.json(null)
 
-  const faixas = await destinoRegraRepo.getUmidadeFaixasPlantio(regra.id)
+  const faixas = destinoRegraRepo.getUmidadeFaixasPlantio(regra.id)
 
   res.json({ ...regra, umidade_faixas: faixas })
 })

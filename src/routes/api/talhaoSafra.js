@@ -9,8 +9,8 @@ const ListQuery = z.object({
   safra_id: z.coerce.number().int().positive(),
 })
 
-talhaoSafraRouter.get('/', validateQuery(ListQuery), async (req, res) => {
-  res.json(await talhaoSafraRepo.listBySafra({ safra_id: req.query.safra_id }))
+talhaoSafraRouter.get('/', validateQuery(ListQuery), (req, res) => {
+  res.json(talhaoSafraRepo.listBySafra({ safra_id: req.query.safra_id }))
 })
 
 const UpsertBody = z.object({
@@ -19,7 +19,7 @@ const UpsertBody = z.object({
   pct_area_colhida: z.coerce.number().min(0).max(1),
 })
 
-talhaoSafraRouter.post('/', validateBody(UpsertBody), async (req, res) => {
-  const row = await talhaoSafraRepo.upsert(req.body)
+talhaoSafraRouter.post('/', validateBody(UpsertBody), (req, res) => {
+  const row = talhaoSafraRepo.upsert(req.body)
   res.status(201).json(row)
 })

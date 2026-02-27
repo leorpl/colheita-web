@@ -45,9 +45,9 @@ const ViagemBody = z.object({
   quebrados_limite_pct: z.coerce.number().min(0).optional().nullable(),
 })
 
-viagensRouter.post('/preview', validateBody(ViagemBody), async (req, res) => {
-  const payload = await viagemService.buildPayload(req.body)
-  const trava = await viagemService.getTravaStatus({
+viagensRouter.post('/preview', validateBody(ViagemBody), (req, res) => {
+  const payload = viagemService.buildPayload(req.body)
+  const trava = viagemService.getTravaStatus({
     destino_id: payload.destino_id,
     safra_id: payload.safra_id,
     sacas: payload.sacas,
@@ -64,9 +64,9 @@ const ListQuery = z.object({
   ate: z.string().optional(),
 })
 
-viagensRouter.get('/', validateQuery(ListQuery), async (req, res) => {
-  const items = await viagemRepo.list(req.query)
-  const totals = await viagemRepo.totals(req.query)
+viagensRouter.get('/', validateQuery(ListQuery), (req, res) => {
+  const items = viagemRepo.list(req.query)
+  const totals = viagemRepo.totals(req.query)
   res.json({ items, totals })
 })
 
@@ -74,32 +74,32 @@ const NextFichaQuery = z.object({
   safra_id: z.coerce.number().int().positive(),
 })
 
-viagensRouter.get('/next-ficha', validateQuery(NextFichaQuery), async (req, res) => {
-  res.json(await viagemService.nextFicha(Number(req.query.safra_id)))
+viagensRouter.get('/next-ficha', validateQuery(NextFichaQuery), (req, res) => {
+  res.json(viagemService.nextFicha(Number(req.query.safra_id)))
 })
 
-viagensRouter.post('/', validateBody(ViagemBody), async (req, res) => {
-  const row = await viagemService.create(req.body)
+viagensRouter.post('/', validateBody(ViagemBody), (req, res) => {
+  const row = viagemService.create(req.body)
   res.status(201).json(row)
 })
 
-viagensRouter.get('/:id', async (req, res) => {
-  const row = await viagemRepo.get(Number(req.params.id))
+viagensRouter.get('/:id', (req, res) => {
+  const row = viagemRepo.get(Number(req.params.id))
   if (!row) throw notFound('Viagem nao encontrada')
   res.json(row)
 })
 
-viagensRouter.put('/:id', validateBody(ViagemBody), async (req, res) => {
+viagensRouter.put('/:id', validateBody(ViagemBody), (req, res) => {
   const id = Number(req.params.id)
-  const exists = await viagemRepo.get(id)
+  const exists = viagemRepo.get(id)
   if (!exists) throw notFound('Viagem nao encontrada')
-  res.json(await viagemService.update(id, req.body))
+  res.json(viagemService.update(id, req.body))
 })
 
-viagensRouter.delete('/:id', async (req, res) => {
+viagensRouter.delete('/:id', (req, res) => {
   const id = Number(req.params.id)
-  const exists = await viagemRepo.get(id)
+  const exists = viagemRepo.get(id)
   if (!exists) throw notFound('Viagem nao encontrada')
-  await viagemRepo.remove(id)
+  viagemRepo.remove(id)
   res.status(204).send()
 })

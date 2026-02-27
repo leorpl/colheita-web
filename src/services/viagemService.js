@@ -4,9 +4,8 @@ import { viagemRepo } from '../repositories/viagemRepo.js'
 import { calcularViagem } from '../domain/calculations.js'
 import { conflict, unprocessable } from '../errors.js'
 import { normalizePercent100, round } from '../domain/normalize.js'
+import { db } from '../db/db.js'
 import { destinoRegraRepo } from '../repositories/destinoRegraRepo.js'
-import { safraRepo } from '../repositories/safraRepo.js'
-import { prismaClient } from '../db/prisma.js'
 
 function toDbNumber(value, fieldName) {
   const n = Number(value)
@@ -20,15 +19,15 @@ function normalizeOptionalPercent(value, fieldName) {
 }
 
 export const viagemService = {
-  async nextFicha(safra_id) {
-    const { maxNum, maxLen } = await viagemRepo.fichaStatsBySafra({ safra_id })
+  nextFicha(safra_id) {
+    const { maxNum, maxLen } = viagemRepo.fichaStatsBySafra({ safra_id })
     const nextNum = (Number(maxNum) || 0) + 1
     const width = Math.max(3, Number(maxLen) || 0, String(nextNum).length)
     const next_ficha = String(nextNum).padStart(width, '0')
     return { safra_id, nextNum, width, next_ficha }
   },
 
-  async buildPayload(input) {
+  buildPayload(input) {
     const carga_total_kg = toDbNumber(input.carga_total_kg, 'carga_total_kg')
     const tara_kg = toDbNumber(input.tara_kg, 'tara_kg')
     if (carga_total_kg < 0 || tara_kg < 0 || tara_kg > carga_total_kg) {
@@ -51,11 +50,13 @@ export const viagemService = {
       throw unprocessable('ficha deve ser um numero positivo')
     }
 
-    const { maxLen } = await viagemRepo.fichaStatsBySafra({ safra_id })
+    const { maxLen } = viagemRepo.fichaStatsBySafra({ safra_id })
     const width = Math.max(3, Number(maxLen) || 0, fichaRaw.length)
     const ficha = String(fichaNum).padStart(width, '0')
 
-    const safraRow = await safraRepo.get(safra_id)
+    const safraRow = db
+      .prepare('SELECT plantio FROM safra WHERE id=?')
+      .get(safra_id)
     const defaultPlantio = String(safraRow?.plantio || 'SOJA')
       .trim()
       .toUpperCase()
@@ -143,7 +144,7 @@ export const viagemService = {
       }
     }
 
-    const valorFrete = await freteRepo.getValor({
+    const valorFrete = freteRepo.getValor({
       safra_id: payload.safra_id,
       motorista_id: payload.motorista_id,
       destino_id: payload.destino_id,
@@ -156,15 +157,13 @@ export const viagemService = {
 
     // regras SEMPRE por destino+safra+tipo_plantio.
     // Se nao existir para o plantio, nao deve "cair" em outra tabela (evita usar regra errada).
-    const regra = await destinoRegraRepo.getBySafraDestinoPlantio({
+    const regra = destinoRegraRepo.getBySafraDestinoPlantio({
       safra_id: payload.safra_id,
       destino_id: payload.destino_id,
       tipo_plantio: payload.tipo_plantio,
     })
 
-    const faixas = regra
-      ? await destinoRegraRepo.getUmidadeFaixasPlantio(regra.id)
-      : []
+    const faixas = regra ? destinoRegraRepo.getUmidadeFaixasPlantio(regra.id) : []
 
     const faixaUmid = this.resolveUmidadeFaixa({
       umidade_pct: payload.umidade_pct,
@@ -274,10 +273,7 @@ export const viagemService = {
       destino_regra_existe,
       umidade_faixas_qtd,
       umidade_origem,
-      trava_sacas:
-        regra?.trava_sacas ??
-        (await destinoRepo.get(payload.destino_id))?.trava_sacas ??
-        null,
+      trava_sacas: regra?.trava_sacas ?? destinoRepo.get(payload.destino_id)?.trava_sacas ?? null,
       limites_origem,
     }
   },
@@ -289,24 +285,24 @@ export const viagemService = {
     return null
   },
 
-  async getTravaStatus({ destino_id, safra_id, sacas, exclude_id } = {}) {
-    const destino = await destinoRepo.get(destino_id)
+  getTravaStatus({ destino_id, safra_id, sacas, exclude_id } = {}) {
+    const destino = destinoRepo.get(destino_id)
     if (!destino) throw unprocessable('Destino inexistente')
 
-    const regra = await destinoRegraRepo.getBySafraDestino({ safra_id, destino_id })
+    const regra = destinoRegraRepo.getBySafraDestino({ safra_id, destino_id })
     const trava_sacas = regra?.trava_sacas ?? destino.trava_sacas
     if (trava_sacas === null || trava_sacas === undefined) return null
 
-    const prisma = prismaClient()
-    const agg = await prisma.viagem.aggregate({
-      where: {
-        destino_id,
-        safra_id,
-        ...(exclude_id ? { id: { not: exclude_id } } : {}),
-      },
-      _sum: { sacas: true },
-    })
-    const entrega_atual = Number(agg._sum?.sacas || 0)
+    const whereExtra = exclude_id ? ' AND id <> @exclude_id' : ''
+    const row = db
+      .prepare(
+        `SELECT COALESCE(SUM(sacas), 0) as entrega_atual
+         FROM viagem
+         WHERE destino_id=@destino_id AND safra_id=@safra_id${whereExtra}`,
+      )
+      .get({ destino_id, safra_id, exclude_id })
+
+    const entrega_atual = Number(row?.entrega_atual || 0)
     const trava = Number(trava_sacas)
     const tentativa = Number(sacas || 0)
 
@@ -325,21 +321,21 @@ export const viagemService = {
     }
   },
 
-  async create(input) {
-    const payload = await this.buildPayload(input)
-    const trava = await this.getTravaStatus({
+  create(input) {
+    const payload = this.buildPayload(input)
+    const trava = this.getTravaStatus({
       destino_id: payload.destino_id,
       safra_id: payload.safra_id,
       sacas: payload.sacas,
     })
     try {
-      const row = await viagemRepo.create(payload)
+      const row = viagemRepo.create(payload)
       return { ...row, trava }
     } catch (e) {
       if (
-        e?.code === 'P2002' &&
-        String(e.meta?.target || '').includes('safra_id') &&
-        String(e.meta?.target || '').includes('ficha')
+        e?.code === 'SQLITE_CONSTRAINT_UNIQUE' &&
+        String(e.message || '').includes('viagem.safra_id') &&
+        String(e.message || '').includes('viagem.ficha')
       ) {
         throw conflict('Ja existe lancamento com esta ficha na mesma safra', {
           safra_id: payload.safra_id,
@@ -350,10 +346,10 @@ export const viagemService = {
     }
   },
 
-  async update(id, input) {
-    const payload = await this.buildPayload(input)
+  update(id, input) {
+    const payload = this.buildPayload(input)
 
-    const trava = await this.getTravaStatus({
+    const trava = this.getTravaStatus({
       destino_id: payload.destino_id,
       safra_id: payload.safra_id,
       sacas: payload.sacas,
@@ -361,13 +357,13 @@ export const viagemService = {
     })
 
     try {
-      const row = await viagemRepo.update(id, payload)
+      const row = viagemRepo.update(id, payload)
       return { ...row, trava }
     } catch (e) {
       if (
-        e?.code === 'P2002' &&
-        String(e.meta?.target || '').includes('safra_id') &&
-        String(e.meta?.target || '').includes('ficha')
+        e?.code === 'SQLITE_CONSTRAINT_UNIQUE' &&
+        String(e.message || '').includes('viagem.safra_id') &&
+        String(e.message || '').includes('viagem.ficha')
       ) {
         throw conflict('Ja existe lancamento com esta ficha na mesma safra', {
           safra_id: payload.safra_id,

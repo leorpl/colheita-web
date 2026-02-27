@@ -14,12 +14,12 @@ const ColheitaQuery = z.object({
   ate: z.string().optional(),
 })
 
-relatoriosRouter.get('/colheita', validateQuery(ColheitaQuery), async (req, res) => {
-  res.json(await relatoriosService.colheita(req.query))
+relatoriosRouter.get('/colheita', validateQuery(ColheitaQuery), (req, res) => {
+  res.json(relatoriosService.colheita(req.query))
 })
 
-relatoriosRouter.get('/painel', async (_req, res) => {
-  res.json(await relatoriosService.painel())
+relatoriosRouter.get('/painel', (_req, res) => {
+  res.json(relatoriosService.painel())
 })
 
 const ResumoTalhaoQuery = z.object({
@@ -29,8 +29,8 @@ const ResumoTalhaoQuery = z.object({
 relatoriosRouter.get(
   '/resumo-talhao',
   validateQuery(ResumoTalhaoQuery),
-  async (req, res) => {
-    res.json(await relatoriosService.resumoTalhao({ safra_id: req.query.safra_id }))
+  (req, res) => {
+    res.json(relatoriosService.resumoTalhao({ safra_id: req.query.safra_id }))
   },
 )
 
@@ -42,8 +42,8 @@ const PagamentoQuery = z.object({
 relatoriosRouter.get(
   '/pagamento-motoristas',
   validateQuery(PagamentoQuery),
-  async (req, res) => {
-    res.json(await relatoriosService.pagamentoMotoristas(req.query))
+  (req, res) => {
+    res.json(relatoriosService.pagamentoMotoristas(req.query))
   },
 )
 
@@ -54,7 +54,7 @@ const EntregasQuery = z.object({
 relatoriosRouter.get(
   '/entregas-por-destino',
   validateQuery(EntregasQuery),
-  async (req, res) => {
-    res.json(await relatoriosService.entregasPorDestino({ safra_id: req.query.safra_id }))
+  (req, res) => {
+    res.json(relatoriosService.entregasPorDestino({ safra_id: req.query.safra_id }))
   },
 )
