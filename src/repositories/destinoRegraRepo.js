@@ -89,6 +89,29 @@ export const destinoRegraRepo = {
     })
   },
 
+  updatePlantioById(id, data) {
+    db.prepare(
+      `UPDATE destino_regra_plantio
+       SET safra_id=@safra_id,
+           destino_id=@destino_id,
+           tipo_plantio=@tipo_plantio,
+           trava_sacas=@trava_sacas,
+           valor_compra_por_saca=@valor_compra_por_saca,
+           custo_silo_por_saca=@custo_silo_por_saca,
+           custo_terceiros_por_saca=@custo_terceiros_por_saca,
+           impureza_limite_pct=@impureza_limite_pct,
+           ardidos_limite_pct=@ardidos_limite_pct,
+           queimados_limite_pct=@queimados_limite_pct,
+           avariados_limite_pct=@avariados_limite_pct,
+           esverdiados_limite_pct=@esverdiados_limite_pct,
+           quebrados_limite_pct=@quebrados_limite_pct,
+           updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({ ...data, id })
+
+    return this.getPlantioById(id)
+  },
+
   listBySafra({ safra_id }) {
     return db
       .prepare(

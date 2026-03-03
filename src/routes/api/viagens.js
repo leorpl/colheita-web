@@ -26,6 +26,7 @@ viagensRouter.post(
     safra_id: payload.safra_id,
     tipo_plantio: payload.tipo_plantio,
     sacas: payload.sacas,
+    exclude_id: id || null,
   })
   res.json({ ...payload, trava })
   },
@@ -39,7 +40,8 @@ viagensRouter.post(
   requirePerm(Permissions.COLHEITA_READ),
   validateBody(CompareBody),
   (req, res) => {
-    res.json(viagemService.compararDestinos(req.body))
+    const id = req.body.id ? Number(req.body.id) : null
+    res.json(viagemService.compararDestinos({ ...req.body, id }))
   },
 )
 

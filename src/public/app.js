@@ -1089,7 +1089,7 @@ async function renderPainel() {
           }
         })
 
-        // show all destinos; order: with trava first, then by % desc, then entrega desc
+        // show all destinos; order: with contrato first, then by % desc, then entrega desc
         all.sort((a, b) => {
           const at = a.trava > 0 ? 1 : 0
           const bt = b.trava > 0 ? 1 : 0
@@ -1105,7 +1105,7 @@ async function renderPainel() {
               d.trava > 0
                 ? `${fmtNum(d.entrega, 2)} / ${fmtNum(d.trava, 2)} sc` +
                   (d.falta > 0 ? ` | falta ${fmtNum(d.falta, 2)} sc` : ' | OK')
-                : `${fmtNum(d.entrega, 2)} sc | sem trava`
+                : `${fmtNum(d.entrega, 2)} sc | sem contrato`
             return `
               <div class="bar">
                 <div class="name">${escapeHtml(d.name)}</div>
@@ -1165,12 +1165,12 @@ async function renderCrudPage({
         .join('')
 
       return `<tr>
-        ${tds}
         <td class="actions">
           ${extraBtns}
           <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
           <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
         </td>
+        ${tds}
       </tr>`
     })
     .join('')
@@ -1188,7 +1188,7 @@ async function renderCrudPage({
         <div class="table-wrap">
           <table>
             <thead>
-              <tr>${th}<th></th></tr>
+              <tr><th class="actions"></th>${th}</tr>
             </thead>
             <tbody>
               ${rows || `<tr><td colspan="${columns.length + 1}">Nenhum registro.</td></tr>`}
@@ -1517,7 +1517,7 @@ async function renderDestinos() {
   await renderCrudPage({
     route: 'destinos',
     title: 'Destinos',
-    subtitle: 'Cadastre destino e distancia (km). A trava (sacas) fica nas Regras do destino.',
+    subtitle: 'Cadastre destino e distancia (km). O contrato (sacas) fica nas Regras do destino.',
     fetchPath: '/api/destinos',
     columns: [
       { key: 'id', label: 'ID' },
@@ -1850,15 +1850,15 @@ async function renderUsuarios() {
   const rows = (users || [])
     .map((u) => {
       return `<tr>
-        <td>${escapeHtml(u.username)}</td>
-        <td>${escapeHtml(u.nome || '')}</td>
-        <td>${escapeHtml(u.role)}</td>
-        <td>${escapeHtml(String(u.active ? 'SIM' : 'NAO'))}</td>
         <td class="actions">
           <button class="btn small ghost" data-act="uedit" data-id="${u.id}">Editar</button>
           <button class="btn small ghost" data-act="upwd" data-id="${u.id}">Senha</button>
           <button class="btn small danger" data-act="udel" data-id="${u.id}">Excluir</button>
         </td>
+        <td>${escapeHtml(u.username)}</td>
+        <td>${escapeHtml(u.nome || '')}</td>
+        <td>${escapeHtml(u.role)}</td>
+        <td>${escapeHtml(String(u.active ? 'SIM' : 'NAO'))}</td>
       </tr>`
     })
     .join('')
@@ -1875,7 +1875,7 @@ async function renderUsuarios() {
       <div class="panel-body">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Usuario</th><th>Nome</th><th>Role</th><th>Ativo</th><th></th></tr></thead>
+            <thead><tr><th class="actions"></th><th>Usuario</th><th>Nome</th><th>Role</th><th>Ativo</th></tr></thead>
             <tbody>${rows || `<tr><td colspan="5">Nenhum usuario.</td></tr>`}</tbody>
           </table>
         </div>
@@ -2023,12 +2023,12 @@ async function renderTiposPlantio() {
   const rows = items
     .map((it) => {
       return `<tr>
-        <td>${it.id}</td>
-        <td>${escapeHtml(it.nome)}</td>
         <td class="actions">
           <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
           <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
         </td>
+        <td>${it.id}</td>
+        <td>${escapeHtml(it.nome)}</td>
       </tr>`
     })
     .join('')
@@ -2045,7 +2045,7 @@ async function renderTiposPlantio() {
       <div class="panel-body">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Nome</th><th></th></tr></thead>
+            <thead><tr><th class="actions"></th><th>ID</th><th>Nome</th></tr></thead>
             <tbody>${rows || `<tr><td colspan="3">Nenhum registro.</td></tr>`}</tbody>
           </table>
         </div>
@@ -2107,15 +2107,15 @@ async function renderFretes() {
   const rows = items
     .map((it) => {
       return `<tr>
+        <td class="actions">
+          <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
+          <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
+        </td>
         <td>${it.id}</td>
         <td>${escapeHtml(it.safra_nome)}</td>
         <td data-sort="${escapeHtml(`${it.motorista_nome || ''} ${it.destino_local || ''} ${it.safra_nome || ''}`.trim())}">${escapeHtml(it.motorista_nome)}</td>
         <td data-sort="${escapeHtml(`${it.destino_local || ''} ${it.motorista_nome || ''} ${it.safra_nome || ''}`.trim())}">${escapeHtml(it.destino_local)}</td>
         <td>${fmtMoney(it.valor_por_saca)}</td>
-        <td class="actions">
-          <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
-          <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
-        </td>
       </tr>`
     })
     .join('')
@@ -2136,7 +2136,7 @@ async function renderFretes() {
       <div class="panel-body">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Safra</th><th>Motorista</th><th>Destino</th><th>Valor por saca</th><th></th></tr></thead>
+            <thead><tr><th class="actions"></th><th>ID</th><th>Safra</th><th>Motorista</th><th>Destino</th><th>Valor por saca</th></tr></thead>
             <tbody>${rows || `<tr><td colspan="6">Nenhum frete cadastrado.</td></tr>`}</tbody>
           </table>
         </div>
@@ -2189,7 +2189,7 @@ async function renderFretes() {
             <div class="hint" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
               <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="only_origin_motoristas" checked /> Somente motoristas com frete na origem</label>
               <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="only_origin_destinos" checked /> Somente destinos com frete na origem</label>
-              <span style="opacity:.75">(Filtro por trava removido: trava fica nas regras do destino)</span>
+              <span style="opacity:.75">(Filtro por contrato removido: contrato fica nas regras do destino)</span>
             </div>
           </div>
           <div class="field col12">
@@ -2308,7 +2308,7 @@ async function renderFretes() {
     if (fromEl) fromEl.onchange = renderPreview
     if (ckOnlyMot) ckOnlyMot.onchange = renderPreview
     if (ckOnlyDes) ckOnlyDes.onchange = renderPreview
-    // filtro por trava foi removido (trava agora fica nas regras do destino)
+    // filtro por contrato foi removido (contrato agora fica nas regras do destino)
     renderPreview()
   }
 
@@ -2493,8 +2493,9 @@ async function renderRegrasDestino() {
   const qs = hash.includes('?') ? hash.split('?')[1] : ''
   const params = new URLSearchParams(qs)
   const editId = Number(params.get('edit_id') || '')
+  const isNew = String(params.get('new') || '') === '1'
 
-  if (!(Number.isFinite(editId) && editId > 0)) {
+  if (!isNew && !(Number.isFinite(editId) && editId > 0)) {
     const rules = await api('/api/destino-regras/plantio')
 
     setView(`
@@ -2513,13 +2514,13 @@ async function renderRegrasDestino() {
             <table>
               <thead>
                 <tr>
+                  <th class="actions"></th>
                   <th>Item</th>
                   <th>Safra</th>
                   <th>Destino</th>
                   <th>Plantio</th>
                   <th>Alteracao</th>
                   <th>Criacao</th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody id="rulesBody">
@@ -2542,16 +2543,16 @@ async function renderRegrasDestino() {
           const upd = String(r.updated_at || '')
           const crt = String(r.created_at || '')
           return `<tr>
+            <td class="actions">
+              <button class="btn small ghost" data-act="edit" data-id="${id}">Editar</button>
+              <button class="btn small danger" data-act="del" data-id="${id}">Excluir</button>
+            </td>
             <td data-sort="${id}">${escapeHtml(String(id))}</td>
             <td data-sort="${escapeHtml(safra)}">${escapeHtml(safra)}</td>
             <td data-sort="${escapeHtml(destino)}">${escapeHtml(destino)}</td>
             <td data-sort="${escapeHtml(plantio)}"><code class="mono">${escapeHtml(plantio)}</code></td>
             <td data-sort="${escapeHtml(upd)}">${escapeHtml(upd || '-')}</td>
             <td data-sort="${escapeHtml(crt)}">${escapeHtml(crt || '-')}</td>
-            <td class="actions">
-              <button class="btn small ghost" data-act="edit" data-id="${id}">Editar</button>
-              <button class="btn small danger" data-act="del" data-id="${id}">Excluir</button>
-            </td>
           </tr>`
         })
         .join('')
@@ -2562,7 +2563,7 @@ async function renderRegrasDestino() {
     const btnNova = view.querySelector('#btnNovaRegra')
     if (btnNova) {
       btnNova.onclick = () => {
-        window.location.hash = '#/regras-destino?edit_id=1'
+        window.location.hash = '#/regras-destino?new=1'
       }
     }
 
@@ -2573,9 +2574,6 @@ async function renderRegrasDestino() {
         if (!r) return
         const qp = new URLSearchParams({
           edit_id: String(id),
-          safra_id: String(r.safra_id),
-          destino_id: String(r.destino_id),
-          tipo_plantio: String(r.tipo_plantio),
         })
         window.location.hash = `#/regras-destino?${qp.toString()}`
       }
@@ -2649,16 +2647,21 @@ async function renderRegrasDestino() {
 
            ${selectField({ label: 'Tipo plantio', name: 'tipo_plantio', options: plantioOptions, value: tipoDefault || plantioOptions[0]?.value || '', span: 'col6' })}
 
-           ${formField({ label: `Trava (sacas) ${helpTip('Quando a soma de sacas da safra para o destino ultrapassa a trava, o lancamento alerta (nao bloqueia).')}`, name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '', span: 'col4' })}
+           <div class="field col6" style="align-self:end">
+             <div class="label">Status</div>
+             <div class="hint" id="ruleIdentityHint">${escapeHtml(isNew ? 'Nova regra' : `Editando regra #${editId}`)}</div>
+           </div>
+
+           ${formField({ label: `Contrato (sacas) ${helpTip('Volume negociado antes do plantio (contrato de fornecimento). Serve para acompanhar quanto falta/excedeu do combinado. Para precos por volume, use a tabela de compra (faixas).')}`, name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '', span: 'col4' })}
 
            <div class="field col12">
              <div class="label">Tabela de compra do silo (por volume de sacas)</div>
              <div class="hint">O preco pode mudar conforme o acumulado de sacas vendidas no destino (na safra e tipo de plantio). Uma colheita pode pegar 2 faixas; o sistema usa a media.</div>
              <div class="table-wrap rule-wrap" style="margin-top:8px">
                <table>
-                 <thead><tr><th>Acumulado (&gt;)</th><th>Acumulado (&lt;=)</th><th>Preco (R$/sc)</th><th></th></tr></thead>
-                 <tbody id="compraFaixas"></tbody>
-               </table>
+                  <thead><tr><th class="actions"></th><th>Acumulado (&gt;)</th><th>Acumulado (&lt;=)</th><th>Preco (R$/sc)</th></tr></thead>
+                  <tbody id="compraFaixas"></tbody>
+                </table>
              </div>
              <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end">
                <button class="btn ghost" type="button" id="btnAddCompra">Adicionar faixa</button>
@@ -2680,7 +2683,7 @@ async function renderRegrasDestino() {
             <div class="hint">Defina faixas: desconto (%) e custo de secagem (R$/sc).</div>
             <div class="table-wrap rule-wrap" style="margin-top:8px">
               <table>
-                <thead><tr><th>Umid (&gt;)</th><th>Umid (&lt;=)</th><th>Desconto (%)</th><th>Secagem (R$/sc)</th><th></th></tr></thead>
+                <thead><tr><th class="actions"></th><th>Umid (&gt;)</th><th>Umid (&lt;=)</th><th>Desconto (%)</th><th>Secagem (R$/sc)</th></tr></thead>
                 <tbody id="faixas"></tbody>
               </table>
             </div>
@@ -2703,6 +2706,10 @@ async function renderRegrasDestino() {
   const btnRecalcCompra = view.querySelector('#btnRecalcCompra')
   const btnBackRules = view.querySelector('#btnBackRules')
 
+  const identityHint = view.querySelector('#ruleIdentityHint')
+  let conflictBlock = false
+  const currentId = !isNew && Number.isFinite(editId) && editId > 0 ? editId : null
+
   if (btnBackRules) {
     btnBackRules.onclick = () => {
       window.location.hash = '#/regras-destino'
@@ -2711,11 +2718,11 @@ async function renderRegrasDestino() {
 
   function faixaRow(f = { umid_gt: '', umid_lte: '', desconto_pct: '' }) {
     return `<tr>
+      <td class="actions"><button class="btn small danger" type="button" data-act="rm">Remover</button></td>
       <td style="width:90px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_gt" value="${escapeHtml(f.umid_gt)}" /></td>
       <td style="width:90px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_lte" value="${escapeHtml(f.umid_lte)}" /></td>
       <td style="width:110px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="desconto_pct" value="${escapeHtml(f.desconto_pct)}" /></td>
       <td style="width:120px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="custo_secagem_por_saca" value="${escapeHtml(f.custo_secagem_por_saca ?? '')}" /></td>
-      <td class="actions"><button class="btn small danger" type="button" data-act="rm">Remover</button></td>
     </tr>`
   }
 
@@ -2729,10 +2736,10 @@ async function renderRegrasDestino() {
 
   function compraRow(f = { sacas_gt: '', sacas_lte: '', preco_por_saca: '' }) {
     return `<tr>
+      <td class="actions"><button class="btn small danger" type="button" data-act="rm-compra">Remover</button></td>
       <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="sacas_gt" value="${escapeHtml(f.sacas_gt)}" /></td>
       <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="sacas_lte" value="${escapeHtml(f.sacas_lte)}" placeholder="(sem limite)" /></td>
       <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="preco_por_saca" value="${escapeHtml(f.preco_por_saca)}" /></td>
-      <td class="actions"><button class="btn small danger" type="button" data-act="rm-compra">Remover</button></td>
     </tr>`
   }
 
@@ -2742,17 +2749,61 @@ async function renderRegrasDestino() {
     })
   }
 
-  async function load() {
+  const checkConflict = debounce(async () => {
+    conflictBlock = false
+    if (!identityHint) return
+    if (!currentId) {
+      identityHint.textContent = 'Nova regra'
+      if (btnSalvar) btnSalvar.disabled = false
+      return
+    }
     const fd = new FormData(form)
     const safra_id = Number(fd.get('safra_id'))
     const destino_id = Number(fd.get('destino_id'))
-    const tipo_plantio = String(fd.get('tipo_plantio') || '')
+    const tipo_plantio = String(fd.get('tipo_plantio') || '').trim()
+    if (!tipo_plantio) {
+      identityHint.textContent = `Editando regra #${currentId}`
+      if (btnSalvar) btnSalvar.disabled = false
+      return
+    }
     const qp = new URLSearchParams({
       safra_id: String(safra_id),
       destino_id: String(destino_id),
+      tipo_plantio,
     })
-    qp.set('tipo_plantio', tipo_plantio)
-    const regra = await api(`/api/destino-regras/one?${qp.toString()}`)
+    const exists = await api(`/api/destino-regras/one?${qp.toString()}`)
+    if (exists && Number(exists.id) !== Number(currentId)) {
+      conflictBlock = true
+      identityHint.textContent = `Conflito: ja existe regra #${exists.id} para esta combinacao (nao pode duplicar).`
+      if (btnSalvar) btnSalvar.disabled = true
+      return
+    }
+    identityHint.textContent = `Editando regra #${currentId}`
+    if (btnSalvar) btnSalvar.disabled = false
+  }, 250)
+
+  async function load() {
+    let regra
+    if (currentId) {
+      regra = await api(`/api/destino-regras/plantio/${currentId}`)
+      // fixar a identidade ao id carregado (nao alternar registro durante edicao)
+      form.safra_id.value = String(regra.safra_id)
+      form.destino_id.value = String(regra.destino_id)
+      form.tipo_plantio.value = String(regra.tipo_plantio || '')
+      if (identityHint) identityHint.textContent = `Editando regra #${currentId}`
+    } else {
+      const fd = new FormData(form)
+      const safra_id = Number(fd.get('safra_id'))
+      const destino_id = Number(fd.get('destino_id'))
+      const tipo_plantio = String(fd.get('tipo_plantio') || '')
+      const qp = new URLSearchParams({
+        safra_id: String(safra_id),
+        destino_id: String(destino_id),
+      })
+      qp.set('tipo_plantio', tipo_plantio)
+      regra = await api(`/api/destino-regras/one?${qp.toString()}`)
+      if (identityHint) identityHint.textContent = 'Nova regra'
+    }
 
     form.trava_sacas.value =
       regra?.trava_sacas === null || regra?.trava_sacas === undefined
@@ -2822,9 +2873,15 @@ async function renderRegrasDestino() {
     }
   }
 
-  form.safra_id.onchange = load
-  form.destino_id.onchange = load
-  form.tipo_plantio.onchange = load
+  if (currentId) {
+    form.safra_id.onchange = () => checkConflict()
+    form.destino_id.onchange = () => checkConflict()
+    form.tipo_plantio.onchange = () => checkConflict()
+  } else {
+    form.safra_id.onchange = load
+    form.destino_id.onchange = load
+    form.tipo_plantio.onchange = load
+  }
 
   btnAddFaixa.onclick = () => {
     if (faixasEl.textContent.includes('Nenhuma faixa')) faixasEl.innerHTML = ''
@@ -2841,6 +2898,10 @@ async function renderRegrasDestino() {
   }
 
   btnSalvar.onclick = async () => {
+    if (conflictBlock) {
+      toast('Erro', 'Ja existe regra para esta combinacao (nao pode duplicar).')
+      return
+    }
     const fd = new FormData(form)
     const safra_id = Number(fd.get('safra_id'))
     const destino_id = Number(fd.get('destino_id'))
@@ -2892,26 +2953,38 @@ async function renderRegrasDestino() {
       compra_faixas.push({ sacas_gt: 0, sacas_lte: null, preco_por_saca: 120 })
     }
 
-    await api('/api/destino-regras', {
-      method: 'POST',
-      body: {
-        safra_id,
-        destino_id,
-        tipo_plantio,
-        trava_sacas: String(fd.get('trava_sacas') || '').trim() === '' ? null : numOr0(fd.get('trava_sacas')),
-        valor_compra_por_saca: Number(compra_faixas[0]?.preco_por_saca ?? 120),
-        compra_faixas,
-        custo_silo_por_saca: numOr0(fd.get('custo_silo_por_saca')),
-        custo_terceiros_por_saca: numOr0(fd.get('custo_terceiros_por_saca')),
-        impureza_limite_pct: numOr0(fd.get('impureza_limite_pct')),
-        ardidos_limite_pct: numOr0(fd.get('ardidos_limite_pct')),
-        queimados_limite_pct: numOr0(fd.get('queimados_limite_pct')),
-        avariados_limite_pct: numOr0(fd.get('avariados_limite_pct')),
-        esverdiados_limite_pct: numOr0(fd.get('esverdiados_limite_pct')),
-        quebrados_limite_pct: numOr0(fd.get('quebrados_limite_pct')),
-        umidade_faixas: faixas,
-      },
-    })
+    const payload = {
+      safra_id,
+      destino_id,
+      tipo_plantio,
+      trava_sacas:
+        String(fd.get('trava_sacas') || '').trim() === ''
+          ? null
+          : numOr0(fd.get('trava_sacas')),
+      valor_compra_por_saca: Number(compra_faixas[0]?.preco_por_saca ?? 120),
+      compra_faixas,
+      custo_silo_por_saca: numOr0(fd.get('custo_silo_por_saca')),
+      custo_terceiros_por_saca: numOr0(fd.get('custo_terceiros_por_saca')),
+      impureza_limite_pct: numOr0(fd.get('impureza_limite_pct')),
+      ardidos_limite_pct: numOr0(fd.get('ardidos_limite_pct')),
+      queimados_limite_pct: numOr0(fd.get('queimados_limite_pct')),
+      avariados_limite_pct: numOr0(fd.get('avariados_limite_pct')),
+      esverdiados_limite_pct: numOr0(fd.get('esverdiados_limite_pct')),
+      quebrados_limite_pct: numOr0(fd.get('quebrados_limite_pct')),
+      umidade_faixas: faixas,
+    }
+
+    if (currentId) {
+      await api(`/api/destino-regras/plantio/${currentId}`, {
+        method: 'PUT',
+        body: payload,
+      })
+    } else {
+      await api('/api/destino-regras', {
+        method: 'POST',
+        body: payload,
+      })
+    }
     toast('Salvo', 'Regras do destino atualizadas.')
     load()
   }
@@ -3144,7 +3217,7 @@ async function renderRegrasDestino() {
 
         prevEl.innerHTML = `
           <div class="form-grid" style="margin:0">
-            ${formField({ label: 'Trava (sacas)', name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: regra.trava_sacas === null || regra.trava_sacas === undefined ? '' : fmtNum(regra.trava_sacas, 2), span: 'col4' })}
+            ${formField({ label: 'Contrato (sacas)', name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: regra.trava_sacas === null || regra.trava_sacas === undefined ? '' : fmtNum(regra.trava_sacas, 2), span: 'col4' })}
             ${formField({ label: 'Custo Silo (R$/sc)', name: 'custo_silo_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: fmtNum(regra.custo_silo_por_saca || 0, 2), span: 'col4' })}
             ${formField({ label: 'Custo Terceiros (R$/sc)', name: 'custo_terceiros_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: fmtNum(regra.custo_terceiros_por_saca || 0, 2), span: 'col4' })}
             ${formField({ label: 'Impureza limite %', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: fmtNum((regra.impureza_limite_pct || 0) * 100, 2), span: 'col4' })}
@@ -3269,6 +3342,7 @@ async function renderColheitaBase(variant) {
           <table>
             <thead>
               <tr>
+                <th class="actions"></th>
                 <th>Ficha</th>
                 <th>Safra</th>
                 <th>Talhão</th>
@@ -3285,7 +3359,6 @@ async function renderColheitaBase(variant) {
                 <th>Compra (Silo)</th>
                 <th>Silo (líquida)</th>
                 <th>Terceiros (ideal)</th>
-                <th></th>
               </tr>
             </thead>
                 <tbody id="tbody"><tr><td colspan="17">Carregando...</td></tr></tbody>
@@ -3383,6 +3456,10 @@ async function renderColheitaBase(variant) {
           compraSilo === null ? null : compraSilo + custoTercPorSaca
 
         return `<tr class="${humClass}">
+          <td class="actions">
+            <button class="btn small ghost" data-act="edit" data-id="${v.id}">Editar</button>
+            <button class="btn small danger" data-act="del" data-id="${v.id}">Excluir</button>
+          </td>
           <td><code class="mono">${escapeHtml(v.ficha)}</code></td>
           <td>${escapeHtml(v.safra_nome)}</td>
           <td data-sort="${escapeHtml(`${v.talhao_nome || ''} ${v.talhao_local || ''} ${v.ficha || ''}`.trim())}">${escapeHtml(v.talhao_nome || '')}</td>
@@ -3399,10 +3476,6 @@ async function renderColheitaBase(variant) {
           <td>${compraSilo === null ? '-' : fmtMoney(compraSilo)}</td>
           <td>${siloLiquida === null ? '-' : fmtMoney(siloLiquida)}</td>
           <td>${terceirosIdeal === null ? '-' : fmtMoney(terceirosIdeal)}</td>
-          <td class="actions">
-            <button class="btn small ghost" data-act="edit" data-id="${v.id}">Editar</button>
-            <button class="btn small danger" data-act="del" data-id="${v.id}">Excluir</button>
-          </td>
         </tr>`
       })
       .join('')
@@ -3586,12 +3659,13 @@ async function renderColheitaBase(variant) {
 
           ${sectionTitle('Regras e limites do destino')}
           <div class="field col12">
-            <div class="label">Trava do destino</div>
+            <div class="label">Contrato do destino</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
               <span class="pill"><span class="dot" id="travaDot"></span><span id="travaStatus">Carregando...</span></span>
               <span class="pill"><span class="dot"></span><span>Entregue: <b id="travaEntregue">-</b> sc</span></span>
-              <span class="pill"><span class="dot"></span><span>Limite: <b id="travaLimite">-</b> sc</span></span>
+              <span class="pill"><span class="dot"></span><span>Contrato: <b id="travaLimite">-</b> sc</span></span>
               <span class="pill"><span class="dot"></span><span>Restante: <b id="travaRestante">-</b> sc</span></span>
+              <span class="pill"><span class="dot"></span><span>Na carga: <b id="travaDentro">-</b> sc dentro | <b id="travaFora">-</b> sc fora</span></span>
               <span class="pill"><span class="dot" id="regraDot"></span><span id="regraInfo">Carregando regras...</span></span>
             </div>
             <div class="hint">Regras e limites sao carregados por destino + safra. Se voce alterar algum limite, o campo fica amarelo.</div>
@@ -3698,14 +3772,14 @@ async function renderColheitaBase(variant) {
         if (isEdit) {
           const r = await api(`/api/viagens/${viagem.id}`, { method: 'PUT', body })
           toast('Atualizado', 'Colheita atualizada.')
-          if (r?.trava?.atingida) {
-            toast('Atencao', 'Trava do destino estourada (salvo mesmo assim).')
+          if (r?.trava?.excedeu || r?.trava?.atingida) {
+            toast('Atencao', 'Contrato do destino excedido (salvo mesmo assim).')
           }
         } else {
           const r = await api('/api/viagens', { method: 'POST', body })
           toast('Cadastrada', 'Colheita registrada.')
-          if (r?.trava?.atingida) {
-            toast('Atencao', 'Trava do destino estourada (salvo mesmo assim).')
+          if (r?.trava?.excedeu || r?.trava?.atingida) {
+            toast('Atencao', 'Contrato do destino excedido (salvo mesmo assim).')
           }
         }
         refreshList()
@@ -3990,6 +4064,8 @@ async function renderColheitaBase(variant) {
       const travaEntregue = dlgForm.querySelector('#travaEntregue')
       const travaLimite = dlgForm.querySelector('#travaLimite')
       const travaRestante = dlgForm.querySelector('#travaRestante')
+      const travaDentro = dlgForm.querySelector('#travaDentro')
+      const travaFora = dlgForm.querySelector('#travaFora')
       const regraDot = dlgForm.querySelector('#regraDot')
       const regraInfo = dlgForm.querySelector('#regraInfo')
 
@@ -4024,20 +4100,20 @@ async function renderColheitaBase(variant) {
           ? entregue / limite
           : null
 
-      let statusText = 'Sem trava'
+      let statusText = 'Sem contrato'
       let dotClass = ''
       if (Number.isFinite(limite) && limite > 0) {
         if (!Number.isFinite(entregue)) {
-          statusText = 'Trava definida'
+          statusText = 'Contrato definido'
           dotClass = 'warn'
         } else if (ratio >= 1) {
-          statusText = 'Trava atingida'
+          statusText = 'Contrato excedido'
           dotClass = 'bad'
         } else if (ratio >= 0.85) {
-          statusText = 'Perto da trava'
+          statusText = 'Perto de completar contrato'
           dotClass = 'warn'
         } else {
-          statusText = 'OK'
+          statusText = 'Dentro do contrato'
           dotClass = ''
         }
       }
@@ -4049,6 +4125,11 @@ async function renderColheitaBase(variant) {
         travaEntregue.textContent = Number.isFinite(entregue) ? fmtSacas(entregue) : '-'
       if (travaRestante)
         travaRestante.textContent = Number.isFinite(restante) ? fmtSacas(restante) : '-'
+
+      const dentro = Number(trava?.dentro_contrato_sacas)
+      const fora = Number(trava?.fora_contrato_sacas)
+      if (travaDentro) travaDentro.textContent = Number.isFinite(dentro) ? fmtSacas(dentro) : '-'
+      if (travaFora) travaFora.textContent = Number.isFinite(fora) ? fmtSacas(fora) : '-'
 
       const regraExiste =
         typeof preview?.destino_regra_existe === 'boolean'
@@ -4308,9 +4389,9 @@ async function renderColheitaBase(variant) {
         }
         const p = await api('/api/viagens/preview', { method: 'POST', body })
 
-        // trava: manter calculos, apenas sinalizar
+        // contrato (antiga "trava"): manter calculos, apenas sinalizar
         const trava = p.trava
-        if (trava?.atingida) {
+        if (trava?.excedeu || trava?.atingida) {
           dlg.dataset.trava = '1'
         } else {
           dlg.dataset.trava = ''
@@ -4683,7 +4764,7 @@ async function renderRelatorios() {
             <div class="table-wrap">
               <table>
                 <thead><tr><th colspan="5">Entregas por destino</th></tr>
-                  <tr><th>Destino</th><th>Trava (sacas)</th><th>Entrega (sacas)</th><th>Peso limpo/seco</th><th>Status</th></tr></thead>
+                   <tr><th>Destino</th><th>Contrato (sacas)</th><th>Entrega (sacas)</th><th>Peso limpo/seco</th><th>Status</th></tr></thead>
                 <tbody id="rdest"><tr><td colspan="5">Carregando...</td></tr></tbody>
               </table>
             </div>
@@ -4751,8 +4832,8 @@ async function renderRelatorios() {
         let status = `<span class="pill"><span class="dot"></span><span>OK</span></span>`
         if (trava && trava > 0) {
           const ratio = entrega / trava
-          if (ratio >= 1) status = `<span class="pill"><span class="dot bad"></span><span>Trava atingida</span></span>`
-          else if (ratio >= 0.85) status = `<span class="pill"><span class="dot warn"></span><span>Perto da trava</span></span>`
+          if (ratio >= 1) status = `<span class="pill"><span class="dot bad"></span><span>Contrato excedido</span></span>`
+          else if (ratio >= 0.85) status = `<span class="pill"><span class="dot warn"></span><span>Perto de completar contrato</span></span>`
         }
         return `<tr>
           <td>${escapeHtml(d.destino_local)}</td>
@@ -4820,15 +4901,15 @@ async function renderRelatorios() {
     const des = await api(`/api/relatorios/entregas-por-destino?safra_id=${safra_id}`)
     downloadCsv(
       `entregas-por-destino-safra-${safra_id}.csv`,
-      ['Destino', 'Trava (sacas)', 'Entrega (sacas)', 'Peso limpo/seco (kg)', 'Status'],
+      ['Destino', 'Contrato (sacas)', 'Entrega (sacas)', 'Peso limpo/seco (kg)', 'Status'],
       (des || []).map((d) => {
         const trava = d.trava_sacas
         const entrega = Number(d.entrega_sacas || 0)
         let status = 'OK'
         if (trava && trava > 0) {
           const ratio = entrega / trava
-          if (ratio >= 1) status = 'Trava atingida'
-          else if (ratio >= 0.85) status = 'Perto da trava'
+          if (ratio >= 1) status = 'Contrato excedido'
+          else if (ratio >= 0.85) status = 'Perto de completar contrato'
         }
         return [
           d.destino_local,
@@ -5371,7 +5452,7 @@ async function renderQuitacaoMotoristas() {
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Motorista</th><th>Qtd</th><th>Frete</th><th>Quitado</th><th>Falta</th><th></th></tr>
+                  <tr><th class="actions"></th><th>Motorista</th><th>Qtd</th><th>Frete</th><th>Quitado</th><th>Falta</th></tr>
                 </thead>
                 <tbody id="qBody"><tr><td colspan="6">Carregando...</td></tr></tbody>
               </table>
@@ -5382,8 +5463,8 @@ async function renderQuitacaoMotoristas() {
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th colspan="6">Lancamentos de quitacao no periodo</th></tr>
-                  <tr><th>Data</th><th>Motorista</th><th>Periodo</th><th>Valor</th><th>Forma</th><th>Obs</th><th></th></tr>
+                  <tr><th colspan="7">Lancamentos de quitacao no periodo</th></tr>
+                  <tr><th class="actions"></th><th>Data</th><th>Motorista</th><th>Periodo</th><th>Valor</th><th>Forma</th><th>Obs</th></tr>
                 </thead>
                 <tbody id="qLanc"><tr><td colspan="7">Carregando...</td></tr></tbody>
               </table>
@@ -5424,12 +5505,12 @@ async function renderQuitacaoMotoristas() {
             : `<span class="pill"><span class="dot warn"></span><span>${escapeHtml(fmtMoney(falta))}</span></span>`
 
         return `<tr>
+          <td><button class="btn small" data-act="pay" data-id="${it.motorista_id}" data-nome="${escapeHtml(it.motorista_nome)}" data-falta="${escapeHtml(String(falta))}">Registrar</button></td>
           <td data-sort="${escapeHtml(String(it.motorista_nome || '').trim())}">${escapeHtml(it.motorista_nome)}${it.motorista_placa ? ` <span class="hint">(${escapeHtml(it.motorista_placa)})</span>` : ''}</td>
           <td>${escapeHtml(String(it.quantidade || 0))}</td>
           <td>${escapeHtml(fmtMoney(it.valor_frete))}</td>
           <td>${escapeHtml(fmtMoney(it.valor_pago))}</td>
           <td>${faltaBadge}</td>
-          <td><button class="btn small" data-act="pay" data-id="${it.motorista_id}" data-nome="${escapeHtml(it.motorista_nome)}" data-falta="${escapeHtml(String(falta))}">Registrar</button></td>
         </tr>`
       })
       .join('')
@@ -5437,16 +5518,16 @@ async function renderQuitacaoMotoristas() {
     qLanc.innerHTML = (r.quitacoes || [])
       .map((q) => {
         return `<tr>
+          <td class="actions">
+            <button class="btn small ghost" data-act="qedit" data-id="${q.id}">Editar</button>
+            <button class="btn small danger" data-act="qdel" data-id="${q.id}">Excluir</button>
+          </td>
           <td>${escapeHtml(q.data_pagamento)}</td>
           <td data-sort="${escapeHtml(String(q.motorista_nome || '').trim())}">${escapeHtml(q.motorista_nome)}${q.motorista_placa ? ` <span class="hint">(${escapeHtml(q.motorista_placa)})</span>` : ''}</td>
           <td>${escapeHtml(q.de)} a ${escapeHtml(q.ate)}</td>
           <td>${escapeHtml(fmtMoney(q.valor))}</td>
           <td>${escapeHtml(q.forma_pagamento || '')}</td>
           <td>${escapeHtml(q.observacoes || '')}</td>
-          <td class="actions">
-            <button class="btn small ghost" data-act="qedit" data-id="${q.id}">Editar</button>
-            <button class="btn small danger" data-act="qdel" data-id="${q.id}">Excluir</button>
-          </td>
         </tr>`
       })
       .join('')

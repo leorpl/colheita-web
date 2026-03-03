@@ -681,8 +681,10 @@ export const viagemService = {
       tipo_plantio: tp,
     })
 
-    const trava_sacas = regra?.trava_sacas ?? null
-    if (trava_sacas === null || trava_sacas === undefined) return null
+    // Regra de negocio (contrato): "trava_sacas" representa o volume contratado (sacas).
+    // Ate este volume, aplica-se o preco/condicao negociado. Acima, entra em regime "fora do contrato".
+    const contrato_sacas_raw = regra?.trava_sacas ?? null
+    if (contrato_sacas_raw === null || contrato_sacas_raw === undefined) return null
 
     const whereExtra = exclude_id ? ' AND v.id <> @exclude_id' : ''
     const row = db
@@ -698,22 +700,35 @@ export const viagemService = {
       .get({ destino_id, safra_id, exclude_id, tipo_plantio: tp })
 
     const entrega_atual = Number(row?.entrega_atual || 0)
-    const trava = Number(trava_sacas)
+    const contrato_sacas = Number(contrato_sacas_raw)
     const tentativa = Number(sacas || 0)
 
-    if (!Number.isFinite(trava) || trava <= 0) return null
+    if (!Number.isFinite(contrato_sacas) || contrato_sacas <= 0) return null
 
-    const atingida = round(entrega_atual + tentativa, 9) > trava
+    const restante_antes = Math.max(0, contrato_sacas - entrega_atual)
+    const dentro_contrato = Math.max(0, Math.min(tentativa, restante_antes))
+    const fora_contrato = Math.max(0, tentativa - dentro_contrato)
+    const entrega_depois = round(entrega_atual + tentativa, 9)
+    const excedeu = entrega_depois > contrato_sacas
 
     return {
-      atingida,
+      // compat: "atingida" era usado como alerta de trava
+      atingida: excedeu,
+      excedeu,
       destino_id,
       safra_id,
       tipo_plantio: tp,
-      trava_sacas: trava,
+      contrato_sacas,
+      // compat
+      trava_sacas: contrato_sacas,
       entrega_atual_sacas: entrega_atual,
       tentativa_sacas: tentativa,
-      restante_sacas: Math.max(0, trava - entrega_atual),
+      restante_sacas: restante_antes,
+      restante_antes_sacas: restante_antes,
+      restante_depois_sacas: Math.max(0, contrato_sacas - entrega_depois),
+      dentro_contrato_sacas: round(dentro_contrato, 9),
+      fora_contrato_sacas: round(fora_contrato, 9),
+      entrega_depois_sacas: entrega_depois,
     }
   },
 

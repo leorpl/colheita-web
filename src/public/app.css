@@ -248,7 +248,28 @@ tbody td{padding:10px 10px;border-bottom:1px solid rgba(15,26,22,.08);vertical-a
 tbody tr:hover{background:rgba(209,154,43,.06)}
 tbody tr.hum-low{background:rgba(209,154,43,.10)}
 tbody tr.hum-high{background:rgba(180,35,24,.10)}
-td.actions{white-space:nowrap}
+th.actions, td.actions{white-space:nowrap;width:1%}
+
+/* "Frame" visual para coluna de acoes (fixa na esquerda) */
+th.actions{
+  position:sticky;
+  left:0;
+  z-index:5;
+  background:rgba(255,255,255,.94);
+  border-right:1px solid var(--line);
+  box-shadow:8px 0 14px rgba(0,0,0,.06);
+}
+td.actions{
+  position:sticky;
+  left:0;
+  z-index:2;
+  background:rgba(255,255,255,.80);
+  border-right:1px solid rgba(15,26,22,.10);
+  box-shadow:8px 0 14px rgba(0,0,0,.05);
+}
+tbody tr:hover td.actions{background:rgba(255,255,255,.88)}
+tbody tr.hum-low td.actions{background:rgba(255,255,255,.86)}
+tbody tr.hum-high td.actions{background:rgba(255,255,255,.86)}
 
 /* Compact inputs inside rule tables (umidade faixas) */
 .table-wrap table input[type="number"],
