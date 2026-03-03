@@ -102,14 +102,6 @@ export const destinoRegraRepo = {
   },
 
   listPlantio({ safra_id } = {}) {
-    const where = []
-    const params = {}
-    if (safra_id) {
-      where.push('rp.safra_id = @safra_id')
-      params.safra_id = safra_id
-    }
-    const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : ''
-
     return db
       .prepare(
         `SELECT
@@ -118,13 +110,13 @@ export const destinoRegraRepo = {
          FROM destino_regra_plantio rp
          JOIN safra s ON s.id = rp.safra_id
          JOIN destino d ON d.id = rp.destino_id
-         ${sqlWhere}
-         ORDER BY
-           CASE WHEN rp.updated_at IS NULL OR rp.updated_at='' THEN 1 ELSE 0 END,
-           rp.updated_at DESC,
-           rp.id DESC`,
+          WHERE (@safra_id IS NULL OR rp.safra_id = @safra_id)
+          ORDER BY
+            CASE WHEN rp.updated_at IS NULL OR rp.updated_at='' THEN 1 ELSE 0 END,
+            rp.updated_at DESC,
+            rp.id DESC`,
       )
-      .all(params)
+      .all({ safra_id: safra_id ?? null })
   },
 
   listPlantioBySafraTipo({ safra_id, tipo_plantio }) {

@@ -1,19 +1,17 @@
 import { Router } from 'express'
-import { z } from 'zod'
 
-import { validateBody, validateQuery } from '../../middleware/validate.js'
+import { validateBody, validateQuery, validateParams } from '../../middleware/validate.js'
 import { destinoRegraRepo } from '../../repositories/destinoRegraRepo.js'
 import { normalizePercent100 } from '../../domain/normalize.js'
 import { conflict, notFound } from '../../errors.js'
 import { db } from '../../db/db.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Permissions } from '../../auth/permissions.js'
+import { S, DestinoRegrasSchemas } from '../../validation/apiSchemas.js'
 
 export const destinoRegrasRouter = Router()
 
-const ListQuery = z.object({
-  safra_id: z.coerce.number().int().positive(),
-})
+const ListQuery = DestinoRegrasSchemas.ListQuery
 
 destinoRegrasRouter.get(
   '/',
@@ -25,9 +23,7 @@ destinoRegrasRouter.get(
 )
 
 // Lista regras por safra+destino+plantio (nova UI)
-const ListPlantioQuery = z.object({
-  safra_id: z.coerce.number().int().positive().optional(),
-})
+const ListPlantioQuery = DestinoRegrasSchemas.ListPlantioQuery
 
 destinoRegrasRouter.get(
   '/plantio',
@@ -41,9 +37,11 @@ destinoRegrasRouter.get(
 destinoRegrasRouter.delete(
   '/plantio/:id',
   requirePerm(Permissions.CONFIG_WRITE),
+  validateParams(S.IdParam),
+  validateQuery(DestinoRegrasSchemas.DeletePlantioQuery),
   (req, res) => {
-  const id = Number(req.params.id)
-  const force = String(req.query.force || '') === '1'
+  const id = req.params.id
+  const force = Number(req.query.force || 0) === 1
 
   const regra = destinoRegraRepo.getPlantioById(id)
   if (!regra) throw notFound('Regra (plantio) nao encontrada')
@@ -77,45 +75,7 @@ destinoRegrasRouter.delete(
   },
 )
 
-const UpsertBody = z.object({
-  safra_id: z.coerce.number().int().positive(),
-  destino_id: z.coerce.number().int().positive(),
-  tipo_plantio: z.string().trim().min(1),
-  trava_sacas: z.union([z.coerce.number().min(0), z.null()]).optional().nullable(),
-
-  valor_compra_por_saca: z.coerce.number().min(0).max(999999).optional().nullable(),
-
-  compra_faixas: z
-    .array(
-      z.object({
-        sacas_gt: z.coerce.number().min(0),
-        sacas_lte: z.union([z.coerce.number().min(0), z.null()]).optional().nullable(),
-        preco_por_saca: z.coerce.number().min(0).max(999999),
-      }),
-    )
-    .optional(),
-
-  custo_silo_por_saca: z.coerce.number().min(0).max(999999).optional().nullable(),
-  custo_terceiros_por_saca: z.coerce.number().min(0).max(999999).optional().nullable(),
-
-  impureza_limite_pct: z.coerce.number().min(0).max(100).optional().nullable(),
-  ardidos_limite_pct: z.coerce.number().min(0).max(100).optional().nullable(),
-  queimados_limite_pct: z.coerce.number().min(0).max(100).optional().nullable(),
-  avariados_limite_pct: z.coerce.number().min(0).max(100).optional().nullable(),
-  esverdiados_limite_pct: z.coerce.number().min(0).max(100).optional().nullable(),
-  quebrados_limite_pct: z.coerce.number().min(0).max(100).optional().nullable(),
-
-  umidade_faixas: z
-    .array(
-      z.object({
-        umid_gt: z.coerce.number().min(0).max(100),
-        umid_lte: z.coerce.number().min(0).max(100),
-        desconto_pct: z.coerce.number().min(0).max(100),
-        custo_secagem_por_saca: z.coerce.number().min(0).max(999999).optional(),
-      }),
-    )
-    .optional(),
-})
+const UpsertBody = DestinoRegrasSchemas.UpsertBody
 
 destinoRegrasRouter.post(
   '/',
@@ -188,11 +148,7 @@ destinoRegrasRouter.post(
   },
 )
 
-const GetQuery = z.object({
-  safra_id: z.coerce.number().int().positive(),
-  destino_id: z.coerce.number().int().positive(),
-  tipo_plantio: z.string().trim().min(1),
-})
+const GetQuery = DestinoRegrasSchemas.GetQuery
 
 destinoRegrasRouter.get(
   '/one',

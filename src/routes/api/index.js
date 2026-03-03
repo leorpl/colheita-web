@@ -13,6 +13,7 @@ import { quitacoesMotoristasRouter } from './quitacoesMotoristas.js'
 import { publicRouter } from './public.js'
 import { authRouter } from './auth.js'
 import { usersRouter } from './users.js'
+import { requireAuth } from '../../middleware/auth.js'
 
 export const apiRouter = Router()
 
@@ -20,7 +21,14 @@ apiRouter.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// Public/open routes
 apiRouter.use('/auth', authRouter)
+apiRouter.use('/public', publicRouter)
+
+// Everything below requires an authenticated session when AUTH_ENABLED=1.
+apiRouter.use(requireAuth)
+
+// Admin/management
 apiRouter.use('/users', usersRouter)
 
 apiRouter.use('/safras', safrasRouter)
@@ -34,4 +42,3 @@ apiRouter.use('/talhao-safra', talhaoSafraRouter)
 apiRouter.use('/viagens', viagensRouter)
 apiRouter.use('/relatorios', relatoriosRouter)
 apiRouter.use('/quitacoes-motoristas', quitacoesMotoristasRouter)
-apiRouter.use('/public', publicRouter)

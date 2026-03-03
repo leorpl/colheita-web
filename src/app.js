@@ -12,10 +12,16 @@ import { requestId } from './middleware/requestId.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { apiRouter } from './routes/api/index.js'
 import { pagesRouter } from './routes/pages.js'
-import { authGate } from './middleware/auth.js'
+import { authenticate } from './middleware/auth.js'
+import { rateLimit } from './middleware/rateLimit.js'
+import { enforceSameOrigin } from './middleware/sameOrigin.js'
 
 export function createApp() {
   const app = express()
+
+  if (Number(env.TRUST_PROXY) === 1) {
+    app.set('trust proxy', 1)
+  }
 
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = path.dirname(__filename)
@@ -64,10 +70,50 @@ export function createApp() {
 
   app.use(express.json({ limit: '1mb' }))
 
+  // Defensive: block cross-site state changes (browser requests with Origin)
+  app.use(
+    '/api',
+    enforceSameOrigin({
+      allowedOrigins: env.CORS_ORIGIN.split(',').map((s) => s.trim()),
+    }),
+  )
+
+  // Rate limiting (in-memory)
+  if (Number(env.RATE_LIMIT_ENABLED) === 1) {
+    app.use(
+      '/api/auth/login',
+      rateLimit({
+        id: 'login',
+        windowMs: Number(env.RATE_LIMIT_LOGIN_WINDOW_MS),
+        max: Number(env.RATE_LIMIT_LOGIN_MAX),
+        message: 'Muitas tentativas de login, tente novamente mais tarde.',
+      }),
+    )
+
+    app.use(
+      '/api',
+      rateLimit({
+        id: 'api',
+        windowMs: Number(env.RATE_LIMIT_API_WINDOW_MS),
+        max: Number(env.RATE_LIMIT_API_MAX),
+        skip: (req) => {
+          const p = String(req.path || '')
+          // health/public nao precisam consumir quota
+          if (p.startsWith('/health')) return true
+          if (p.startsWith('/public')) return true
+          // login tem limit separado
+          if (p === '/auth/login') return true
+          return false
+        },
+      }),
+    )
+  }
+
   app.use(express.static(publicDir))
 
   app.use('/', pagesRouter)
-  app.use('/api', authGate, apiRouter)
+  // Always try to attach req.user (session cookie); authorization happens inside /api router.
+  app.use('/api', authenticate, apiRouter)
 
   app.use((req, res) => {
     res.status(404).json({

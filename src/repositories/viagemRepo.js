@@ -47,39 +47,30 @@ export const viagemRepo = {
          WHERE v.id = ?`,
       )
       .get(id)
-    return recalcDerived(row)
+    const v = recalcDerived(row)
+    if (!v) return v
+    const talhoes = db
+      .prepare(
+        `SELECT vt.*, t.codigo as talhao_codigo, t.local as talhao_local, t.nome as talhao_nome
+         FROM viagem_talhao vt
+         JOIN talhao t ON t.id = vt.talhao_id
+         WHERE vt.viagem_id = ?
+         ORDER BY vt.id ASC`,
+      )
+      .all(id)
+    return { ...v, talhoes }
   },
 
   list(filters) {
-    const where = []
-    const params = {}
-
-    if (filters.safra_id) {
-      where.push('v.safra_id = @safra_id')
-      params.safra_id = filters.safra_id
+    // Query fixa (sem concatenacao de filtros) - todos os valores via parametros.
+    const params = {
+      safra_id: filters.safra_id ?? null,
+      talhao_id: filters.talhao_id ?? null,
+      destino_id: filters.destino_id ?? null,
+      motorista_id: filters.motorista_id ?? null,
+      de: filters.de ?? null,
+      ate: filters.ate ?? null,
     }
-    if (filters.talhao_id) {
-      where.push('v.talhao_id = @talhao_id')
-      params.talhao_id = filters.talhao_id
-    }
-    if (filters.destino_id) {
-      where.push('v.destino_id = @destino_id')
-      params.destino_id = filters.destino_id
-    }
-    if (filters.motorista_id) {
-      where.push('v.motorista_id = @motorista_id')
-      params.motorista_id = filters.motorista_id
-    }
-    if (filters.de) {
-      where.push('v.data_saida >= @de')
-      params.de = filters.de
-    }
-    if (filters.ate) {
-      where.push('v.data_saida <= @ate')
-      params.ate = filters.ate
-    }
-
-    const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
     const rows = db
       .prepare(
@@ -104,8 +95,16 @@ export const viagemRepo = {
            ON rp.safra_id = v.safra_id
           AND rp.destino_id = v.destino_id
           AND rp.tipo_plantio = UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, '')))
-         ${sqlWhere}
-         ORDER BY v.id DESC`,
+          WHERE (@safra_id IS NULL OR v.safra_id = @safra_id)
+            AND (@talhao_id IS NULL OR EXISTS (
+              SELECT 1 FROM viagem_talhao vt
+              WHERE vt.viagem_id = v.id AND vt.talhao_id = @talhao_id
+            ))
+            AND (@destino_id IS NULL OR v.destino_id = @destino_id)
+            AND (@motorista_id IS NULL OR v.motorista_id = @motorista_id)
+            AND (@de IS NULL OR v.data_saida >= @de)
+            AND (@ate IS NULL OR v.data_saida <= @ate)
+          ORDER BY v.id DESC`,
       )
       .all(params)
 
@@ -113,35 +112,104 @@ export const viagemRepo = {
   },
 
   totals(filters) {
-    const where = []
-    const params = {}
-
-    if (filters.safra_id) {
-      where.push('safra_id = @safra_id')
-      params.safra_id = filters.safra_id
-    }
-    if (filters.talhao_id) {
-      where.push('talhao_id = @talhao_id')
-      params.talhao_id = filters.talhao_id
-    }
-    if (filters.destino_id) {
-      where.push('destino_id = @destino_id')
-      params.destino_id = filters.destino_id
-    }
-    if (filters.motorista_id) {
-      where.push('motorista_id = @motorista_id')
-      params.motorista_id = filters.motorista_id
-    }
-    if (filters.de) {
-      where.push('data_saida >= @de')
-      params.de = filters.de
-    }
-    if (filters.ate) {
-      where.push('data_saida <= @ate')
-      params.ate = filters.ate
+    // Query fixa (sem concatenacao de filtros) - todos os valores via parametros.
+    const talhao_id = filters.talhao_id ? Number(filters.talhao_id) : null
+    const params = {
+      safra_id: filters.safra_id ?? null,
+      destino_id: filters.destino_id ?? null,
+      motorista_id: filters.motorista_id ?? null,
+      de: filters.de ?? null,
+      ate: filters.ate ?? null,
+      talhao_id: talhao_id || null,
     }
 
-    const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : ''
+    if (talhao_id) {
+      return db
+        .prepare(
+          `SELECT
+             COALESCE(SUM(v.carga_total_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as carga_total_kg,
+             COALESCE(SUM(v.tara_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as tara_kg,
+             COALESCE(SUM(COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0)), 0) as peso_bruto_kg,
+             COALESCE(SUM(v.umidade_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as umidade_kg,
+             COALESCE(SUM(v.impureza_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as impureza_kg,
+             COALESCE(SUM(v.ardidos_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as ardidos_kg,
+             COALESCE(SUM(v.queimados_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as queimados_kg,
+             COALESCE(SUM(v.avariados_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as avariados_kg,
+             COALESCE(SUM(v.esverdiados_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as esverdiados_kg,
+             COALESCE(SUM(v.quebrados_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as quebrados_kg,
+             COALESCE(SUM(v.peso_limpo_seco_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as peso_limpo_seco_kg,
+             COALESCE(SUM(v.sub_total_frete * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as sub_total_frete,
+             COALESCE(SUM(v.sacas * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as sacas
+           FROM viagem v
+           JOIN viagem_talhao vt ON vt.viagem_id = v.id AND vt.talhao_id = @talhao_id
+           WHERE (@safra_id IS NULL OR v.safra_id = @safra_id)
+             AND (@destino_id IS NULL OR v.destino_id = @destino_id)
+             AND (@motorista_id IS NULL OR v.motorista_id = @motorista_id)
+             AND (@de IS NULL OR v.data_saida >= @de)
+             AND (@ate IS NULL OR v.data_saida <= @ate)`,
+         )
+        .get(params)
+    }
 
     return db
       .prepare(
@@ -160,7 +228,11 @@ export const viagemRepo = {
            COALESCE(SUM(sub_total_frete), 0) as sub_total_frete,
            COALESCE(SUM(sacas), 0) as sacas
          FROM viagem
-         ${sqlWhere}`,
+         WHERE (@safra_id IS NULL OR safra_id = @safra_id)
+           AND (@destino_id IS NULL OR destino_id = @destino_id)
+           AND (@motorista_id IS NULL OR motorista_id = @motorista_id)
+           AND (@de IS NULL OR data_saida >= @de)
+           AND (@ate IS NULL OR data_saida <= @ate)`,
       )
       .get(params)
   },
@@ -248,16 +320,14 @@ export const viagemRepo = {
   },
 
   fichaStatsBySafra({ safra_id, exclude_id } = {}) {
-    const where = ['safra_id = @safra_id']
-    const params = { safra_id }
-    if (exclude_id) {
-      where.push('id <> @exclude_id')
-      params.exclude_id = exclude_id
-    }
-
     const rows = db
-      .prepare(`SELECT ficha FROM viagem WHERE ${where.join(' AND ')}`)
-      .all(params)
+      .prepare(
+        `SELECT ficha
+         FROM viagem
+         WHERE safra_id = @safra_id
+           AND (@exclude_id IS NULL OR id <> @exclude_id)`,
+      )
+      .all({ safra_id, exclude_id: exclude_id ?? null })
 
     let maxNum = 0
     let maxLen = 0

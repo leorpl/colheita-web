@@ -2,7 +2,12 @@ import { db } from './db.js'
 import { hashPassword } from '../auth/password.js'
 
 function hasColumn(table, column) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all()
+  // Defesa: evita identifiers inesperados (nao pode ser parametrizado).
+  const t = String(table || '')
+  if (!/^[a-z_][a-z0-9_]*$/i.test(t)) {
+    throw new Error('Invalid table name')
+  }
+  const cols = db.prepare(`PRAGMA table_info(${t})`).all()
   return cols.some((c) => c.name === column)
 }
 
@@ -264,6 +269,25 @@ export function migrate() {
     CREATE INDEX IF NOT EXISTS idx_viagem_motorista ON viagem(motorista_id);
     CREATE INDEX IF NOT EXISTS idx_viagem_data_saida ON viagem(data_saida);
 
+    -- rateio de uma viagem por talhao (para cargas mistas)
+    CREATE TABLE IF NOT EXISTS viagem_talhao (
+      id INTEGER PRIMARY KEY,
+      viagem_id INTEGER NOT NULL,
+      talhao_id INTEGER NOT NULL,
+      -- fracao 0..1 (quando informado via % no cadastro)
+      pct_rateio REAL,
+      -- kg rateado (quando peso bruto existir ou quando informado em kg)
+      kg_rateio REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      UNIQUE (viagem_id, talhao_id),
+      FOREIGN KEY (viagem_id) REFERENCES viagem(id) ON DELETE CASCADE,
+      FOREIGN KEY (talhao_id) REFERENCES talhao(id) ON DELETE RESTRICT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_viagem_talhao_viagem ON viagem_talhao(viagem_id);
+    CREATE INDEX IF NOT EXISTS idx_viagem_talhao_talhao ON viagem_talhao(talhao_id);
+
     CREATE TABLE IF NOT EXISTS motorista_quitacao (
       id INTEGER PRIMARY KEY,
       motorista_id INTEGER NOT NULL,
@@ -309,6 +333,20 @@ export function migrate() {
     CREATE INDEX IF NOT EXISTS idx_usuario_sessao_user ON usuario_sessao(usuario_id);
     CREATE INDEX IF NOT EXISTS idx_usuario_sessao_exp ON usuario_sessao(expires_at);
   `)
+
+  // backfill de rateio: viagens antigas (1 talhao -> 100%)
+  try {
+    db.exec(`
+      INSERT INTO viagem_talhao (viagem_id, talhao_id, pct_rateio, kg_rateio, updated_at)
+      SELECT v.id, v.talhao_id, 1, v.peso_bruto_kg, datetime('now')
+      FROM viagem v
+      WHERE NOT EXISTS (
+        SELECT 1 FROM viagem_talhao vt WHERE vt.viagem_id = v.id
+      );
+    `)
+  } catch {
+    // backfill e opcional (ex: tabela ainda nao existe em DB antigo)
+  }
 
   if (!hasColumn('usuario', 'menus_json')) {
     db.exec('ALTER TABLE usuario ADD COLUMN menus_json TEXT')

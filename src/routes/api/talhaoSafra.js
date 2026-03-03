@@ -1,15 +1,13 @@
 import { Router } from 'express'
-import { z } from 'zod'
 import { validateBody, validateQuery } from '../../middleware/validate.js'
 import { talhaoSafraRepo } from '../../repositories/talhaoSafraRepo.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Permissions } from '../../auth/permissions.js'
+import { TalhaoSafraSchemas } from '../../validation/apiSchemas.js'
 
 export const talhaoSafraRouter = Router()
 
-const ListQuery = z.object({
-  safra_id: z.coerce.number().int().positive(),
-})
+const ListQuery = TalhaoSafraSchemas.ListQuery
 
 talhaoSafraRouter.get(
   '/',
@@ -20,11 +18,7 @@ talhaoSafraRouter.get(
   },
 )
 
-const UpsertBody = z.object({
-  safra_id: z.coerce.number().int().positive(),
-  talhao_id: z.coerce.number().int().positive(),
-  pct_area_colhida: z.coerce.number().min(0).max(1),
-})
+const UpsertBody = TalhaoSafraSchemas.UpsertBody
 
 talhaoSafraRouter.post(
   '/',

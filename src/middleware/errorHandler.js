@@ -2,6 +2,19 @@ import { AppError } from '../errors.js'
 import { logger } from '../logger.js'
 
 export function errorHandler(err, req, res, _next) {
+  // JSON parse errors (express.json)
+  if (
+    err instanceof SyntaxError &&
+    (err?.type === 'entity.parse.failed' || err?.status === 400)
+  ) {
+    return res.status(400).json({
+      error: 'BadRequest',
+      message: 'JSON invalido',
+      details: null,
+      requestId: req.id,
+    })
+  }
+
   if (err instanceof AppError) {
     return res.status(err.status).json({
       error: err.name,
@@ -12,10 +25,16 @@ export function errorHandler(err, req, res, _next) {
   }
 
   if (err?.name === 'ZodError') {
-    return res.status(422).json({
-      error: 'ValidationError',
-      message: 'Invalid request',
-      details: err.issues,
+    const issues = Array.isArray(err.issues) ? err.issues : []
+    const details = issues.map((i) => ({
+      path: Array.isArray(i.path) ? i.path.join('.') : '',
+      message: String(i.message || 'Campo invalido'),
+    }))
+
+    return res.status(400).json({
+      error: 'BadRequest',
+      message: details.length ? details[0].message : 'Requisicao invalida',
+      details,
       requestId: req.id,
     })
   }

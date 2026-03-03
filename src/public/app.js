@@ -498,6 +498,54 @@ function openDialog({ title, bodyHtml, onSubmit, submitLabel = 'Salvar', size } 
         return
       }
 
+      // Erros de rateio (talhoes): mostrar motivo com numeros
+      if (
+        msg.toLowerCase().includes('rateio') ||
+        details?.delta_pct !== undefined ||
+        details?.delta_pct_100 !== undefined ||
+        details?.delta_kg !== undefined
+      ) {
+        const somaPct =
+          details?.soma_pct_100 !== undefined
+            ? Number(details.soma_pct_100)
+            : details?.soma_pct !== undefined
+              ? Number(details.soma_pct) * 100
+              : null
+        const deltaPct =
+          details?.delta_pct_100 !== undefined
+            ? Number(details.delta_pct_100)
+            : details?.delta_pct !== undefined
+              ? Number(details.delta_pct) * 100
+              : null
+        const pesoBruto =
+          details?.peso_bruto_kg !== undefined ? Number(details.peso_bruto_kg) : null
+        const somaKg =
+          details?.soma_kg_rateio !== undefined ? Number(details.soma_kg_rateio) : null
+        const deltaKg = details?.delta_kg !== undefined ? Number(details.delta_kg) : null
+
+        const pctLine =
+          somaPct === null || !Number.isFinite(somaPct)
+            ? ''
+            : `<div class="hint" style="margin-top:8px">Percentual: soma <b>${escapeHtml(fmtNum(somaPct, 2))}%</b>${Number.isFinite(deltaPct) ? ` | falta/sobra <b>${escapeHtml(fmtNum(deltaPct, 2))}%</b>` : ''}</div>`
+
+        const kgLine =
+          !Number.isFinite(pesoBruto) || !Number.isFinite(somaKg) || !Number.isFinite(deltaKg)
+            ? ''
+            : `<div class="hint" style="margin-top:6px">Peso bruto: <b>${escapeHtml(fmtNum(pesoBruto, 0))} kg</b> | soma kg: <b>${escapeHtml(fmtNum(somaKg, 0))} kg</b> | falta/sobra: <b>${escapeHtml(fmtNum(deltaKg, 0))} kg</b></div>`
+
+        showDialogOverlay({
+          title: 'Nao foi possivel salvar',
+          primaryLabel: 'OK',
+          bodyHtml: `
+            <div>${escapeHtml(msg)}</div>
+            ${pctLine}
+            ${kgLine}
+            <div class="hint" style="margin-top:10px">Dica: use o botao <b>Restante</b> no rateio para fechar em 100%.</div>
+          `.trim(),
+        })
+        return
+      }
+
       // fallback
       toast('Erro', msg)
     }
@@ -3405,7 +3453,6 @@ async function renderColheitaBase(variant) {
       }))
     }
 
-    const talhaoOpts = buildTalhaoOpts('nome')
     const destinoOpts = cache.destinos.map((d) => ({ value: d.id, label: `${d.local}` }))
     const motoristaOpts = cache.motoristas.map((m) => ({ value: m.id, label: `${m.nome} (${m.placa || '-'})` }))
 
@@ -3495,6 +3542,7 @@ async function renderColheitaBase(variant) {
     openDialog({
       title: isEdit ? `Editar colheita #${viagem.id}` : 'Nova colheita',
       submitLabel: isEdit ? 'Salvar' : 'Cadastrar',
+      size: 'wide',
       bodyHtml: `
         ${
           variant === 'rev01'
@@ -3509,7 +3557,30 @@ async function renderColheitaBase(variant) {
           ${formField({ label: 'Local', name: 'local', value: base.local ?? '', placeholder: '', span: 'col3' })}
 
            ${selectField({ label: 'Ordenar talhões', name: 'talhao_sort', options: [{ value: 'nome', label: 'Por nome' }, { value: 'local', label: 'Por local' }], value: 'nome', span: 'col3' })}
-           ${selectField({ label: 'Talhão', name: 'talhao_id', options: talhaoOpts, value: base.talhao_id, span: 'col9' })}
+           <div class="field col9">
+             <div class="rateio-card">
+               <div class="rateio-head">
+                 <div>
+                   <div class="rateio-title">Talhões (rateio)</div>
+                   <div class="rateio-sub">Use % (estimativa) antes do peso bruto; quando houver peso bruto, o sistema calcula/ajusta kg e valida o fechamento.</div>
+                 </div>
+                 <div class="rateio-actions">
+                   <button class="btn ghost small" type="button" id="btnAddTalhao">Adicionar</button>
+                   <button class="btn ghost small" type="button" id="btnFillRest">Restante</button>
+                 </div>
+               </div>
+               <div class="rateio-grid rateio-header">
+                 <div>Talhão</div>
+                 <div>%</div>
+                 <div>kg</div>
+                 <div></div>
+               </div>
+               <div id="rateioTalhoes" class="rateio-body"></div>
+               <div class="rateio-foot">
+                 <div id="rateioInfo"></div>
+               </div>
+             </div>
+           </div>
           ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOpts, value: base.destino_id, span: 'col6' })}
           ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOpts, value: base.motorista_id, span: 'col6' })}
 
@@ -3567,6 +3638,12 @@ async function renderColheitaBase(variant) {
         }
       `,
       onSubmit: async (obj) => {
+        const talhoesRateio = collectRateioTalhoes()
+        const primaryTalhaoId = Number(talhoesRateio?.[0]?.talhao_id)
+        if (!Number.isInteger(primaryTalhaoId) || primaryTalhaoId <= 0) {
+          throw new Error('Informe ao menos um talhão no rateio.')
+        }
+
         const umidEl = dlgForm.querySelector('input[name="umidade_desc_pct_manual"]')
         const umidUserEdited = umidEl && umidEl.dataset.userEdited === '1'
         const umidSuggestedHundredths = Number(
@@ -3589,7 +3666,8 @@ async function renderColheitaBase(variant) {
           ficha: obj.ficha,
           safra_id: Number(obj.safra_id),
           tipo_plantio: obj.tipo_plantio || null,
-          talhao_id: Number(obj.talhao_id),
+          talhao_id: primaryTalhaoId,
+          talhoes: talhoesRateio,
           local: obj.local || null,
           destino_id: Number(obj.destino_id),
           motorista_id: Number(obj.motorista_id),
@@ -3598,8 +3676,8 @@ async function renderColheitaBase(variant) {
           hora_saida: obj.hora_saida || null,
           data_entrega: obj.data_entrega || null,
           hora_entrega: obj.hora_entrega || null,
-          carga_total_kg: parseNumberPt(obj.carga_total_kg),
-          tara_kg: parseNumberPt(obj.tara_kg),
+          carga_total_kg: asNumberOrNull(obj.carga_total_kg) ?? 0,
+          tara_kg: asNumberOrNull(obj.tara_kg) ?? 0,
           umidade_pct: parsePercent100OrZero(obj.umidade_pct, 'umidade_pct'),
           // Campo unico: se igual ao sugerido, manda null (usa tabela); se diferente, manda valor.
           umidade_desc_pct_manual: umidManualValue,
@@ -3639,13 +3717,100 @@ async function renderColheitaBase(variant) {
     const inputPlaca = dlgForm.querySelector('input[name="placa"]')
     const inputLocal = dlgForm.querySelector('input[name="local"]')
     const selMotorista = dlgForm.querySelector('select[name="motorista_id"]')
-    const selTalhao = dlgForm.querySelector('select[name="talhao_id"]')
+    const rateioWrap = dlgForm.querySelector('#rateioTalhoes')
+    const rateioInfo = dlgForm.querySelector('#rateioInfo')
+    const btnAddTalhao = dlgForm.querySelector('#btnAddTalhao')
+    const btnFillRest = dlgForm.querySelector('#btnFillRest')
     const selTalhaoSort = dlgForm.querySelector('select[name="talhao_sort"]')
     const selDestino = dlgForm.querySelector('select[name="destino_id"]')
     const selSafra = dlgForm.querySelector('select[name="safra_id"]')
     const inputUmidDesc = dlgForm.querySelector(
       'input[name="umidade_desc_pct_manual"]',
     )
+
+    function getPesoBaseKg() {
+      const carga = asNumberOrNull(dlgForm.querySelector('input[name="carga_total_kg"]')?.value)
+      const tara = asNumberOrNull(dlgForm.querySelector('input[name="tara_kg"]')?.value)
+      if (!Number.isFinite(carga) || !Number.isFinite(tara)) return null
+      const bruto = carga - tara
+      if (!Number.isFinite(bruto) || bruto <= 0) return null
+      return bruto
+    }
+
+    function collectRateioTalhoes() {
+      const rows = rateioWrap
+        ? Array.from(rateioWrap.querySelectorAll('[data-role="rateio-row"]'))
+        : []
+
+      return rows
+        .map((row) => {
+          const sel = row.querySelector('select[data-role="talhao"]')
+          const inPct = row.querySelector('input[data-role="pct"]')
+          const inKg = row.querySelector('input[data-role="kg"]')
+          const talhao_id = Number(sel?.value)
+          const pct = asNumberOrNull(inPct?.value)
+          const kg = asNumberOrNull(inKg?.value)
+          return {
+            talhao_id,
+            pct_rateio: pct === null ? null : pct,
+            kg_rateio: kg === null ? null : kg,
+          }
+        })
+        .filter((it) => Number.isInteger(it.talhao_id) && it.talhao_id > 0)
+    }
+
+    function updateRateioInfo() {
+      if (!rateioInfo) return
+      const items = collectRateioTalhoes()
+      const sumPct = items.reduce((a, it) => a + Number(it.pct_rateio || 0), 0)
+      const sumKg = items.reduce((a, it) => a + Number(it.kg_rateio || 0), 0)
+      const baseKg = getPesoBaseKg()
+
+      const okPct = Math.abs(sumPct - 100) <= 0.01
+      const okKg = baseKg ? Math.abs(sumKg - baseKg) <= 2 : true
+      const ok = okPct && okKg
+
+      const dotClass = ok ? '' : 'warn'
+      const baseTxt = baseKg ? `${fmtNum(baseKg, 0)} kg` : '-'
+      const kgTxt = sumKg > 0 ? `${fmtNum(sumKg, 0)} kg` : '-'
+      const note = baseKg
+        ? ok
+          ? ''
+          : ' Ajuste para fechar com o peso bruto.'
+        : ' Sem peso bruto: use % como estimativa.'
+
+      rateioInfo.innerHTML = `
+        <span class="pill">
+          <span class="dot ${dotClass}"></span>
+          <span>
+            Soma: <b>${fmtNum(sumPct, 2)}%</b>
+            <span class="hint" style="margin:0">|</span>
+            kg: <b>${kgTxt}</b>
+            <span class="hint" style="margin:0">|</span>
+            peso bruto: <b>${baseTxt}</b>
+            <span style="color:var(--muted)">${escapeHtml(note)}</span>
+          </span>
+        </span>
+      `.trim()
+    }
+
+    function buildTalhaoOptionsHtml(by) {
+      const opts = buildTalhaoOpts(by)
+      return opts
+        .map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`)
+        .join('')
+    }
+
+    function applyTalhaoSort() {
+      if (!selTalhaoSort || !rateioWrap) return
+      const html = buildTalhaoOptionsHtml(selTalhaoSort.value)
+      const sels = Array.from(rateioWrap.querySelectorAll('select[data-role="talhao"]'))
+      for (const sel of sels) {
+        const current = sel.value
+        sel.innerHTML = html
+        if (current) sel.value = current
+      }
+    }
 
     async function suggestNextFicha() {
       if (isEdit) return
@@ -3722,19 +3887,6 @@ async function renderColheitaBase(variant) {
       inputFicha.addEventListener('input', () => {
         inputFicha.dataset.userEdited = '1'
       })
-    }
-
-    function applyTalhaoSort() {
-      if (!selTalhaoSort || !selTalhao) return
-      const current = selTalhao.value
-      const opts = buildTalhaoOpts(selTalhaoSort.value)
-      selTalhao.innerHTML = opts
-        .map(
-          (o) =>
-            `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`,
-        )
-        .join('')
-      if (current) selTalhao.value = current
     }
 
     if (selTalhaoSort) {
@@ -3819,7 +3971,7 @@ async function renderColheitaBase(variant) {
     }
 
     function setLocalFromTalhao() {
-      const tid = Number(selTalhao.value)
+      const tid = Number(collectRateioTalhoes()?.[0]?.talhao_id)
       const t = cache.talhoes.find((x) => x.id === tid)
       if (!t) return
       inputLocal.value = t.local || ''
@@ -3973,12 +4125,16 @@ async function renderColheitaBase(variant) {
           toast('Erro', 'Preencha carga total e tara antes de comparar.')
           return
         }
+
+        const talhoesRateio = collectRateioTalhoes()
+        const primaryTalhaoId = Number(talhoesRateio?.[0]?.talhao_id)
         const body = {
           ...(isEdit && viagem?.id ? { id: Number(viagem.id) } : {}),
           ficha: obj.ficha || '1',
           safra_id: Number(obj.safra_id),
           tipo_plantio: obj.tipo_plantio || null,
-          talhao_id: Number(obj.talhao_id),
+          talhao_id: primaryTalhaoId,
+          talhoes: talhoesRateio,
           local: obj.local || null,
           destino_id: Number(obj.destino_id),
           motorista_id: Number(obj.motorista_id),
@@ -4020,11 +4176,6 @@ async function renderColheitaBase(variant) {
                 ? '-'
                 : `${delta >= 0 ? '+' : ''}${fmtMoney(delta)}`
             const badge = it.is_atual ? ' <span class="hint">(atual)</span>' : ''
-
-            const freteTotal =
-              it.sub_total_frete === null || it.sub_total_frete === undefined
-                ? null
-                : Number(it.sub_total_frete)
 
             const finalSemFrete = Number(it.valor_final_total_sem_frete)
             const finalComFrete =
@@ -4079,42 +4230,40 @@ async function renderColheitaBase(variant) {
       }
     }
     const runPreview = debounce(async () => {
+      const renderPreviewShell = (innerHtml) => {
+        if (!previewEl) return
+        if (variant !== 'rev01') {
+          previewEl.innerHTML = innerHtml
+          return
+        }
+
+        if (!('previewCollapsed' in dlg.dataset)) dlg.dataset.previewCollapsed = '0'
+        const collapsed = dlg.dataset.previewCollapsed === '1'
+        const btnLabel = collapsed ? 'Exibir cálculos' : 'Recolher cálculos'
+
+        previewEl.innerHTML = `
+          <div class="prev-head">
+            <div class="prev-title">Cálculos</div>
+            <button class="btn ghost small" type="button" id="btnPrevToggle">${escapeHtml(btnLabel)}</button>
+          </div>
+          <div class="prev-body" style="${collapsed ? 'display:none' : ''}">${innerHtml}</div>
+        `.trim()
+
+        const btn = previewEl.querySelector('#btnPrevToggle')
+        if (btn) {
+          btn.onclick = () => {
+            dlg.dataset.previewCollapsed = dlg.dataset.previewCollapsed === '1' ? '0' : '1'
+            // re-render to apply collapsed state
+            renderPreviewShell(innerHtml)
+          }
+        }
+      }
+
       try {
         const fd = new FormData(dlgForm)
         const obj = Object.fromEntries(fd.entries())
 
-        const renderPreviewShell = (innerHtml) => {
-          if (!previewEl) return
-          if (variant !== 'rev01') {
-            previewEl.innerHTML = innerHtml
-            return
-          }
-
-          if (!('previewCollapsed' in dlg.dataset)) dlg.dataset.previewCollapsed = '0'
-          const collapsed = dlg.dataset.previewCollapsed === '1'
-          const btnLabel = collapsed ? 'Exibir cálculos' : 'Recolher cálculos'
-
-          previewEl.innerHTML = `
-            <div class="prev-head">
-              <div class="prev-title">Cálculos</div>
-              <button class="btn ghost small" type="button" id="btnTogglePreview">${escapeHtml(btnLabel)}</button>
-            </div>
-            <div class="prev-body">${innerHtml}</div>
-          `.trim()
-        }
-
-        if (previewEl && variant === 'rev01' && previewEl.dataset.togglerBound !== '1') {
-          previewEl.dataset.togglerBound = '1'
-          previewEl.addEventListener('click', (e) => {
-            const btn = e.target?.closest?.('#btnTogglePreview')
-            if (!btn) return
-            e.preventDefault()
-            const collapsed = dlg.dataset.previewCollapsed === '1'
-            dlg.dataset.previewCollapsed = collapsed ? '0' : '1'
-            // Apenas alterna a visibilidade via CSS; o conteudo segue sendo atualizado pelo preview
-            btn.textContent = collapsed ? 'Recolher cálculos' : 'Exibir cálculos'
-          })
-        }
+        // (renderPreviewShell definido acima para ser usado também no catch)
 
         if (!obj.carga_total_kg || !obj.tara_kg) {
           renderPreviewShell(
@@ -4127,7 +4276,8 @@ async function renderColheitaBase(variant) {
           ficha: obj.ficha || '1',
           safra_id: Number(obj.safra_id),
           tipo_plantio: obj.tipo_plantio || null,
-          talhao_id: Number(obj.talhao_id),
+          talhao_id: Number(collectRateioTalhoes()?.[0]?.talhao_id),
+          talhoes: collectRateioTalhoes(),
           local: obj.local || null,
           destino_id: Number(obj.destino_id),
           motorista_id: Number(obj.motorista_id),
@@ -4253,6 +4403,162 @@ async function renderColheitaBase(variant) {
       }
     }, 250)
 
+    function syncRowFromPct(row) {
+      const baseKg = getPesoBaseKg()
+      if (!baseKg) return
+      const inPct = row.querySelector('input[data-role="pct"]')
+      const inKg = row.querySelector('input[data-role="kg"]')
+      const pct = asNumberOrNull(inPct?.value)
+      if (pct === null) return
+      const kg = (baseKg * pct) / 100
+      if (inKg) inKg.value = String(Math.round(kg))
+    }
+
+    function syncRowFromKg(row) {
+      const baseKg = getPesoBaseKg()
+      if (!baseKg) return
+      const inPct = row.querySelector('input[data-role="pct"]')
+      const inKg = row.querySelector('input[data-role="kg"]')
+      const kg = asNumberOrNull(inKg?.value)
+      if (kg === null) return
+      const pct = (kg / baseKg) * 100
+      if (inPct) inPct.value = pct.toFixed(2)
+    }
+
+    function addRateioRow({ talhao_id, pct_rateio, kg_rateio } = {}) {
+      if (!rateioWrap) return
+
+      const row = document.createElement('div')
+      row.dataset.role = 'rateio-row'
+      row.className = 'rateio-grid rateio-item'
+
+      row.innerHTML = `
+        <div class="rateio-cell" data-cell="talhao">
+          <select data-role="talhao" aria-label="Talhão"></select>
+        </div>
+        <div class="rateio-cell" data-cell="pct">
+          <input data-role="pct" aria-label="Percentual" type="text" inputmode="decimal" pattern="[0-9.,]*" placeholder="100,00" />
+        </div>
+        <div class="rateio-cell" data-cell="kg">
+          <input data-role="kg" aria-label="Quilos" type="text" inputmode="numeric" pattern="[0-9.,]*" placeholder="0" />
+        </div>
+        <div class="rateio-cell" data-cell="rm">
+          <button class="btn ghost small" type="button" data-role="rm" aria-label="Remover talhão">Remover</button>
+        </div>
+      `.trim()
+
+      const sel = row.querySelector('select[data-role="talhao"]')
+      if (sel) {
+        sel.innerHTML = buildTalhaoOptionsHtml(selTalhaoSort?.value || 'nome')
+        if (talhao_id) sel.value = String(talhao_id)
+      }
+
+      const inPct = row.querySelector('input[data-role="pct"]')
+      const inKg = row.querySelector('input[data-role="kg"]')
+
+      if (inPct && pct_rateio !== null && pct_rateio !== undefined) {
+        const n = Number(pct_rateio)
+        if (Number.isFinite(n)) inPct.value = n.toFixed(2)
+      }
+      if (inKg && kg_rateio !== null && kg_rateio !== undefined) {
+        const n = Number(kg_rateio)
+        if (Number.isFinite(n)) inKg.value = String(Math.round(n))
+      }
+
+      if (inPct) {
+        inPct.addEventListener('input', () => {
+          syncRowFromPct(row)
+          updateRateioInfo()
+        })
+      }
+      if (inKg) {
+        inKg.addEventListener('input', () => {
+          syncRowFromKg(row)
+          updateRateioInfo()
+        })
+      }
+
+      const btnRm = row.querySelector('button[data-role="rm"]')
+      if (btnRm) {
+        btnRm.onclick = () => {
+          row.remove()
+          // manter ao menos 1 linha
+          if (rateioWrap.querySelectorAll('[data-role="rateio-row"]').length === 0) {
+            addRateioRow({ talhao_id: base.talhao_id, pct_rateio: 100 })
+          }
+          updateRateioInfo()
+          setLocalFromTalhao()
+          runPreview()
+        }
+      }
+
+      rateioWrap.appendChild(row)
+      updateRateioInfo()
+    }
+
+    function fillRestRateio() {
+      if (!rateioWrap) return
+      const rows = Array.from(rateioWrap.querySelectorAll('[data-role="rateio-row"]'))
+      if (!rows.length) return
+      const last = rows[rows.length - 1]
+      const baseKg = getPesoBaseKg()
+
+      if (baseKg) {
+        let usedKg = 0
+        for (let i = 0; i < rows.length - 1; i++) {
+          const inKg = rows[i].querySelector('input[data-role="kg"]')
+          usedKg += Number(asNumberOrNull(inKg?.value) || 0)
+        }
+        const restKg = Math.max(0, baseKg - usedKg)
+        const inKgLast = last.querySelector('input[data-role="kg"]')
+        if (inKgLast) inKgLast.value = String(Math.round(restKg))
+        syncRowFromKg(last)
+      } else {
+        let usedPct = 0
+        for (let i = 0; i < rows.length - 1; i++) {
+          const inPct = rows[i].querySelector('input[data-role="pct"]')
+          usedPct += Number(asNumberOrNull(inPct?.value) || 0)
+        }
+        const restPct = Math.max(0, 100 - usedPct)
+        const inPctLast = last.querySelector('input[data-role="pct"]')
+        if (inPctLast) inPctLast.value = restPct.toFixed(2)
+      }
+      updateRateioInfo()
+      setLocalFromTalhao()
+      runPreview()
+    }
+
+    // inicializar rateio (edit: usa itens do backend; create: 100% no talhao selecionado)
+    if (rateioWrap) {
+      rateioWrap.innerHTML = ''
+      const initial = Array.isArray(viagem?.talhoes) && viagem.talhoes.length
+        ? viagem.talhoes.map((it) => ({
+            talhao_id: it.talhao_id,
+            pct_rateio:
+              it.pct_rateio === null || it.pct_rateio === undefined
+                ? null
+                : Number(it.pct_rateio) * 100,
+            kg_rateio: it.kg_rateio,
+          }))
+        : [{ talhao_id: base.talhao_id, pct_rateio: 100, kg_rateio: null }]
+
+      for (const it of initial) addRateioRow(it)
+      applyTalhaoSort()
+      updateRateioInfo()
+
+      if (btnAddTalhao) {
+        btnAddTalhao.onclick = () => {
+          const used = new Set(collectRateioTalhoes().map((x) => x.talhao_id))
+          const next = cache.talhoes.find((t) => !used.has(t.id))?.id || base.talhao_id
+          addRateioRow({ talhao_id: next, pct_rateio: 0, kg_rateio: null })
+          runPreview()
+        }
+      }
+      if (btnFillRest) {
+        btnFillRest.onclick = fillRestRateio
+      }
+    }
+
     // comportamento amigavel: preencher local/placa e puxar limites do destino
     inputLocal.readOnly = true
     setLocalFromTalhao()
@@ -4280,9 +4586,20 @@ async function renderColheitaBase(variant) {
       })
     }
 
-    selTalhao.onchange = () => {
-      setLocalFromTalhao()
-      runPreview()
+    if (rateioWrap) {
+      rateioWrap.addEventListener('change', (e) => {
+        const target = e.target
+        if (!(target instanceof HTMLElement)) return
+        if (target.matches('select[data-role="talhao"]')) {
+          // apenas o primeiro talhao define o local automaticamente
+          const firstSel = rateioWrap.querySelector('select[data-role="talhao"]')
+          if (firstSel && target === firstSel) {
+            setLocalFromTalhao()
+          }
+          updateRateioInfo()
+          runPreview()
+        }
+      })
     }
     selMotorista.onchange = () => {
       setPlacaFromMotorista()
@@ -5376,7 +5693,7 @@ async function renderFazenda() {
           <div class="span12" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
             <img src="/logo.png" alt="${escapeHtml(f.nome)}" style="width:140px;height:140px;object-fit:contain;background:rgba(255,255,255,.75);border:1px solid rgba(15,26,22,.14);border-radius:18px;padding:14px" />
             <div>
-              <div style="font-family:var(--serif);font-size:22px">NazcaTrack</div>
+              <div style="font-family:var(--serif);font-size:22px">NazcaTraker</div>
               <div style="margin-top:6px;color:var(--muted)">Base interna: colheita (safras, talhões, destinos, viagens, descontos e fretes).</div>
               <div style="margin-top:10px" class="pill"><span class="dot warn"></span><span>Fontes publicas: Google Maps / Instagram / Facebook.</span></div>
             </div>
@@ -5552,7 +5869,7 @@ if (btnToggleNav) {
   try {
     initial = localStorage.getItem('nav_collapsed') === '1'
   } catch {
-    initial = false
+    // ignore
   }
   setNavCollapsed(initial)
 }

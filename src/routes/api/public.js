@@ -1,18 +1,17 @@
 import { Router } from 'express'
-import { z } from 'zod'
 
 import { notFound } from '../../errors.js'
-import { validateQuery } from '../../middleware/validate.js'
+import { validateQuery, validateParams } from '../../middleware/validate.js'
 import { talhaoRepo } from '../../repositories/talhaoRepo.js'
 import { viagemRepo } from '../../repositories/viagemRepo.js'
 import { talhaoSafraRepo } from '../../repositories/talhaoSafraRepo.js'
 import { db } from '../../db/db.js'
+import { S, PublicSchemas } from '../../validation/apiSchemas.js'
 
 export const publicRouter = Router()
 
-publicRouter.get('/talhoes/:id', (req, res) => {
-  const id = Number(req.params.id)
-  const t = talhaoRepo.get(id)
+publicRouter.get('/talhoes/:id', validateParams(S.IdParam), (req, res) => {
+  const t = talhaoRepo.get(req.params.id)
   if (!t) throw notFound('Talhao nao encontrado')
 
   res.json({
@@ -29,17 +28,14 @@ publicRouter.get('/talhoes/:id', (req, res) => {
   })
 })
 
-const ResumoQuery = z.object({
-  safra_id: z.coerce.number().int().positive().optional(),
-  de: z.string().min(1).optional(),
-  ate: z.string().min(1).optional(),
-})
+const ResumoQuery = PublicSchemas.ResumoQuery
 
 publicRouter.get(
   '/talhoes/:id/resumo',
+  validateParams(S.IdParam),
   validateQuery(ResumoQuery),
   (req, res) => {
-    const talhao_id = Number(req.params.id)
+    const talhao_id = req.params.id
     const t = talhaoRepo.get(talhao_id)
     if (!t) throw notFound('Talhao nao encontrado')
 
@@ -50,8 +46,9 @@ publicRouter.get(
         .prepare(
           `SELECT s.id, s.safra
            FROM viagem v
+           JOIN viagem_talhao vt ON vt.viagem_id = v.id
            JOIN safra s ON s.id = v.safra_id
-           WHERE v.talhao_id = @talhao_id
+           WHERE vt.talhao_id = @talhao_id
            GROUP BY s.id
            ORDER BY (s.data_referencia IS NULL) ASC, s.data_referencia DESC, s.id DESC
            LIMIT 1`,
