@@ -1,13 +1,12 @@
-# Tasks (Oficial)
+# TASKS_OFICIAL.md
+
+## Prioridade Alta
+- [ ]
+
+## Prioridade Média
+- [ ]
 
 ## Backlog
 - [ ]
 
-## In Progress
-- [ ]
-
-## Done
-- [ ]
-
-## Notes
-- Define task owners, priority, and acceptance criteria.
+Somente tarefas listadas aqui são consideradas pendentes.
