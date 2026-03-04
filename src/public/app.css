@@ -138,6 +138,7 @@ body.nav-collapsed .nav{display:none}
 
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
 .span4{grid-column:span 4}
+.span2{grid-column:span 2}
 .span6{grid-column:span 6}
 .span8{grid-column:span 8}
 .span12{grid-column:span 12}
@@ -411,6 +412,61 @@ code.mono{font-family:var(--mono);font-size:12px}
 .dlg[data-variant="rev01"][data-preview-collapsed="1"] #preview .prev-body{display:none}
 
 .form-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+
+/* Colheita: cards (dialog form) */
+.colheita-form{display:flex;flex-direction:column;gap:26px}
+.form-card{
+  border:1px solid rgba(15,26,22,.12);
+  border-radius:18px;
+  background:rgba(255,255,255,.82);
+  box-shadow:0 12px 26px rgba(0,0,0,.06);
+  overflow:hidden;
+}
+.form-card .form-grid{padding:16px}
+.card-head{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+  padding:14px 16px 12px;
+  border-bottom:1px solid rgba(15,26,22,.10);
+  background:linear-gradient(180deg, rgba(255,255,255,.90), rgba(255,255,255,.72));
+}
+.card-title{font-family:var(--serif);font-size:15px;color:rgba(14,21,18,.92);letter-spacing:.01em}
+.card-actions{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;justify-content:flex-end}
+.card-head .hint{margin-top:4px}
+.form-card .card-body{padding:16px}
+
+.pill-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+
+/* numeric field density in colheita cards */
+.colheita-form input[name$="_pct"],
+.colheita-form input[name$="_pct_manual"],
+.colheita-form input[name$="_limite_pct"]{max-width:160px}
+.colheita-form input[name$="_kg"],
+.colheita-form input[name$="_kg_rateio"],
+.colheita-form input[name="carga_total_kg"],
+.colheita-form input[name="tara_kg"]{max-width:240px}
+
+.colheita-form select[name="motorista_id"]{min-width:260px}
+.colheita-form input[name="placa"]{max-width:140px}
+
+/* rateio card inside colheita */
+.form-card .rateio-header{padding:0 16px}
+.form-card .rateio-body{padding:10px 16px 0}
+.form-card .rateio-foot{padding:8px 16px 14px}
+
+.form-card .rateio-grid{display:grid;grid-template-columns:1fr 120px 180px 90px;gap:10px;align-items:center}
+.rateio-header{color:rgba(14,21,18,.70);font-size:13px;font-weight:600;letter-spacing:.01em;border-bottom:1px solid rgba(15,26,22,.10)}
+.card-actions .mini{min-width:140px}
+.card-actions .mini select{min-width:140px}
+.rateio-cell input,.rateio-cell select{width:100%}
+
+@media (max-width: 980px){
+  .rateio-grid{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
+  .rateio-header{display:none}
+  .rateio-item{padding:12px}
+}
 .col6{grid-column:span 6}
 .col4{grid-column:span 4}
 .col3{grid-column:span 3}

@@ -3576,12 +3576,18 @@ async function renderColheitaBase(variant) {
     const rowsCount = Array.isArray(data.items) ? data.items.length : 0
     const uniqueCount = new Set((data.items || []).map((it) => Number(it.id))).size
     const countHint = uniqueCount !== rowsCount ? `Linhas (rateio): ${rowsCount}` : `Linhas: ${rowsCount}`
+    const pb = Number(t.peso_bruto_kg || 0)
+    const pbUmid = Number(t.peso_bruto_x_umidade || 0)
+    const umidMedia = pb > 0 ? pbUmid / pb : null
+    const umidMediaTxt = umidMedia === null || !Number.isFinite(umidMedia) ? '-' : `${fmtNum(umidMedia * 100, 2)}%`
+
     totalsEl.innerHTML = `
-      <div class="stat span4"><div class="stat-k">Peso bruto</div><div class="stat-v">${fmtKg(t.peso_bruto_kg)}</div><div class="stat-h">Base da pesagem</div></div>
-      <div class="stat span4"><div class="stat-k">Peso limpo e seco</div><div class="stat-v">${fmtKg(t.peso_limpo_seco_kg)}</div><div class="stat-h">Liquido apos descontos</div></div>
-      <div class="stat span4"><div class="stat-k">Sacas (filtrado)</div><div class="stat-v">${fmtNum(t.sacas, 2)}</div><div class="stat-h">Peso limpo e seco / 60</div></div>
-      <div class="stat span4"><div class="stat-k">Frete (filtrado)</div><div class="stat-v">${fmtMoney(t.sub_total_frete)}</div><div class="stat-h">Peso bruto (sacas) x tabela</div></div>
-      <div class="stat span4"><div class="stat-k">Registros</div><div class="stat-v">${uniqueCount}</div><div class="stat-h">${escapeHtml(countHint)}</div></div>
+      <div class="stat span2"><div class="stat-k">Registros</div><div class="stat-v">${uniqueCount}</div><div class="stat-h">${escapeHtml(countHint)}</div></div>
+      <div class="stat span2"><div class="stat-k">Umidade média</div><div class="stat-v">${escapeHtml(umidMediaTxt)}</div><div class="stat-h">Ponderada por peso bruto</div></div>
+      <div class="stat span2"><div class="stat-k">Frete</div><div class="stat-v">${fmtMoney(t.sub_total_frete)}</div><div class="stat-h">Somatoria filtrada</div></div>
+      <div class="stat span2"><div class="stat-k">Peso bruto</div><div class="stat-v">${fmtKg(t.peso_bruto_kg)}</div><div class="stat-h">Somatoria filtrada</div></div>
+      <div class="stat span2"><div class="stat-k">Peso limpo</div><div class="stat-v">${fmtKg(t.peso_limpo_seco_kg)}</div><div class="stat-h">Somatoria filtrada</div></div>
+      <div class="stat span2"><div class="stat-k">Sacas</div><div class="stat-v">${fmtNum(t.sacas, 2)}</div><div class="stat-h">Somatoria filtrada</div></div>
     `
 
     const expanded = new Set()
@@ -3929,112 +3935,123 @@ async function renderColheitaBase(variant) {
             ? `<div id="preview"><div class="hint">Preencha os campos para ver o calculo (preview).</div></div>`
             : ''
         }
-        <div class="form-grid" id="vForm">
-          ${sectionTitle('Identificacao')}
-          ${formField({ label: 'Ficha', name: 'ficha', value: base.ficha, placeholder: '001', span: 'col2' })}
-          ${selectField({ label: 'Safra', name: 'safra_id', options: safraOpts, value: base.safra_id, span: 'col3' })}
-          ${selectField({ label: 'Plantio', name: 'tipo_plantio', options: plantioOpts, value: plantioValue, span: 'col2' })}
-          ${formField({ label: 'Local', name: 'local', value: base.local ?? '', placeholder: '', span: 'col2' })}
-          ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOpts, value: base.destino_id, span: 'col3' })}
+        <div id="vForm" class="colheita-form">
+          <div class="form-card">
+            <div class="card-head"><div class="card-title">Identificacao da carga</div></div>
+            <div class="form-grid">
+              ${formField({ label: 'Ficha', name: 'ficha', value: base.ficha, placeholder: '001', span: 'col2' })}
+              ${selectField({ label: 'Safra', name: 'safra_id', options: safraOpts, value: base.safra_id, span: 'col3' })}
+              ${selectField({ label: 'Plantio', name: 'tipo_plantio', options: plantioOpts, value: plantioValue, span: 'col2' })}
+              ${formField({ label: 'Local', name: 'local', value: base.local ?? '', placeholder: '', span: 'col2' })}
+              ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOpts, value: base.destino_id, span: 'col3' })}
+            </div>
+          </div>
 
-          ${sectionTitle('Rateio de talhoes')}
-          <div class="field col12">
-            <div class="rateio-card">
-              <div class="rateio-head">
-                <div>
-                  <div class="rateio-title">Rateio de talhoes</div>
-                  <div class="rateio-sub">Use % antes do peso bruto; quando houver peso bruto, o sistema calcula/ajusta kg e valida o fechamento.</div>
+          <div class="form-card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Rateio por talhao</div>
+                <div class="hint">Talhao | % | kg. Use % antes do peso bruto; com peso bruto, o sistema ajusta kg.</div>
+              </div>
+              <div class="card-actions">
+                <div class="mini">
+                  <div class="label">Ordenar</div>
+                  <select name="talhao_sort">
+                    <option value="nome" selected>Nome</option>
+                    <option value="local">Local</option>
+                  </select>
                 </div>
-                <div class="rateio-actions">
-                  <div class="mini">
-                    <div class="label">Ordenar</div>
-                    <select name="talhao_sort">
-                      <option value="nome" selected>Por nome</option>
-                      <option value="local">Por local</option>
-                    </select>
-                  </div>
-                  <button class="btn ghost small" type="button" id="btnAddTalhao">Adicionar</button>
-                  <button class="btn ghost small" type="button" id="btnFillRest">Restante</button>
-                </div>
+                <button class="btn ghost small" type="button" id="btnAddTalhao">Adicionar talhao</button>
+                <button class="btn ghost small" type="button" id="btnFillRest">Restante</button>
               </div>
-              <div class="rateio-grid rateio-header">
-                <div>Talhão</div>
-                <div>%</div>
-                <div>kg</div>
-                <div></div>
+            </div>
+            <div class="rateio-grid rateio-header">
+              <div>Talhao</div>
+              <div style="text-align:right">%</div>
+              <div style="text-align:right">kg</div>
+              <div></div>
+            </div>
+            <div id="rateioTalhoes" class="rateio-body"></div>
+            <div class="rateio-foot"><div id="rateioInfo"></div></div>
+          </div>
+
+          <div class="form-card">
+            <div class="card-head"><div class="card-title">Transporte</div></div>
+            <div class="form-grid">
+              ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOpts, value: base.motorista_id, span: 'col6' })}
+              ${formField({ label: 'Placa', name: 'placa', value: base.placa ?? '', placeholder: 'AAA0A00', span: 'col2' })}
+              <div class="field col4"></div>
+
+              ${formField({ label: 'Data saida', name: 'data_saida', type: 'date', value: base.data_saida ?? '', span: 'col3' })}
+              ${formField({ label: 'Hora saida', name: 'hora_saida', type: 'time', value: base.hora_saida ?? '', span: 'col3' })}
+              ${formField({ label: 'Data entrega', name: 'data_entrega', type: 'date', value: base.data_entrega ?? '', span: 'col3' })}
+              ${formField({ label: 'Hora entrega', name: 'hora_entrega', type: 'time', value: base.hora_entrega ?? '', span: 'col3' })}
+            </div>
+          </div>
+
+          <div class="form-card">
+            <div class="card-head"><div class="card-title">Pesagem</div></div>
+            <div class="form-grid">
+              ${formField({ label: 'Carga total (kg)', name: 'carga_total_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.carga_total_kg, span: 'col4' })}
+              ${formField({ label: 'Tara (kg)', name: 'tara_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.tara_kg, span: 'col4' })}
+              ${formField({ label: `Peso bruto (kg) ${helpTip('Calculado: carga total - tara.')}`, name: 'calc_peso_bruto_kg', type: 'text', value: base.calc_peso_bruto_kg ?? '-', span: 'col4', readonly: true })}
+            </div>
+          </div>
+
+          <div class="form-card">
+            <div class="card-head">
+              <div class="card-title">Qualidade da amostra</div>
+              <div class="card-actions">
+                <button class="btn ghost small" type="button" id="btnCompareDest">Comparar destinos</button>
               </div>
-              <div id="rateioTalhoes" class="rateio-body"></div>
-              <div class="rateio-foot">
-                <div id="rateioInfo"></div>
+            </div>
+            <div class="form-grid">
+              ${formField({ label: 'Impureza %', name: 'impureza_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.impureza_pct, span: 'col2' })}
+              ${formField({ label: 'Ardidos %', name: 'ardidos_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.ardidos_pct, span: 'col2' })}
+              ${formField({ label: 'Queimados %', name: 'queimados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.queimados_pct, span: 'col2' })}
+              ${formField({ label: 'Avariados %', name: 'avariados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.avariados_pct, span: 'col2' })}
+              ${formField({ label: 'Esverdiados %', name: 'esverdiados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.esverdiados_pct, span: 'col2' })}
+              ${formField({ label: 'Quebrados %', name: 'quebrados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.quebrados_pct, span: 'col2' })}
+
+              ${formField({ label: 'Impureza (kg)', name: 'calc_impureza_kg', type: 'text', value: base.calc_impureza_kg, span: 'col2', readonly: true })}
+              ${formField({ label: 'Ardidos (kg)', name: 'calc_ardidos_kg', type: 'text', value: base.calc_ardidos_kg, span: 'col2', readonly: true })}
+              ${formField({ label: 'Queimados (kg)', name: 'calc_queimados_kg', type: 'text', value: base.calc_queimados_kg, span: 'col2', readonly: true })}
+              ${formField({ label: 'Avariados (kg)', name: 'calc_avariados_kg', type: 'text', value: base.calc_avariados_kg, span: 'col2', readonly: true })}
+              ${formField({ label: 'Esverdiados (kg)', name: 'calc_esverdiados_kg', type: 'text', value: base.calc_esverdiados_kg, span: 'col2', readonly: true })}
+              ${formField({ label: 'Quebrados (kg)', name: 'calc_quebrados_kg', type: 'text', value: base.calc_quebrados_kg, span: 'col2', readonly: true })}
+            </div>
+            <div class="card-body" style="padding-top:0">
+              <div class="label">Regras do destino / contrato</div>
+              <div class="pill-row" style="margin-top:8px">
+                <span class="pill"><span class="dot" id="travaDot"></span><span id="travaStatus">Carregando...</span></span>
+                <span class="pill"><span class="dot"></span><span>Entregue: <b id="travaEntregue">-</b> sc</span></span>
+                <span class="pill"><span class="dot"></span><span>Contrato: <b id="travaLimite">-</b> sc</span></span>
+                <span class="pill"><span class="dot"></span><span>Restante: <b id="travaRestante">-</b> sc</span></span>
+                <span class="pill"><span class="dot"></span><span>Na carga: <b id="travaDentro">-</b> sc dentro | <b id="travaFora">-</b> sc fora</span></span>
+                <span class="pill"><span class="dot" id="regraDot"></span><span id="regraInfo">Carregando regras...</span></span>
+              </div>
+              <div class="hint">Regras e limites sao carregados por destino + safra. Se voce alterar algum limite, o campo fica amarelo.</div>
+              <div class="form-grid" style="margin-top:12px">
+                ${formField({ label: 'Impureza limite %', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.impureza_limite_pct ?? '0.00', span: 'col2' })}
+                ${formField({ label: 'Ardidos limite %', name: 'ardidos_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.ardidos_limite_pct ?? '0.00', span: 'col2' })}
+                ${formField({ label: 'Queimados limite %', name: 'queimados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.queimados_limite_pct ?? '0.00', span: 'col2' })}
+                ${formField({ label: 'Avariados limite %', name: 'avariados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.avariados_limite_pct ?? '0.00', span: 'col2' })}
+                ${formField({ label: 'Esverdiados limite %', name: 'esverdiados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.esverdiados_limite_pct ?? '0.00', span: 'col2' })}
+                ${formField({ label: 'Quebrados limite %', name: 'quebrados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.quebrados_limite_pct ?? '0.00', span: 'col2' })}
               </div>
             </div>
           </div>
 
-          ${sectionTitle('Motorista')}
-          ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOpts, value: base.motorista_id, span: 'col6' })}
-
-          ${sectionTitle('Contrato e regras do destino')}
-          <div class="field col12">
-            <div class="label">Contrato do destino</div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
-              <span class="pill"><span class="dot" id="travaDot"></span><span id="travaStatus">Carregando...</span></span>
-              <span class="pill"><span class="dot"></span><span>Entregue: <b id="travaEntregue">-</b> sc</span></span>
-              <span class="pill"><span class="dot"></span><span>Contrato: <b id="travaLimite">-</b> sc</span></span>
-              <span class="pill"><span class="dot"></span><span>Restante: <b id="travaRestante">-</b> sc</span></span>
-              <span class="pill"><span class="dot"></span><span>Na carga: <b id="travaDentro">-</b> sc dentro | <b id="travaFora">-</b> sc fora</span></span>
-              <span class="pill"><span class="dot" id="regraDot"></span><span id="regraInfo">Carregando regras...</span></span>
+          <div class="form-card">
+            <div class="card-head"><div class="card-title">Umidade e resultado</div></div>
+            <div class="form-grid">
+              ${formField({ label: 'Umidade %', name: 'umidade_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_pct, span: 'col4' })}
+              ${formField({ label: 'Desconto umidade %', name: 'umidade_desc_pct_manual', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_desc_pct_manual ?? '', span: 'col4' })}
+              ${formField({ label: 'Umidade (kg)', name: 'calc_umidade_kg', type: 'text', value: base.calc_umidade_kg ?? '-', span: 'col4', readonly: true })}
+              ${formField({ label: 'Peso limpo/seco (kg)', name: 'calc_peso_limpo_seco_kg', type: 'text', value: base.calc_peso_limpo_seco_kg ?? '-', span: 'col6', readonly: true })}
+              ${formField({ label: 'Sacas (sc)', name: 'calc_sacas', type: 'text', value: base.calc_sacas ?? '-', span: 'col6', readonly: true })}
             </div>
-            <div class="hint">Regras e limites sao carregados por destino + safra. Se voce alterar algum limite, o campo fica amarelo.</div>
           </div>
-
-          ${formField({ label: 'Impureza limite %', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.impureza_limite_pct ?? '0.00', span: 'col2' })}
-          ${formField({ label: 'Ardidos limite %', name: 'ardidos_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.ardidos_limite_pct ?? '0.00', span: 'col2' })}
-          ${formField({ label: 'Queimados limite %', name: 'queimados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.queimados_limite_pct ?? '0.00', span: 'col2' })}
-          ${formField({ label: 'Avariados limite %', name: 'avariados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.avariados_limite_pct ?? '0.00', span: 'col2' })}
-          ${formField({ label: 'Esverdiados limite %', name: 'esverdiados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.esverdiados_limite_pct ?? '0.00', span: 'col2' })}
-          ${formField({ label: 'Quebrados limite %', name: 'quebrados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.quebrados_limite_pct ?? '0.00', span: 'col2' })}
-
-          ${sectionTitle('Transporte')}
-          ${formField({ label: 'Placa', name: 'placa', value: base.placa ?? '', placeholder: 'AAA0A00', span: 'col3' })}
-          ${formField({ label: 'Data saida', name: 'data_saida', type: 'date', value: base.data_saida ?? '', span: 'col3' })}
-          ${formField({ label: 'Hora saida', name: 'hora_saida', type: 'time', value: base.hora_saida ?? '', span: 'col2' })}
-          ${formField({ label: 'Data entrega', name: 'data_entrega', type: 'date', value: base.data_entrega ?? '', span: 'col2' })}
-          ${formField({ label: 'Hora entrega', name: 'hora_entrega', type: 'time', value: base.hora_entrega ?? '', span: 'col2' })}
-
-          ${sectionTitle('Pesagem')}
-          ${formField({ label: 'Carga total (kg)', name: 'carga_total_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.carga_total_kg, span: 'col4' })}
-          ${formField({ label: 'Tara (kg)', name: 'tara_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.tara_kg, span: 'col4' })}
-          ${formField({ label: `Peso bruto (kg) ${helpTip('Calculado: carga total - tara.')}`, name: 'calc_peso_bruto_kg', type: 'text', value: base.calc_peso_bruto_kg ?? '', span: 'col4', readonly: true })}
-
-          ${sectionTitle('Umidade')}
-          ${formField({ label: `Umidade % ${helpTip('Valor informado pela amostra do silo (laboratorio).')}`, name: 'umidade_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_pct, span: 'col4' })}
-          ${formField({ label: `Desconto umidade % ${helpTip('Sugerido automaticamente pela tabela do destino (por safra) a partir da umidade informada. Voce pode ajustar; se ficar diferente da tabela, o campo fica amarelo.')}`, name: 'umidade_desc_pct_manual', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_desc_pct_manual ?? '', span: 'col4' })}
-          ${formField({ label: `Umidade (kg) ${helpTip('Calculado a partir do peso bruto e desconto de umidade aplicado.')}`, name: 'calc_umidade_kg', type: 'text', value: base.calc_umidade_kg ?? '', span: 'col4', readonly: true })}
-
-          ${sectionTitle('Qualidade (amostra do silo)')}
-          <div class="field col12" style="margin-top:-6px">
-            <div style="display:flex;justify-content:flex-end">
-              <button class="btn ghost small" type="button" id="btnCompareDest">Comparar destinos</button>
-            </div>
-            <div class="hint" style="margin-top:6px">Simula quantas sacas (limpa/seca) dariam em outros destinos com regras cadastradas para esta safra e plantio. Nao salva nada.</div>
-          </div>
-          ${formField({ label: 'Impureza %', name: 'impureza_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.impureza_pct, span: 'col2' })}
-          ${formField({ label: 'Ardidos %', name: 'ardidos_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.ardidos_pct, span: 'col2' })}
-          ${formField({ label: 'Queimados %', name: 'queimados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.queimados_pct, span: 'col2' })}
-          ${formField({ label: 'Avariados %', name: 'avariados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.avariados_pct, span: 'col2' })}
-          ${formField({ label: 'Esverdiados %', name: 'esverdiados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.esverdiados_pct, span: 'col2' })}
-          ${formField({ label: 'Quebrados %', name: 'quebrados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.quebrados_pct, span: 'col2' })}
-
-          ${formField({ label: 'Impureza (kg)', name: 'calc_impureza_kg', type: 'text', value: base.calc_impureza_kg, span: 'col2', readonly: true })}
-          ${formField({ label: 'Ardidos (kg)', name: 'calc_ardidos_kg', type: 'text', value: base.calc_ardidos_kg, span: 'col2', readonly: true })}
-          ${formField({ label: 'Queimados (kg)', name: 'calc_queimados_kg', type: 'text', value: base.calc_queimados_kg, span: 'col2', readonly: true })}
-          ${formField({ label: 'Avariados (kg)', name: 'calc_avariados_kg', type: 'text', value: base.calc_avariados_kg, span: 'col2', readonly: true })}
-          ${formField({ label: 'Esverdiados (kg)', name: 'calc_esverdiados_kg', type: 'text', value: base.calc_esverdiados_kg, span: 'col2', readonly: true })}
-          ${formField({ label: 'Quebrados (kg)', name: 'calc_quebrados_kg', type: 'text', value: base.calc_quebrados_kg, span: 'col2', readonly: true })}
-
-          ${sectionTitle('Resultado')}
-          ${formField({ label: `Peso limpo/seco (kg) ${helpTip('Peso liquido apos descontos (umidade + qualidade).')}`, name: 'calc_peso_limpo_seco_kg', type: 'text', value: base.calc_peso_limpo_seco_kg ?? '', span: 'col6', readonly: true })}
-          ${formField({ label: `Sacas (sc) ${helpTip('Calculado: peso limpo/seco / 60.')}`, name: 'calc_sacas', type: 'text', value: base.calc_sacas ?? '', span: 'col6', readonly: true })}
         </div>
         ${
           variant !== 'rev01'

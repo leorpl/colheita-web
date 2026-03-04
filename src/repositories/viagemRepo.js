@@ -139,13 +139,14 @@ export const viagemRepo = {
                  ELSE 0
                END
              )), 0) as tara_kg,
-             COALESCE(SUM(COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0)), 0) as peso_bruto_kg,
-             COALESCE(SUM(v.umidade_kg * (
-               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
-                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
-                 ELSE 0
-               END
-             )), 0) as umidade_kg,
+              COALESCE(SUM(COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0)), 0) as peso_bruto_kg,
+              COALESCE(SUM(COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) * COALESCE(v.umidade_pct, 0)), 0) as peso_bruto_x_umidade,
+              COALESCE(SUM(v.umidade_kg * (
+                CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                  THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                  ELSE 0
+                END
+              )), 0) as umidade_kg,
              COALESCE(SUM(v.impureza_kg * (
                CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
                  THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
@@ -194,21 +195,21 @@ export const viagemRepo = {
                  ELSE 0
                END
              )), 0) as sub_total_frete,
-             COALESCE(SUM(v.sacas * (
-               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
-                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
-                 ELSE 0
-               END
-             )), 0) as sacas
-           FROM viagem v
-           JOIN viagem_talhao vt ON vt.viagem_id = v.id AND vt.talhao_id = @talhao_id
-           WHERE (@safra_id IS NULL OR v.safra_id = @safra_id)
-             AND (@destino_id IS NULL OR v.destino_id = @destino_id)
-             AND (@motorista_id IS NULL OR v.motorista_id = @motorista_id)
-             AND (@de IS NULL OR v.data_saida >= @de)
-             AND (@ate IS NULL OR v.data_saida <= @ate)`,
-         )
-        .get(params)
+              COALESCE(SUM(v.sacas * (
+                CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                  THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                  ELSE 0
+                END
+              )), 0) as sacas
+            FROM viagem v
+            JOIN viagem_talhao vt ON vt.viagem_id = v.id AND vt.talhao_id = @talhao_id
+            WHERE (@safra_id IS NULL OR v.safra_id = @safra_id)
+              AND (@destino_id IS NULL OR v.destino_id = @destino_id)
+              AND (@motorista_id IS NULL OR v.motorista_id = @motorista_id)
+              AND (@de IS NULL OR v.data_saida >= @de)
+              AND (@ate IS NULL OR v.data_saida <= @ate)`,
+          )
+         .get(params)
     }
 
     return db
@@ -217,6 +218,7 @@ export const viagemRepo = {
            COALESCE(SUM(carga_total_kg), 0) as carga_total_kg,
            COALESCE(SUM(tara_kg), 0) as tara_kg,
            COALESCE(SUM(peso_bruto_kg), 0) as peso_bruto_kg,
+           COALESCE(SUM(peso_bruto_kg * COALESCE(umidade_pct, 0)), 0) as peso_bruto_x_umidade,
            COALESCE(SUM(umidade_kg), 0) as umidade_kg,
            COALESCE(SUM(impureza_kg), 0) as impureza_kg,
            COALESCE(SUM(ardidos_kg), 0) as ardidos_kg,
