@@ -3880,12 +3880,12 @@ async function renderColheitaBase(variant) {
             <div class="hint">Regras e limites sao carregados por destino + safra. Se voce alterar algum limite, o campo fica amarelo.</div>
           </div>
 
-          ${formField({ label: 'Impureza limite %', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.impureza_limite_pct ?? '0.00', span: 'col3' })}
-          ${formField({ label: 'Ardidos limite %', name: 'ardidos_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.ardidos_limite_pct ?? '0.00', span: 'col3' })}
-          ${formField({ label: 'Queimados limite %', name: 'queimados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.queimados_limite_pct ?? '0.00', span: 'col3' })}
-          ${formField({ label: 'Avariados limite %', name: 'avariados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.avariados_limite_pct ?? '0.00', span: 'col3' })}
-          ${formField({ label: 'Esverdiados limite %', name: 'esverdiados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.esverdiados_limite_pct ?? '0.00', span: 'col3' })}
-          ${formField({ label: 'Quebrados limite %', name: 'quebrados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.quebrados_limite_pct ?? '0.00', span: 'col3' })}
+          ${formField({ label: 'Impureza limite %', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.impureza_limite_pct ?? '0.00', span: 'col2' })}
+          ${formField({ label: 'Ardidos limite %', name: 'ardidos_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.ardidos_limite_pct ?? '0.00', span: 'col2' })}
+          ${formField({ label: 'Queimados limite %', name: 'queimados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.queimados_limite_pct ?? '0.00', span: 'col2' })}
+          ${formField({ label: 'Avariados limite %', name: 'avariados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.avariados_limite_pct ?? '0.00', span: 'col2' })}
+          ${formField({ label: 'Esverdiados limite %', name: 'esverdiados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.esverdiados_limite_pct ?? '0.00', span: 'col2' })}
+          ${formField({ label: 'Quebrados limite %', name: 'quebrados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.quebrados_limite_pct ?? '0.00', span: 'col2' })}
 
           ${sectionTitle('Data e transporte')}
           ${formField({ label: 'Placa', name: 'placa', value: base.placa ?? '', placeholder: 'AAA0A00', span: 'col4' })}
@@ -3895,10 +3895,10 @@ async function renderColheitaBase(variant) {
            ${formField({ label: 'Hora entrega', name: 'hora_entrega', type: 'time', value: base.hora_entrega ?? '', span: 'col6' })}
 
           ${sectionTitle('Pesagem e umidade')}
-          ${formField({ label: 'Carga total (kg)', name: 'carga_total_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.carga_total_kg, span: 'col4' })}
-          ${formField({ label: 'Tara (kg)', name: 'tara_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.tara_kg, span: 'col4' })}
-          ${formField({ label: `Umidade % ${helpTip('Valor informado pela amostra do silo (laboratorio).')}`, name: 'umidade_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_pct, span: 'col4' })}
-          ${formField({ label: `Desconto umidade % ${helpTip('Sugerido automaticamente pela tabela do destino (por safra) a partir da umidade informada. Voce pode ajustar; se ficar diferente da tabela, o campo fica amarelo.')}`, name: 'umidade_desc_pct_manual', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_desc_pct_manual ?? '', span: 'col4' })}
+          ${formField({ label: 'Carga total (kg)', name: 'carga_total_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.carga_total_kg, span: 'col3' })}
+          ${formField({ label: 'Tara (kg)', name: 'tara_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.tara_kg, span: 'col3' })}
+          ${formField({ label: `Umidade % ${helpTip('Valor informado pela amostra do silo (laboratorio).')}`, name: 'umidade_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_pct, span: 'col3' })}
+          ${formField({ label: `Desconto umidade % ${helpTip('Sugerido automaticamente pela tabela do destino (por safra) a partir da umidade informada. Voce pode ajustar; se ficar diferente da tabela, o campo fica amarelo.')}`, name: 'umidade_desc_pct_manual', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_desc_pct_manual ?? '', span: 'col3' })}
 
           ${formField({ label: `Peso bruto (kg) ${helpTip('Calculado: carga total - tara.')}`, name: 'calc_peso_bruto_kg', type: 'text', value: base.calc_peso_bruto_kg ?? '', span: 'col3', readonly: true })}
           ${formField({ label: `Umidade (kg) ${helpTip('Calculado a partir do peso bruto e desconto de umidade aplicado.')}`, name: 'calc_umidade_kg', type: 'text', value: base.calc_umidade_kg ?? '', span: 'col3', readonly: true })}
@@ -3912,12 +3912,12 @@ async function renderColheitaBase(variant) {
             </div>
             <div class="hint" style="margin-top:6px">Simula quantas sacas (limpa/seca) dariam em outros destinos com regras cadastradas para esta safra e plantio. Nao salva nada.</div>
           </div>
-          ${pctKgField({ label: 'Impureza %', pctName: 'impureza_pct', pctValue: base.impureza_pct, kgName: 'calc_impureza_kg', kgValue: base.calc_impureza_kg, span: 'col3' })}
-          ${pctKgField({ label: 'Ardidos %', pctName: 'ardidos_pct', pctValue: base.ardidos_pct, kgName: 'calc_ardidos_kg', kgValue: base.calc_ardidos_kg, span: 'col3' })}
-          ${pctKgField({ label: 'Queimados %', pctName: 'queimados_pct', pctValue: base.queimados_pct, kgName: 'calc_queimados_kg', kgValue: base.calc_queimados_kg, span: 'col3' })}
-          ${pctKgField({ label: 'Avariados %', pctName: 'avariados_pct', pctValue: base.avariados_pct, kgName: 'calc_avariados_kg', kgValue: base.calc_avariados_kg, span: 'col3' })}
-          ${pctKgField({ label: 'Esverdiados %', pctName: 'esverdiados_pct', pctValue: base.esverdiados_pct, kgName: 'calc_esverdiados_kg', kgValue: base.calc_esverdiados_kg, span: 'col3' })}
-          ${pctKgField({ label: 'Quebrados %', pctName: 'quebrados_pct', pctValue: base.quebrados_pct, kgName: 'calc_quebrados_kg', kgValue: base.calc_quebrados_kg, span: 'col3' })}
+          ${pctKgField({ label: 'Impureza %', pctName: 'impureza_pct', pctValue: base.impureza_pct, kgName: 'calc_impureza_kg', kgValue: base.calc_impureza_kg, span: 'col2' })}
+          ${pctKgField({ label: 'Ardidos %', pctName: 'ardidos_pct', pctValue: base.ardidos_pct, kgName: 'calc_ardidos_kg', kgValue: base.calc_ardidos_kg, span: 'col2' })}
+          ${pctKgField({ label: 'Queimados %', pctName: 'queimados_pct', pctValue: base.queimados_pct, kgName: 'calc_queimados_kg', kgValue: base.calc_queimados_kg, span: 'col2' })}
+          ${pctKgField({ label: 'Avariados %', pctName: 'avariados_pct', pctValue: base.avariados_pct, kgName: 'calc_avariados_kg', kgValue: base.calc_avariados_kg, span: 'col2' })}
+          ${pctKgField({ label: 'Esverdiados %', pctName: 'esverdiados_pct', pctValue: base.esverdiados_pct, kgName: 'calc_esverdiados_kg', kgValue: base.calc_esverdiados_kg, span: 'col2' })}
+          ${pctKgField({ label: 'Quebrados %', pctName: 'quebrados_pct', pctValue: base.quebrados_pct, kgName: 'calc_quebrados_kg', kgValue: base.calc_quebrados_kg, span: 'col2' })}
         </div>
         ${
           variant !== 'rev01'
@@ -3926,6 +3926,10 @@ async function renderColheitaBase(variant) {
         }
       `,
       onSubmit: async (obj) => {
+        if (!obj.data_saida || !obj.hora_saida) {
+          throw new Error('Informe data e hora de saída.')
+        }
+
         const talhoesRateio = collectRateioTalhoes()
         const primaryTalhaoId = Number(talhoesRateio?.[0]?.talhao_id)
         if (!Number.isInteger(primaryTalhaoId) || primaryTalhaoId <= 0) {
@@ -5112,18 +5116,42 @@ async function renderRelatorios() {
   const rPay = view.querySelector('#rpay')
 
   async function run() {
-    const fd = new FormData(form)
-    const safra_id = Number(fd.get('safra_id'))
-    const de = fd.get('de') || null
-    const ate = fd.get('ate') || null
+    try {
+      const fd = new FormData(form)
+      const safra_id = Number(fd.get('safra_id'))
+      const de = fd.get('de') || null
+      const ate = fd.get('ate') || null
 
-    const [tal, des, pay] = await Promise.all([
-      api(`/api/relatorios/resumo-talhao?safra_id=${safra_id}`),
-      api(`/api/relatorios/entregas-por-destino?safra_id=${safra_id}`),
-      api(`/api/relatorios/pagamento-motoristas?${new URLSearchParams({ ...(de ? { de } : {}), ...(ate ? { ate } : {}) })}`),
-    ])
+      const [tal, des, pay] = await Promise.all([
+        api(
+          `/api/relatorios/resumo-talhao?${new URLSearchParams({
+            safra_id: String(safra_id),
+            ...(de ? { de } : {}),
+            ...(ate ? { ate } : {}),
+          })}`,
+        ),
+        api(
+          `/api/relatorios/entregas-por-destino?${new URLSearchParams({
+            safra_id: String(safra_id),
+            ...(de ? { de } : {}),
+            ...(ate ? { ate } : {}),
+          })}`,
+        ),
+        api(
+          `/api/relatorios/pagamento-motoristas?${new URLSearchParams({
+            safra_id: String(safra_id),
+            ...(de ? { de } : {}),
+            ...(ate ? { ate } : {}),
+          })}`,
+        ),
+      ])
 
-    rTal.innerHTML = tal
+      const talItems = (tal || []).filter((t) => {
+        if (!de && !ate) return true
+        return Number(t?.sacas || 0) > 0 || Number(t?.peso_limpo_seco_kg || 0) > 0 || Number(t?.sub_total_frete || 0) > 0
+      })
+
+    rTal.innerHTML = talItems
       .map((t) => {
         const pct = Number(t.pct_area_colhida ?? 0) * 100
         const areaColhidaHa = Number(t.hectares || 0) * Number(t.pct_area_colhida ?? 0)
@@ -5141,7 +5169,12 @@ async function renderRelatorios() {
       })
       .join('')
 
-    rDes.innerHTML = des
+      const desItems = (des || []).filter((d) => {
+        if (!de && !ate) return true
+        return Number(d?.entrega_sacas || 0) > 0 || Number(d?.peso_limpo_seco_kg || 0) > 0
+      })
+
+    rDes.innerHTML = desItems
       .map((d) => {
         const trava = d.trava_sacas
         const entrega = Number(d.entrega_sacas || 0)
@@ -5161,7 +5194,7 @@ async function renderRelatorios() {
       })
       .join('')
 
-    rPay.innerHTML = pay
+      rPay.innerHTML = pay
       .map((p) => `<tr>
         <td>${escapeHtml(p.motorista_nome)}</td>
         <td>${p.quantidade}</td>
@@ -5169,6 +5202,9 @@ async function renderRelatorios() {
         <td>${escapeHtml(p.placa || '')}</td>
       </tr>`)
       .join('')
+    } catch (e) {
+      toast('Erro', String(e?.message || e))
+    }
   }
 
   btn.onclick = run
@@ -5176,7 +5212,20 @@ async function renderRelatorios() {
   btnExpTal.onclick = async () => {
     const fd = new FormData(form)
     const safra_id = Number(fd.get('safra_id'))
-    const tal = await api(`/api/relatorios/resumo-talhao?safra_id=${safra_id}`)
+    const de = fd.get('de') || null
+    const ate = fd.get('ate') || null
+    const tal = await api(
+      `/api/relatorios/resumo-talhao?${new URLSearchParams({
+        safra_id: String(safra_id),
+        ...(de ? { de } : {}),
+        ...(ate ? { ate } : {}),
+      })}`,
+    )
+    const tal2 = (tal || []).filter((t) => {
+      if (!de && !ate) return true
+      return Number(t?.sacas || 0) > 0 || Number(t?.peso_limpo_seco_kg || 0) > 0 || Number(t?.sub_total_frete || 0) > 0
+    })
+
     downloadCsv(
       `resumo-talhao-safra-${safra_id}.csv`,
       [
@@ -5191,7 +5240,7 @@ async function renderRelatorios() {
         'Peso limpo/seco (kg)',
         'Frete (R$)',
       ],
-      (tal || []).map((t) => {
+      tal2.map((t) => {
         const pct = Number(t.pct_area_colhida ?? 0)
         const hectares = Number(t.hectares || 0)
         const areaHa = hectares * pct
@@ -5214,11 +5263,24 @@ async function renderRelatorios() {
   btnExpDes.onclick = async () => {
     const fd = new FormData(form)
     const safra_id = Number(fd.get('safra_id'))
-    const des = await api(`/api/relatorios/entregas-por-destino?safra_id=${safra_id}`)
+    const de = fd.get('de') || null
+    const ate = fd.get('ate') || null
+    const des = await api(
+      `/api/relatorios/entregas-por-destino?${new URLSearchParams({
+        safra_id: String(safra_id),
+        ...(de ? { de } : {}),
+        ...(ate ? { ate } : {}),
+      })}`,
+    )
+    const des2 = (des || []).filter((d) => {
+      if (!de && !ate) return true
+      return Number(d?.entrega_sacas || 0) > 0 || Number(d?.peso_limpo_seco_kg || 0) > 0
+    })
+
     downloadCsv(
       `entregas-por-destino-safra-${safra_id}.csv`,
       ['Destino', 'Contrato (sacas)', 'Entrega (sacas)', 'Peso limpo/seco (kg)', 'Status'],
-      (des || []).map((d) => {
+      des2.map((d) => {
         const trava = d.trava_sacas
         const entrega = Number(d.entrega_sacas || 0)
         let status = 'OK'
@@ -5240,10 +5302,12 @@ async function renderRelatorios() {
 
   btnExpPay.onclick = async () => {
     const fd = new FormData(form)
+    const safra_id = Number(fd.get('safra_id'))
     const de = fd.get('de') || null
     const ate = fd.get('ate') || null
     const pay = await api(
       `/api/relatorios/pagamento-motoristas?${new URLSearchParams({
+        safra_id: String(safra_id),
         ...(de ? { de } : {}),
         ...(ate ? { ate } : {}),
       })}`,

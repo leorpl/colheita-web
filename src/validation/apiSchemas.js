@@ -34,15 +34,27 @@ function isValidDateYMD(s) {
   )
 }
 
+// Aceita YYYY-MM-DD ou DD/MM/YYYY e normaliza para YYYY-MM-DD.
+function normalizeDateToYMD(v) {
+  const s = String(v ?? '').trim()
+  if (!s) return s
+  const m = s.match(/^([0-9]{2})\/([0-9]{2})\/([0-9]{4})$/)
+  if (!m) return s
+  return `${m[3]}-${m[2]}-${m[1]}`
+}
+
 export const S = {
   // Params
   IdParam: z.object({ id: z.coerce.number().int().positive() }),
 
   // Common primitives
-  DateYMD: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .refine(isValidDateYMD, 'Data invalida (YYYY-MM-DD)'),
+  DateYMD: z.preprocess(
+    (v) => normalizeDateToYMD(v),
+    z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .refine(isValidDateYMD, 'Data invalida (YYYY-MM-DD)'),
+  ),
 
   TimeHM: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora invalida (HH:MM)'),
 
@@ -80,7 +92,7 @@ export const SafraSchemas = {
     safra: z.string().trim().min(1).max(MAX.short),
     plantio: z.preprocess(emptyToNull, z.string().trim().max(MAX.short).nullable().optional()),
     data_referencia: z
-      .preprocess(emptyToNull, z.string().nullable().optional())
+      .preprocess((v) => normalizeDateToYMD(emptyToNull(v)), z.string().nullable().optional())
       .refine((v) => v == null || isValidDateYMD(v), 'Data invalida (YYYY-MM-DD)'),
     area_ha: z.coerce.number().min(0).max(1_000_000).optional().default(0),
   }),
@@ -205,7 +217,7 @@ export const ViagemSchemas = {
       motorista_id: z.coerce.number().int().positive(),
       placa: z.preprocess(emptyToNull, z.string().trim().max(MAX.placa).nullable().optional()),
 
-      data_saida: z.preprocess(emptyToNull, z.string().nullable().optional()).refine(
+      data_saida: z.preprocess((v) => normalizeDateToYMD(emptyToNull(v)), z.string().nullable().optional()).refine(
         (v) => v == null || isValidDateYMD(v),
         'data_saida invalida (YYYY-MM-DD)',
       ),
@@ -213,7 +225,7 @@ export const ViagemSchemas = {
         (v) => v == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(v),
         'hora_saida invalida (HH:MM)',
       ),
-      data_entrega: z.preprocess(emptyToNull, z.string().nullable().optional()).refine(
+      data_entrega: z.preprocess((v) => normalizeDateToYMD(emptyToNull(v)), z.string().nullable().optional()).refine(
         (v) => v == null || isValidDateYMD(v),
         'data_entrega invalida (YYYY-MM-DD)',
       ),
@@ -292,12 +304,30 @@ export const ViagemSchemas = {
     talhao_id: z.coerce.number().int().positive().optional(),
     destino_id: z.coerce.number().int().positive().optional(),
     motorista_id: z.coerce.number().int().positive().optional(),
-    de: z.preprocess((v) => emptyToUndefined(firstOfArray(v)), z.any()).pipe(
-      z.union([z.undefined(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]),
-    ),
-    ate: z.preprocess((v) => emptyToUndefined(firstOfArray(v)), z.any()).pipe(
-      z.union([z.undefined(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]),
-    ),
+    de: z
+      .preprocess((v) => {
+        const raw = emptyToUndefined(firstOfArray(v))
+        if (raw === undefined) return undefined
+        return normalizeDateToYMD(raw)
+      }, z.any())
+      .pipe(
+        z.union([
+          z.undefined(),
+          z.string().refine(isValidDateYMD, 'Data invalida (YYYY-MM-DD)'),
+        ]),
+      ),
+    ate: z
+      .preprocess((v) => {
+        const raw = emptyToUndefined(firstOfArray(v))
+        if (raw === undefined) return undefined
+        return normalizeDateToYMD(raw)
+      }, z.any())
+      .pipe(
+        z.union([
+          z.undefined(),
+          z.string().refine(isValidDateYMD, 'Data invalida (YYYY-MM-DD)'),
+        ]),
+      ),
   }),
 
   NextFichaQuery: z.object({
@@ -314,18 +344,87 @@ ViagemSchemas.CompareBody = ViagemSchemas.Body.extend({
 
 export const RelatoriosSchemas = {
   ColheitaQuery: ViagemSchemas.ListQuery,
-  ResumoTalhaoQuery: z.object({ safra_id: z.coerce.number().int().positive() }),
+  ResumoTalhaoQuery: z.object({
+    safra_id: z.coerce.number().int().positive(),
+    de: z
+      .preprocess((v) => {
+        const raw = emptyToUndefined(firstOfArray(v))
+        if (raw === undefined) return undefined
+        return normalizeDateToYMD(raw)
+      }, z.any())
+      .pipe(
+        z.union([
+          z.undefined(),
+          z.string().refine(isValidDateYMD, 'Data invalida (YYYY-MM-DD)'),
+        ]),
+      ),
+    ate: z
+      .preprocess((v) => {
+        const raw = emptyToUndefined(firstOfArray(v))
+        if (raw === undefined) return undefined
+        return normalizeDateToYMD(raw)
+      }, z.any())
+      .pipe(
+        z.union([
+          z.undefined(),
+          z.string().refine(isValidDateYMD, 'Data invalida (YYYY-MM-DD)'),
+        ]),
+      ),
+  }),
   PagamentoQuery: z.object({
-    de: z.preprocess((v) => emptyToUndefined(firstOfArray(v)), z.any()).pipe(
-      z.union([z.undefined(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]),
-    ),
-    ate: z.preprocess((v) => emptyToUndefined(firstOfArray(v)), z.any()).pipe(
-      z.union([z.undefined(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]),
-    ),
+    safra_id: z.coerce.number().int().positive().optional(),
+    de: z
+      .preprocess((v) => {
+        const raw = emptyToUndefined(firstOfArray(v))
+        if (raw === undefined) return undefined
+        return normalizeDateToYMD(raw)
+      }, z.any())
+      .pipe(
+        z.union([
+          z.undefined(),
+          z.string().refine(isValidDateYMD, 'Data invalida (YYYY-MM-DD)'),
+        ]),
+      ),
+    ate: z
+      .preprocess((v) => {
+        const raw = emptyToUndefined(firstOfArray(v))
+        if (raw === undefined) return undefined
+        return normalizeDateToYMD(raw)
+      }, z.any())
+      .pipe(
+        z.union([
+          z.undefined(),
+          z.string().refine(isValidDateYMD, 'Data invalida (YYYY-MM-DD)'),
+        ]),
+      ),
   }),
   EntregasQuery: z.object({
     safra_id: z.coerce.number().int().positive(),
     tipo_plantio: z.preprocess(emptyToUndefined, z.string().trim().min(1).max(MAX.short).optional()),
+    de: z
+      .preprocess((v) => {
+        const raw = emptyToUndefined(firstOfArray(v))
+        if (raw === undefined) return undefined
+        return normalizeDateToYMD(raw)
+      }, z.any())
+      .pipe(
+        z.union([
+          z.undefined(),
+          z.string().refine(isValidDateYMD, 'Data invalida (YYYY-MM-DD)'),
+        ]),
+      ),
+    ate: z
+      .preprocess((v) => {
+        const raw = emptyToUndefined(firstOfArray(v))
+        if (raw === undefined) return undefined
+        return normalizeDateToYMD(raw)
+      }, z.any())
+      .pipe(
+        z.union([
+          z.undefined(),
+          z.string().refine(isValidDateYMD, 'Data invalida (YYYY-MM-DD)'),
+        ]),
+      ),
   }),
 }
 

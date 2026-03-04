@@ -29,7 +29,13 @@ relatoriosRouter.get(
   requirePerm(Permissions.RELATORIOS_READ),
   validateQuery(ResumoTalhaoQuery),
   (req, res) => {
-    res.json(relatoriosService.resumoTalhao({ safra_id: req.query.safra_id }))
+    res.json(
+      relatoriosService.resumoTalhao({
+        safra_id: req.query.safra_id,
+        de: req.query.de,
+        ate: req.query.ate,
+      }),
+    )
   },
 )
 
@@ -55,6 +61,8 @@ relatoriosRouter.get(
       relatoriosService.entregasPorDestino({
         safra_id: req.query.safra_id,
         tipo_plantio: req.query.tipo_plantio,
+        de: req.query.de,
+        ate: req.query.ate,
       }),
     )
   },

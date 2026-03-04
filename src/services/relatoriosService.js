@@ -140,7 +140,84 @@ export const relatoriosService = {
     return { items, totals }
   },
 
-  resumoTalhao({ safra_id }) {
+  resumoTalhao({ safra_id, de, ate }) {
+    const hasPeriod = Boolean(de || ate)
+    const params = { safra_id, de: de ?? null, ate: ate ?? null }
+
+    // Sem periodo: lista todos os talhoes (mesmo sem movimento).
+    if (!hasPeriod) {
+      return db
+        .prepare(
+          `SELECT
+             t.id as talhao_id,
+             t.codigo as talhao_codigo,
+             t.local as talhao_local,
+             t.nome as talhao_nome,
+             t.situacao as talhao_situacao,
+             t.hectares as hectares,
+             COALESCE(ts.pct_area_colhida, 0) as pct_area_colhida,
+             COALESCE(SUM(
+               CASE WHEN v.id IS NULL THEN 0 ELSE COALESCE(
+                 vt.kg_rateio,
+                 v.peso_bruto_kg * vt.pct_rateio,
+                 0
+               ) END
+             ), 0) as peso_liquido_kg,
+             COALESCE(SUM(v.umidade_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as umidade_kg,
+             COALESCE(SUM(v.impureza_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as impureza_kg,
+             COALESCE(SUM(v.peso_limpo_seco_kg * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as peso_limpo_seco_kg,
+             COALESCE(SUM(v.sacas * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as sacas,
+             CASE WHEN t.hectares > 0 THEN (COALESCE(SUM(v.sacas * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) / t.hectares) ELSE 0 END as produtividade_sacas_ha,
+             CASE WHEN t.hectares > 0 AND COALESCE(ts.pct_area_colhida, 0) > 0 THEN (COALESCE(SUM(v.sacas * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) / (t.hectares * COALESCE(ts.pct_area_colhida, 0))) ELSE 0 END as produtividade_ajustada_sacas_ha,
+             COALESCE(SUM(v.sub_total_frete * (
+               CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+                 THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+                 ELSE 0
+               END
+             )), 0) as sub_total_frete
+            FROM talhao t
+            LEFT JOIN viagem_talhao vt ON vt.talhao_id = t.id
+            LEFT JOIN viagem v
+              ON v.id = vt.viagem_id
+             AND v.safra_id = @safra_id
+            LEFT JOIN talhao_safra ts ON ts.talhao_id = t.id AND ts.safra_id = @safra_id
+            GROUP BY t.id
+            ORDER BY t.local, t.codigo`,
+        )
+        .all({ safra_id })
+    }
+
+    // Com periodo: retorna apenas talhoes com movimento no periodo.
     return db
       .prepare(
         `SELECT
@@ -151,13 +228,11 @@ export const relatoriosService = {
            t.situacao as talhao_situacao,
            t.hectares as hectares,
            COALESCE(ts.pct_area_colhida, 0) as pct_area_colhida,
-           COALESCE(SUM(
-             CASE WHEN v.id IS NULL THEN 0 ELSE COALESCE(
-               vt.kg_rateio,
-               v.peso_bruto_kg * vt.pct_rateio,
-               0
-             ) END
-           ), 0) as peso_liquido_kg,
+           COALESCE(SUM(COALESCE(
+             vt.kg_rateio,
+             v.peso_bruto_kg * vt.pct_rateio,
+             0
+           )), 0) as peso_liquido_kg,
            COALESCE(SUM(v.umidade_kg * (
              CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
                THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
@@ -201,16 +276,18 @@ export const relatoriosService = {
              END
            )), 0) as sub_total_frete
           FROM talhao t
-          LEFT JOIN viagem_talhao vt ON vt.talhao_id = t.id
-          LEFT JOIN viagem v ON v.id = vt.viagem_id AND v.safra_id = @safra_id
+          JOIN viagem_talhao vt ON vt.talhao_id = t.id
+          JOIN viagem v ON v.id = vt.viagem_id AND v.safra_id = @safra_id
           LEFT JOIN talhao_safra ts ON ts.talhao_id = t.id AND ts.safra_id = @safra_id
+          WHERE (@de IS NULL OR v.data_saida >= @de)
+            AND (@ate IS NULL OR v.data_saida <= @ate)
           GROUP BY t.id
           ORDER BY t.local, t.codigo`,
       )
-      .all({ safra_id })
+      .all(params)
   },
 
-  pagamentoMotoristas({ de, ate }) {
+  pagamentoMotoristas({ safra_id, de, ate }) {
     return db
       .prepare(
         `SELECT
@@ -221,16 +298,57 @@ export const relatoriosService = {
            COALESCE(SUM(v.sub_total_frete), 0) as valor
          FROM motorista m
          LEFT JOIN viagem v ON v.motorista_id = m.id
-         WHERE (@de IS NULL OR v.data_saida >= @de)
+         WHERE (@safra_id IS NULL OR v.safra_id = @safra_id)
+           AND (@de IS NULL OR v.data_saida >= @de)
            AND (@ate IS NULL OR v.data_saida <= @ate)
          GROUP BY m.id
          ORDER BY m.nome`,
       )
-      .all({ de: de ?? null, ate: ate ?? null })
+      .all({ safra_id: safra_id ?? null, de: de ?? null, ate: ate ?? null })
   },
 
-  entregasPorDestino({ safra_id, tipo_plantio }) {
+  entregasPorDestino({ safra_id, tipo_plantio, de, ate }) {
     const tp = String(tipo_plantio || '').trim().toUpperCase()
+    const hasPeriod = Boolean(de || ate)
+    const params = { safra_id, tipo_plantio: tp, de: de ?? null, ate: ate ?? null }
+
+    // Com periodo: retornar apenas destinos com entregas no periodo.
+    if (hasPeriod) {
+      return db
+        .prepare(
+          `SELECT
+             d.id as destino_id,
+             d.codigo as destino_codigo,
+             d.local as destino_local,
+             c.sacas_contratadas as trava_sacas,
+             d.distancia_km as distancia_km,
+             COALESCE(SUM(v.sacas), 0) as entrega_sacas,
+             COALESCE(SUM(v.peso_limpo_seco_kg), 0) as peso_limpo_seco_kg
+           FROM destino d
+           JOIN viagem v
+             ON v.destino_id = d.id
+            AND v.safra_id = @safra_id
+            AND (@de IS NULL OR v.data_saida >= @de)
+            AND (@ate IS NULL OR v.data_saida <= @ate)
+           LEFT JOIN (
+             SELECT
+               c.destino_id,
+               c.safra_id,
+               c.tipo_plantio,
+               SUM(f.sacas) as sacas_contratadas
+             FROM contrato_silo c
+             JOIN contrato_silo_faixa f ON f.contrato_silo_id = c.id
+             GROUP BY c.destino_id, c.safra_id, c.tipo_plantio
+           ) c
+             ON c.destino_id = d.id
+            AND c.safra_id = @safra_id
+            AND (@tipo_plantio = '' OR c.tipo_plantio = @tipo_plantio)
+           GROUP BY d.id, c.sacas_contratadas
+           ORDER BY d.local`,
+        )
+        .all(params)
+    }
+
     return db
       .prepare(
         `SELECT
@@ -241,7 +359,7 @@ export const relatoriosService = {
            d.distancia_km as distancia_km,
            COALESCE(SUM(v.sacas), 0) as entrega_sacas,
            COALESCE(SUM(v.peso_limpo_seco_kg), 0) as peso_limpo_seco_kg
-         FROM destino d
+          FROM destino d
          LEFT JOIN (
            SELECT
              c.destino_id,
@@ -255,10 +373,14 @@ export const relatoriosService = {
            ON c.destino_id = d.id
           AND c.safra_id = @safra_id
           AND (@tipo_plantio = '' OR c.tipo_plantio = @tipo_plantio)
-         LEFT JOIN viagem v ON v.destino_id = d.id AND v.safra_id = @safra_id
-         GROUP BY d.id, c.sacas_contratadas
-         ORDER BY d.local`,
+          LEFT JOIN viagem v
+            ON v.destino_id = d.id
+           AND v.safra_id = @safra_id
+           AND (@de IS NULL OR v.data_saida >= @de)
+           AND (@ate IS NULL OR v.data_saida <= @ate)
+          GROUP BY d.id, c.sacas_contratadas
+          ORDER BY d.local`,
       )
-      .all({ safra_id, tipo_plantio: tp })
+      .all(params)
   },
 }

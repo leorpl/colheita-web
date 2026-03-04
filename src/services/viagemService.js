@@ -730,6 +730,9 @@ export const viagemService = {
 
   create(input) {
     const payload = this.buildPayload(input)
+
+    if (!payload.data_saida) throw unprocessable('data_saida obrigatoria')
+    if (!payload.hora_saida) throw unprocessable('hora_saida obrigatoria')
     const rateioItems = buildRateioItems({
       input,
       peso_base_kg: payload.peso_bruto_kg,
@@ -775,6 +778,9 @@ export const viagemService = {
 
   update(id, input) {
     const payload = this.buildPayload(input, { current_id: id, exclude_id: id })
+
+    if (!payload.data_saida) throw unprocessable('data_saida obrigatoria')
+    if (!payload.hora_saida) throw unprocessable('hora_saida obrigatoria')
 
     const rateioItems = buildRateioItems({
       input,
