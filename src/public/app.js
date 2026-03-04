@@ -126,6 +126,35 @@ function fmtMoney(n) {
   return x.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+function iconSvg(name) {
+  // tiny inline icons (16px) to keep action column compact
+  if (name === 'edit') {
+    return `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l8.06-8.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/></svg>`
+  }
+  if (name === 'trash') {
+    return `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7zm3-3h6l1 2H8l1-2z"/></svg>`
+  }
+  if (name === 'pin') {
+    return `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M14 2l-1 6 5 5-2 2-4-4-6 1 6-10zM6 22l6-10"/></svg>`
+  }
+  if (name === 'eye') {
+    return `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 12a5 5 0 110-10 5 5 0 010 10zm0-2.5A2.5 2.5 0 1112 9a2.5 2.5 0 010 5z"/></svg>`
+  }
+  if (name === 'qr') {
+    return `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm10-2h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm2 2h2v2h-2v-2zm2-6h2v4h-2v-4zm0 6h2v2h-2v-2z"/></svg>`
+  }
+  if (name === 'more') {
+    return `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 7a2 2 0 110-4 2 2 0 010 4zm0 7a2 2 0 110-4 2 2 0 010 4zm0 7a2 2 0 110-4 2 2 0 010 4z"/></svg>`
+  }
+  return ''
+}
+
+function pillBadge({ label, tone = 'muted' } = {}) {
+  const dot = tone === 'warn' ? 'warn' : ''
+  // ok uses default dot
+  return `<span class="pill"><span class="dot ${dot}"></span><span>${escapeHtml(String(label || ''))}</span></span>`
+}
+
 function toast(title, message) {
   toastEl.innerHTML = `<div class="t">${escapeHtml(title)}</div><div class="m">${escapeHtml(message)}</div>`
   toastEl.classList.add('show')
@@ -1135,23 +1164,55 @@ async function renderCrudPage({
   title,
   subtitle,
   fetchPath,
+  items: itemsOverride,
   columns,
   onCreate,
   onEdit,
   onDelete,
   addLabel,
+  headerActions,
+  onHeaderAction,
   extraActions,
   onAction,
+  hintHtml,
+  showDefaultHint = true,
 }) {
   activeNav(route)
-  const items = await api(fetchPath)
-  const th = columns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join('')
+  const items = Array.isArray(itemsOverride) ? itemsOverride : await api(fetchPath)
+
+  function colClass(c) {
+    const k = String(c.key || '')
+    if (k === 'id' || k.endsWith('_id')) return 'col-id t-right'
+    if (k.includes('data')) return 'col-date t-center'
+    if (k === 'painel' || k === 'ativo' || k === 'situacao' || k === 'status') return 'col-status t-center'
+    if (c.align === 'right') return 't-right'
+    if (c.align === 'center') return 't-center'
+    return 't-left'
+  }
+
+  const th = columns
+    .map((c) => `<th class="${escapeHtml(colClass(c))}">${escapeHtml(c.label)}</th>`)
+    .join('')
 
   const rows = items
     .map((it) => {
       const tds = columns
         .map((c) => {
           const shown = c.format ? c.format(it[c.key], it) : it[c.key] ?? ''
+          const isHtml = c.html === true
+          const k = String(c.key || '')
+          const isStatus = k === 'painel' || k === 'ativo' || k === 'situacao' || k === 'status'
+          let cell = isHtml ? String(shown ?? '') : escapeHtml(shown)
+          if (isStatus) {
+            const s = String(shown || '').trim().toUpperCase()
+            if (s === 'SIM' || s === 'ATIVO' || s === 'OK') {
+              cell = pillBadge({ label: shown || 'OK', tone: 'ok' })
+            } else if (!s) {
+              cell = pillBadge({ label: 'NÃO', tone: 'muted' })
+            } else {
+              cell = pillBadge({ label: shown, tone: 'muted' })
+            }
+          }
           let sortAttr = ''
           if (typeof c.sort === 'function') {
             const sv = c.sort(it[c.key], it)
@@ -1159,27 +1220,57 @@ async function renderCrudPage({
               sortAttr = ` data-sort="${escapeHtml(String(sv))}"`
             }
           }
-          return `<td${sortAttr}>${escapeHtml(shown)}</td>`
+          return `<td class="${escapeHtml(colClass(c))}"${sortAttr}>${cell}</td>`
         })
         .join('')
 
       const extraBtns = (extraActions || [])
         .map((a) => {
-          const cls = a.className || 'ghost'
-          return `<button class="btn small ${escapeHtml(cls)}" data-act="${escapeHtml(a.act)}" data-id="${it.id}">${escapeHtml(a.label)}</button>`
+          const act = String(a.act || '')
+          const title = String(a.label || act)
+          let icon = iconSvg('more')
+          let short = title
+          if (act === 'painel') {
+            icon = iconSvg('pin')
+            short = 'Painel'
+          } else if (act === 'view') {
+            icon = iconSvg('eye')
+            short = 'Ver'
+          } else if (act === 'qr') {
+            icon = iconSvg('qr')
+            short = 'QR'
+          }
+          return `<button class="act-btn" data-act="${escapeHtml(act)}" data-id="${it.id}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${icon}<span>${escapeHtml(short)}</span></button>`
         })
         .join('')
 
       return `<tr>
         <td class="actions">
           ${extraBtns}
-          <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
-          <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
+          <button class="act-btn" data-act="edit" data-id="${it.id}" title="Editar" aria-label="Editar">${iconSvg('edit')}<span>Editar</span></button>
+          <button class="act-btn danger" data-act="del" data-id="${it.id}" title="Excluir" aria-label="Excluir">${iconSvg('trash')}<span>Excluir</span></button>
         </td>
         ${tds}
       </tr>`
     })
     .join('')
+
+  const headActionsHtml = (headerActions || [])
+    .map((a) => {
+      const act = String(a.act || '')
+      const label = String(a.label || act)
+      const cls = String(a.className || 'ghost').trim()
+      return `<button class="btn ${escapeHtml(cls)}" type="button" data-hact="${escapeHtml(act)}">${escapeHtml(label)}</button>`
+    })
+    .join('')
+
+  const addBtnHtml =
+    typeof onCreate === 'function'
+      ? `<button class="btn" id="btnAdd" type="button">${escapeHtml(addLabel || 'Cadastrar')}</button>`
+      : ''
+
+  const defaultHintHtml =
+    '<div class="hint">Dica: cadastre primeiro <span class="kbd">Destinos</span>, <span class="kbd">Motoristas</span> e <span class="kbd">Fretes</span> para lançar viagens sem erros.</div>'
 
   setView(`
     <section class="panel">
@@ -1188,25 +1279,36 @@ async function renderCrudPage({
           <div class="panel-title">${escapeHtml(title)}</div>
           <div class="panel-sub">${escapeHtml(subtitle)}</div>
         </div>
-        <button class="btn" id="btnAdd">${escapeHtml(addLabel || 'Cadastrar')}</button>
+        ${headActionsHtml || addBtnHtml ? `<div style="display:flex;gap:10px;flex-wrap:wrap">${headActionsHtml}${addBtnHtml}</div>` : ''}
       </div>
       <div class="panel-body">
         <div class="table-wrap">
-          <table>
+          <table class="grid-table">
             <thead>
-              <tr><th class="actions"></th>${th}</tr>
+              <tr><th class="actions">Ações</th>${th}</tr>
             </thead>
             <tbody>
               ${rows || `<tr><td colspan="${columns.length + 1}">Nenhum registro.</td></tr>`}
             </tbody>
           </table>
         </div>
-        <div class="hint">Dica: cadastre primeiro <span class="kbd">Destinos</span>, <span class="kbd">Motoristas</span> e <span class="kbd">Fretes</span> para lançar viagens sem erros.</div>
+        <div class="hint" style="margin-top:10px">Registros: <b>${escapeHtml(String(items.length))}</b></div>
+        ${hintHtml ? `<div class="hint">${hintHtml}</div>` : ''}
+        ${showDefaultHint ? defaultHintHtml : ''}
       </div>
     </section>
   `)
 
-  view.querySelector('#btnAdd').onclick = () => onCreate()
+  const btnAdd = view.querySelector('#btnAdd')
+  if (btnAdd) btnAdd.onclick = () => onCreate()
+
+  view.querySelectorAll('[data-hact]').forEach((btn) => {
+    btn.onclick = () => {
+      const act = String(btn.dataset.hact || '')
+      if (typeof onHeaderAction === 'function') onHeaderAction(act, items)
+    }
+  })
+
   view.querySelectorAll('[data-act]').forEach((btn) => {
     btn.onclick = async () => {
       const id = Number(btn.dataset.id)
@@ -2023,83 +2125,54 @@ async function renderUsuarios() {
 }
 
 async function renderTiposPlantio() {
-  activeNav('tipos-plantio')
-  const items = await api('/api/tipos-plantio')
-
-  const rows = items
-    .map((it) => {
-      return `<tr>
-        <td class="actions">
-          <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
-          <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
-        </td>
-        <td>${it.id}</td>
-        <td>${escapeHtml(it.nome)}</td>
-      </tr>`
-    })
-    .join('')
-
-  setView(`
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title">Tipos de plantio</div>
-          <div class="panel-sub">Lista padrao para preencher Safras e Colheita.</div>
-        </div>
-        <button class="btn" id="btnAdd">Novo tipo</button>
-      </div>
-      <div class="panel-body">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th class="actions"></th><th>ID</th><th>Nome</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="3">Nenhum registro.</td></tr>`}</tbody>
-          </table>
-        </div>
-          <div class="hint">Valores iniciais: SOJA e MILHO (seed automático).</div>
-      </div>
-    </section>
-  `)
-
-  view.querySelector('#btnAdd').onclick = () => {
-    openDialog({
-      title: 'Novo tipo de plantio',
-      bodyHtml: `<div class="form-grid">${formField({ label: 'Nome', name: 'nome', placeholder: 'SOJA', span: 'col6' })}</div>`,
-      onSubmit: async (obj) => {
-        await api('/api/tipos-plantio', { method: 'POST', body: { nome: obj.nome } })
-        toast('Salvo', 'Tipo cadastrado.')
-        renderTiposPlantio()
-      },
-    })
-  }
-
-  view.querySelectorAll('[data-act]').forEach((btn) => {
-    btn.onclick = async () => {
-      const id = Number(btn.dataset.id)
-      const act = btn.dataset.act
-      const item = items.find((x) => x.id === id)
-      if (act === 'edit') {
-        openDialog({
-          title: `Editar tipo #${id}`,
-          bodyHtml: `<div class="form-grid">${formField({ label: 'Nome', name: 'nome', value: item.nome, span: 'col6' })}</div>`,
-          onSubmit: async (obj) => {
-            await api(`/api/tipos-plantio/${id}`, { method: 'PUT', body: { nome: obj.nome } })
-            toast('Atualizado', 'Tipo atualizado.')
-            renderTiposPlantio()
-          },
-        })
-      }
-      if (act === 'del') {
-        if (!(await confirmDanger(`Excluir o tipo "${item.nome}"?`))) return
-        await api(`/api/tipos-plantio/${id}`, { method: 'DELETE' })
-        toast('Excluído', 'Tipo removido.')
-        renderTiposPlantio()
-      }
-    }
+  await renderCrudPage({
+    route: 'tipos-plantio',
+    title: 'Tipos de plantio',
+    subtitle: 'Lista padrão para preencher Safras e Colheita.',
+    fetchPath: '/api/tipos-plantio',
+    columns: [
+      { key: 'id', label: 'ID' },
+      { key: 'nome', label: 'Nome' },
+    ],
+    addLabel: 'Novo tipo',
+    hintHtml: 'Valores iniciais: SOJA e MILHO (seed automático).',
+    showDefaultHint: false,
+    onCreate: () => {
+      openDialog({
+        title: 'Novo tipo de plantio',
+        bodyHtml: `<div class="form-grid">${formField({ label: 'Nome', name: 'nome', placeholder: 'SOJA', span: 'col6' })}</div>`,
+        onSubmit: async (obj) => {
+          await api('/api/tipos-plantio', { method: 'POST', body: { nome: obj.nome } })
+          toast('Salvo', 'Tipo cadastrado.')
+          renderTiposPlantio()
+        },
+      })
+    },
+    onEdit: (item) => {
+      if (!item) return
+      const id = Number(item.id)
+      openDialog({
+        title: `Editar tipo #${id}`,
+        bodyHtml: `<div class="form-grid">${formField({ label: 'Nome', name: 'nome', value: item.nome, span: 'col6' })}</div>`,
+        onSubmit: async (obj) => {
+          await api(`/api/tipos-plantio/${id}`, { method: 'PUT', body: { nome: obj.nome } })
+          toast('Atualizado', 'Tipo atualizado.')
+          renderTiposPlantio()
+        },
+      })
+    },
+    onDelete: async (item) => {
+      if (!item) return
+      const id = Number(item.id)
+      if (!(await confirmDanger(`Excluir o tipo "${item.nome}"?`))) return
+      await api(`/api/tipos-plantio/${id}`, { method: 'DELETE' })
+      toast('Excluído', 'Tipo removido.')
+      renderTiposPlantio()
+    },
   })
 }
 
 async function renderFretes() {
-  activeNav('fretes')
   await loadLookups()
   const items = await api('/api/fretes')
 
@@ -2110,61 +2183,28 @@ async function renderFretes() {
     label: `${d.local}`,
   }))
 
-  const rows = items
-    .map((it) => {
-      return `<tr>
-        <td class="actions">
-          <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
-          <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
-        </td>
-        <td>${it.id}</td>
-        <td>${escapeHtml(it.safra_nome)}</td>
-        <td data-sort="${escapeHtml(`${it.motorista_nome || ''} ${it.destino_local || ''} ${it.safra_nome || ''}`.trim())}">${escapeHtml(it.motorista_nome)}</td>
-        <td data-sort="${escapeHtml(`${it.destino_local || ''} ${it.motorista_nome || ''} ${it.safra_nome || ''}`.trim())}">${escapeHtml(it.destino_local)}</td>
-        <td>${fmtMoney(it.valor_por_saca)}</td>
-      </tr>`
-    })
-    .join('')
-
-  setView(`
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title">Fretes</div>
-          <div class="panel-sub">Tabela por motorista x destino (R$ por saca de frete).</div>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn ghost" id="btnCopySafra">Copiar de safra</button>
-          <button class="btn ghost" id="btnGridSafra">Editar em grade</button>
-          <button class="btn" id="btnAdd">Definir frete</button>
-        </div>
-      </div>
-      <div class="panel-body">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th class="actions"></th><th>ID</th><th>Safra</th><th>Motorista</th><th>Destino</th><th>Valor por saca</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="6">Nenhum frete cadastrado.</td></tr>`}</tbody>
-          </table>
-        </div>
-        <div class="hint">O frete e usado no calculo automatico de <span class="kbd">sub_total_frete</span> ao lancar uma viagem.</div>
-      </div>
-    </section>
-  `)
-
-  view.querySelector('#btnAdd').onclick = () => {
+  function openUpsertDialog({
+    title,
+    safra_id,
+    motorista_id,
+    destino_id,
+    valor_por_saca,
+  }) {
     openDialog({
-      title: 'Definir frete (upsert)',
+      title: title || 'Definir frete (upsert)',
+      submitLabel: 'Salvar',
       bodyHtml: `
         <div class="form-grid">
-          ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safraOptions[0]?.value, span: 'col6' })}
-          ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOptions, value: motoristaOptions[0]?.value, span: 'col6' })}
-          ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: destinoOptions[0]?.value, span: 'col6' })}
-          ${formField({ label: 'Valor por saca (R$)', name: 'valor_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '4,50', span: 'col6' })}
+          ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safra_id ?? safraOptions[0]?.value, span: 'col6' })}
+          ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOptions, value: motorista_id ?? motoristaOptions[0]?.value, span: 'col6' })}
+          ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: destino_id ?? destinoOptions[0]?.value, span: 'col6' })}
+          ${formField({ label: 'Valor por saca (R$)', name: 'valor_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: valor_por_saca ?? '4,50', span: 'col6' })}
+          <div class="field col12"><div class="hint">Ao salvar, o sistema recalcula o frete nas colheitas já lançadas que baterem (safra, motorista, destino).</div></div>
         </div>`,
       onSubmit: async (obj) => {
         const valor = parseNumberPt(obj.valor_por_saca)
         if (!Number.isFinite(valor) || valor < 0) {
-          toast('Erro', 'Valor por saca invalido.')
+          toast('Erro', 'Valor por saca inválido.')
           return
         }
         await api('/api/fretes', {
@@ -2176,13 +2216,13 @@ async function renderFretes() {
             valor_por_saca: valor,
           },
         })
-        toast('Salvo', 'Frete atualizado (viagens recalculadas).')
+        toast('OK', 'Frete atualizado.')
         renderFretes()
       },
     })
   }
 
-  view.querySelector('#btnCopySafra').onclick = () => {
+  function openCopySafraDialog() {
     openDialog({
       title: 'Copiar fretes de uma safra',
       submitLabel: 'Copiar',
@@ -2318,7 +2358,7 @@ async function renderFretes() {
     renderPreview()
   }
 
-  view.querySelector('#btnGridSafra').onclick = () => {
+  function openGridSafraDialog() {
     openDialog({
       title: 'Editar fretes em grade (por safra)',
       submitLabel: 'Salvar grade',
@@ -2441,53 +2481,70 @@ async function renderFretes() {
     renderGrid()
   }
 
-  view.querySelectorAll('[data-act]').forEach((btn) => {
-    btn.onclick = async () => {
-      const id = Number(btn.dataset.id)
-      const act = btn.dataset.act
-      const item = items.find((x) => x.id === id)
+  await renderCrudPage({
+    route: 'fretes',
+    title: 'Fretes',
+    subtitle: 'Tabela por motorista x destino (R$ por saca de frete).',
+    fetchPath: '/api/fretes',
+    items,
+    columns: [
+      { key: 'id', label: 'ID' },
+      { key: 'safra_nome', label: 'Safra' },
+      {
+        key: 'motorista_nome',
+        label: 'Motorista',
+        sort: (v, it) => `${it.motorista_nome || ''} ${it.destino_local || ''} ${it.safra_nome || ''}`.trim(),
+      },
+      {
+        key: 'destino_local',
+        label: 'Destino',
+        sort: (v, it) => `${it.destino_local || ''} ${it.motorista_nome || ''} ${it.safra_nome || ''}`.trim(),
+      },
+      {
+        key: 'valor_por_saca',
+        label: 'Valor por saca',
+        align: 'right',
+        format: (v) => fmtMoney(v),
+      },
+    ],
+    addLabel: 'Definir frete',
+    headerActions: [
+      { act: 'copy-safra', label: 'Copiar de safra', className: 'ghost' },
+      { act: 'grid-safra', label: 'Editar em grade', className: 'ghost' },
+    ],
+    onHeaderAction: (act) => {
+      if (act === 'copy-safra') return openCopySafraDialog()
+      if (act === 'grid-safra') return openGridSafraDialog()
+    },
+    hintHtml: 'O frete é usado no cálculo automático de <span class="kbd">sub_total_frete</span> ao lançar uma viagem.',
+    showDefaultHint: false,
+    onCreate: () => {
+      openUpsertDialog({
+        title: 'Definir frete (upsert)',
+        safra_id: safraOptions[0]?.value,
+        motorista_id: motoristaOptions[0]?.value,
+        destino_id: destinoOptions[0]?.value,
+        valor_por_saca: '4,50',
+      })
+    },
+    onEdit: (item) => {
       if (!item) return
-
-      if (act === 'edit') {
-        openDialog({
-          title: `Editar frete #${id}`,
-          submitLabel: 'Salvar',
-          bodyHtml: `
-            <div class="form-grid">
-              ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: item.safra_id, span: 'col6' })}
-              ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOptions, value: item.motorista_id, span: 'col6' })}
-              ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: item.destino_id, span: 'col6' })}
-              ${formField({ label: 'Valor por saca (R$)', name: 'valor_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: fmtNum(Number(item.valor_por_saca ?? 0), 2), span: 'col6' })}
-              <div class="field col12"><div class="hint">Ao salvar, o sistema recalcula o frete nas colheitas ja lancadas que baterem (safra, motorista, destino).</div></div>
-            </div>`,
-          onSubmit: async (obj) => {
-            const valor = parseNumberPt(obj.valor_por_saca)
-            if (!Number.isFinite(valor) || valor < 0) {
-              toast('Erro', 'Valor por saca invalido.')
-              return
-            }
-            await api('/api/fretes', {
-              method: 'POST',
-              body: {
-                safra_id: Number(obj.safra_id),
-                motorista_id: Number(obj.motorista_id),
-                destino_id: Number(obj.destino_id),
-                valor_por_saca: valor,
-              },
-            })
-            toast('Atualizado', 'Frete atualizado. Use “Recalcular colheitas” para atualizar os calculos.')
-            renderFretes()
-          },
-        })
-      }
-
-      if (act === 'del') {
-        if (!(await confirmDanger(`Excluir o frete #${id}?`))) return
-        await api(`/api/fretes/${id}`, { method: 'DELETE' })
-        toast('Excluído', 'Frete removido.')
-        renderFretes()
-      }
-    }
+      openUpsertDialog({
+        title: `Editar frete #${item.id}`,
+        safra_id: item.safra_id,
+        motorista_id: item.motorista_id,
+        destino_id: item.destino_id,
+        valor_por_saca: fmtNum(Number(item.valor_por_saca ?? 0), 2),
+      })
+    },
+    onDelete: async (item) => {
+      if (!item) return
+      const id = Number(item.id)
+      if (!(await confirmDanger(`Excluir o frete #${id}?`))) return
+      await api(`/api/fretes/${id}`, { method: 'DELETE' })
+      toast('Excluído', 'Frete removido.')
+      renderFretes()
+    },
   })
 }
 
@@ -2504,88 +2561,38 @@ async function renderRegrasDestino() {
   if (!isNew && !(Number.isFinite(editId) && editId > 0)) {
     const rules = await api('/api/destino-regras/plantio')
 
-    setView(`
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <div class="panel-title">Regras do destino</div>
-            <div class="panel-sub">Regras por safra + destino + plantio. Clique em editar para configurar tabelas.</div>
-          </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button class="btn ghost" id="btnRecalcAll">Recalcular colheitas</button>
-            <button class="btn" id="btnNovaRegra">Nova regra</button>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th class="actions"></th>
-                  <th>Item</th>
-                  <th>Safra</th>
-                  <th>Destino</th>
-                  <th>Plantio</th>
-                  <th>Alteracao</th>
-                  <th>Criacao</th>
-                </tr>
-              </thead>
-              <tbody id="rulesBody">
-                ${Array.isArray(rules) && rules.length ? '' : '<tr><td colspan="7">Nenhuma regra cadastrada.</td></tr>'}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-    `)
+    const safraOptions2 = [{ value: '', label: 'Todas' }, ...cache.safras.map((s) => ({ value: s.id, label: s.safra }))]
+    const destinoOptions2 = [{ value: '', label: 'Todos' }, ...cache.destinos.map((d) => ({ value: d.id, label: d.local }))]
+    const plantioOptions2 = [{ value: '', label: 'Todos' }, ...cache.tiposPlantio.map((p) => ({ value: p.nome, label: p.nome }))]
 
-    const body = view.querySelector('#rulesBody')
-    if (body && Array.isArray(rules) && rules.length) {
-      body.innerHTML = rules
-        .map((r) => {
-          const id = Number(r.id)
-          const safra = String(r.safra_nome || '')
-          const destino = String(r.destino_local || '')
-          const plantio = String(r.tipo_plantio || '')
-          const upd = String(r.updated_at || '')
-          const crt = String(r.created_at || '')
-          return `<tr>
-            <td class="actions">
-              <button class="btn small ghost" data-act="edit" data-id="${id}">Editar</button>
-              <button class="btn small danger" data-act="del" data-id="${id}">Excluir</button>
-            </td>
-            <td data-sort="${id}">${escapeHtml(String(id))}</td>
-            <td data-sort="${escapeHtml(safra)}">${escapeHtml(safra)}</td>
-            <td data-sort="${escapeHtml(destino)}">${escapeHtml(destino)}</td>
-            <td data-sort="${escapeHtml(plantio)}"><code class="mono">${escapeHtml(plantio)}</code></td>
-            <td data-sort="${escapeHtml(upd)}">${escapeHtml(upd || '-')}</td>
-            <td data-sort="${escapeHtml(crt)}">${escapeHtml(crt || '-')}</td>
-          </tr>`
-        })
-        .join('')
-    }
-
-    initTableSorting(view)
-
-    const btnNova = view.querySelector('#btnNovaRegra')
-    if (btnNova) {
-      btnNova.onclick = () => {
-        window.location.hash = '#/regras-destino?new=1'
-      }
-    }
-
-    const btnRecalcAll = view.querySelector('#btnRecalcAll')
-    if (btnRecalcAll) {
-      btnRecalcAll.onclick = () => {
-        const safraOptions2 = [{ value: '', label: 'Todas' }, ...cache.safras.map((s) => ({ value: s.id, label: s.safra }))]
-        const destinoOptions2 = [{ value: '', label: 'Todos' }, ...cache.destinos.map((d) => ({ value: d.id, label: d.local }))]
-        const plantioOptions2 = [{ value: '', label: 'Todos' }, ...cache.tiposPlantio.map((p) => ({ value: p.nome, label: p.nome }))]
-
+    await renderCrudPage({
+      route: 'regras-destino',
+      title: 'Regras do destino',
+      subtitle: 'Regras por safra + destino + plantio. Edite para configurar tabelas.',
+      fetchPath: '/api/destino-regras/plantio',
+      items: rules,
+      columns: [
+        { key: 'id', label: 'Item' },
+        { key: 'safra_nome', label: 'Safra' },
+        { key: 'destino_local', label: 'Destino' },
+        {
+          key: 'tipo_plantio',
+          label: 'Plantio',
+          html: true,
+          format: (v) => `<code class="mono">${escapeHtml(String(v || ''))}</code>`,
+        },
+        { key: 'updated_at', label: 'Alteração' },
+        { key: 'created_at', label: 'Criação' },
+      ],
+      addLabel: 'Nova regra',
+      headerActions: [{ act: 'recalc-all', label: 'Recalcular colheitas', className: 'ghost' }],
+      onHeaderAction: async (act) => {
+        if (act !== 'recalc-all') return
         openDialog({
           title: 'Recalcular colheitas',
           submitLabel: 'Recalcular',
           bodyHtml: `
-            <div class="hint">Recalcula todos os lancamentos no banco com base nas regras atuais (umidade/limites/custos/frete/contrato). Pode levar alguns segundos.</div>
+            <div class="hint">Recalcula todos os lançamentos no banco com base nas regras atuais (umidade/limites/custos/frete/contrato). Pode levar alguns segundos.</div>
             <div class="form-grid" style="margin-top:12px">
               ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions2, value: '', span: 'col4' })}
               ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions2, value: '', span: 'col4' })}
@@ -2604,13 +2611,13 @@ async function renderRegrasDestino() {
             const msg = `Total: ${r.total} | Atualizadas: ${r.updated} | Ignoradas: ${r.skipped}`
             if (Number(r.errors_count || 0) > 0) {
               openDialog({
-                title: 'Recalculo concluido (com erros)',
+                title: 'Recalculo concluído (com erros)',
                 submitLabel: 'Fechar',
                 bodyHtml: `
                   <div>${escapeHtml(msg)}</div>
                   <div class="hint" style="margin-top:10px">Primeiros erros:</div>
                   <div class="table-wrap" style="margin-top:8px">
-                    <table>
+                    <table class="grid-table">
                       <thead><tr><th>ID</th><th>Ficha</th><th>Safra</th><th>Destino</th><th>Plantio</th><th>Erro</th></tr></thead>
                       <tbody>
                         ${(Array.isArray(r.errors) ? r.errors : [])
@@ -2634,27 +2641,20 @@ async function renderRegrasDestino() {
             toast('OK', msg)
           },
         })
-      }
-    }
-
-    view.querySelectorAll('button[data-act="edit"]').forEach((b) => {
-      b.onclick = () => {
-        const id = Number(b.dataset.id)
-        const r = (rules || []).find((x) => Number(x.id) === id)
+      },
+      showDefaultHint: false,
+      onCreate: () => {
+        window.location.hash = '#/regras-destino?new=1'
+      },
+      onEdit: (r) => {
         if (!r) return
-        const qp = new URLSearchParams({
-          edit_id: String(id),
-        })
+        const id = Number(r.id)
+        const qp = new URLSearchParams({ edit_id: String(id) })
         window.location.hash = `#/regras-destino?${qp.toString()}`
-      }
-    })
-
-    view.querySelectorAll('button[data-act="del"]').forEach((b) => {
-      b.onclick = async () => {
-        const id = Number(b.dataset.id)
-        const r = (rules || []).find((x) => Number(x.id) === id)
+      },
+      onDelete: async (r) => {
         if (!r) return
-
+        const id = Number(r.id)
         const msg = `Excluir a regra?\n\nSafra: ${r.safra_nome}\nDestino: ${r.destino_local}\nPlantio: ${r.tipo_plantio}`
         if (!(await confirmAction(msg, { title: 'Confirmar', confirmLabel: 'Excluir' }))) return
 
@@ -2664,7 +2664,7 @@ async function renderRegrasDestino() {
           renderRegrasDestino()
         } catch (e) {
           if (e?.details?.used_count) {
-            const msg2 = `Esta regra ja foi usada na colheita (${e.details.used_count} registros).\n\nExcluir nao apaga as colheitas, mas pode afetar preview/indicadores.\n\nExcluir mesmo assim?`
+            const msg2 = `Esta regra já foi usada na colheita (${e.details.used_count} registros).\n\nExcluir não apaga as colheitas, mas pode afetar preview/indicadores.\n\nExcluir mesmo assim?`
             if (!(await confirmAction(msg2, { title: 'Atenção', confirmLabel: 'Excluir mesmo assim' }))) return
             await api(`/api/destino-regras/plantio/${id}?force=1`, { method: 'DELETE' })
             toast('Excluído', 'Regra removida.')
@@ -2673,7 +2673,7 @@ async function renderRegrasDestino() {
           }
           throw e
         }
-      }
+      },
     })
 
     return
@@ -3656,9 +3656,9 @@ async function renderColheitaBase(variant) {
         : ''
 
       const actionCell = isChild
-        ? `<td class="actions">${toggleBtn}<button class="btn small ghost" data-act="edit" data-id="${v.id}" data-rateio-index="${v.rateio_index}">Editar</button></td>`
-        : `<td class="actions">${toggleBtn}<button class="btn small ghost" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''}>Editar</button>
-            <button class="btn small danger" data-act="del" data-id="${v.id}">Excluir</button>
+        ? `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" data-rateio-index="${v.rateio_index}" title="Editar" aria-label="Editar">${iconSvg('edit')}</button></td>`
+        : `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button>
+            <button class="icon-btn danger" data-act="del" data-id="${v.id}" title="Excluir" aria-label="Excluir">${iconSvg('trash')}</button>
           </td>`
 
       const childAttrs = isChild ? ` data-parent="${v.id}" style="${expanded.has(v.id) ? '' : 'display:none'}"` : ''
@@ -6000,23 +6000,23 @@ async function renderQuitacaoMotoristas() {
             <div class="stat-h">Frete - Quitado</div>
           </div>
 
-          <div class="span12">
-            <div class="table-wrap">
-              <table>
+           <div class="span12">
+             <div class="table-wrap">
+              <table class="grid-table">
                 <thead>
-                  <tr><th class="actions"></th><th>Motorista</th><th>Qtd</th><th>Frete</th><th>Quitado</th><th>Falta</th></tr>
+                  <tr><th class="actions">Ações</th><th>Motorista</th><th class="t-right">Qtd</th><th class="t-right">Frete</th><th class="t-right">Quitado</th><th class="t-right">Falta</th></tr>
                 </thead>
                 <tbody id="qBody"><tr><td colspan="6">Carregando...</td></tr></tbody>
               </table>
             </div>
           </div>
 
-          <div class="span12">
-            <div class="table-wrap">
-              <table>
+           <div class="span12">
+             <div class="table-wrap">
+              <table class="grid-table">
                 <thead>
                   <tr><th colspan="7">Lancamentos de quitacao no periodo</th></tr>
-                  <tr><th class="actions"></th><th>Data</th><th>Motorista</th><th>Periodo</th><th>Valor</th><th>Forma</th><th>Obs</th></tr>
+                  <tr><th class="actions">Ações</th><th>Data</th><th>Motorista</th><th>Período</th><th class="t-right">Valor</th><th>Forma</th><th>Obs</th></tr>
                 </thead>
                 <tbody id="qLanc"><tr><td colspan="7">Carregando...</td></tr></tbody>
               </table>
@@ -6057,12 +6057,12 @@ async function renderQuitacaoMotoristas() {
             : `<span class="pill"><span class="dot warn"></span><span>${escapeHtml(fmtMoney(falta))}</span></span>`
 
         return `<tr>
-          <td><button class="btn small" data-act="pay" data-id="${it.motorista_id}" data-nome="${escapeHtml(it.motorista_nome)}" data-falta="${escapeHtml(String(falta))}">Registrar</button></td>
+          <td class="actions"><button class="act-btn" data-act="pay" data-id="${it.motorista_id}" data-nome="${escapeHtml(it.motorista_nome)}" data-falta="${escapeHtml(String(falta))}" title="Registrar" aria-label="Registrar">${iconSvg('edit')}<span>Registrar</span></button></td>
           <td data-sort="${escapeHtml(String(it.motorista_nome || '').trim())}">${escapeHtml(it.motorista_nome)}${it.motorista_placa ? ` <span class="hint">(${escapeHtml(it.motorista_placa)})</span>` : ''}</td>
-          <td>${escapeHtml(String(it.quantidade || 0))}</td>
-          <td>${escapeHtml(fmtMoney(it.valor_frete))}</td>
-          <td>${escapeHtml(fmtMoney(it.valor_pago))}</td>
-          <td>${faltaBadge}</td>
+          <td class="t-right">${escapeHtml(String(it.quantidade || 0))}</td>
+          <td class="t-right">${escapeHtml(fmtMoney(it.valor_frete))}</td>
+          <td class="t-right">${escapeHtml(fmtMoney(it.valor_pago))}</td>
+          <td class="t-right">${faltaBadge}</td>
         </tr>`
       })
       .join('')
@@ -6071,13 +6071,13 @@ async function renderQuitacaoMotoristas() {
       .map((q) => {
         return `<tr>
           <td class="actions">
-            <button class="btn small ghost" data-act="qedit" data-id="${q.id}">Editar</button>
-            <button class="btn small danger" data-act="qdel" data-id="${q.id}">Excluir</button>
+            <button class="act-btn" data-act="qedit" data-id="${q.id}" title="Editar" aria-label="Editar">${iconSvg('edit')}<span>Editar</span></button>
+            <button class="act-btn danger" data-act="qdel" data-id="${q.id}" title="Excluir" aria-label="Excluir">${iconSvg('trash')}<span>Excluir</span></button>
           </td>
           <td>${escapeHtml(q.data_pagamento)}</td>
           <td data-sort="${escapeHtml(String(q.motorista_nome || '').trim())}">${escapeHtml(q.motorista_nome)}${q.motorista_placa ? ` <span class="hint">(${escapeHtml(q.motorista_placa)})</span>` : ''}</td>
           <td>${escapeHtml(q.de)} a ${escapeHtml(q.ate)}</td>
-          <td>${escapeHtml(fmtMoney(q.valor))}</td>
+          <td class="t-right">${escapeHtml(fmtMoney(q.valor))}</td>
           <td>${escapeHtml(q.forma_pagamento || '')}</td>
           <td>${escapeHtml(q.observacoes || '')}</td>
         </tr>`
