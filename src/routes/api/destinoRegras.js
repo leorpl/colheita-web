@@ -11,39 +11,7 @@ import { S, DestinoRegrasSchemas } from '../../validation/apiSchemas.js'
 
 export const destinoRegrasRouter = Router()
 
-function normalizeCompraFaixasWithContrato({ compra_faixas, contrato_sacas, preco_padrao }) {
-  const c = Number(contrato_sacas)
-  if (!Number.isFinite(c) || c <= 0) return compra_faixas
-
-  const faixas = Array.isArray(compra_faixas) ? [...compra_faixas] : []
-
-  // Se nao vier tabela, cria 2 faixas (contrato e pos-contrato) com o preco informado.
-  if (!faixas.length) {
-    const p = Number(preco_padrao || 0)
-    return [
-      { sacas_gt: 0, sacas_lte: c, preco_por_saca: p },
-      { sacas_gt: c, sacas_lte: null, preco_por_saca: p },
-    ]
-  }
-
-  // Caso comum: 1 faixa "0 .. (sem limite)".
-  // Se existir contrato, fecha a primeira em contrato e cria a faixa pos-contrato.
-  if (faixas.length === 1) {
-    const f0 = faixas[0]
-    const gt0 = Number(f0?.sacas_gt || 0)
-    const lte0 = f0?.sacas_lte === null || f0?.sacas_lte === undefined ? null : Number(f0.sacas_lte)
-    const p0 = Number(f0?.preco_por_saca || 0)
-
-    if (Number.isFinite(gt0) && gt0 <= 0 && (lte0 === null || !Number.isFinite(lte0))) {
-      return [
-        { sacas_gt: 0, sacas_lte: c, preco_por_saca: p0 },
-        { sacas_gt: c, sacas_lte: null, preco_por_saca: p0 },
-      ]
-    }
-  }
-
-  return faixas
-}
+// compra por faixas removida (somente contrato)
 
 const ListQuery = DestinoRegrasSchemas.ListQuery
 
@@ -119,8 +87,25 @@ destinoRegrasRouter.get(
     const regra = destinoRegraRepo.getPlantioById(id)
     if (!regra) throw notFound('Regra (plantio) nao encontrada')
     const faixas = destinoRegraRepo.getUmidadeFaixasPlantio(regra.id)
-    const compra_faixas = destinoRegraRepo.getCompraFaixasPlantio(regra.id)
-    res.json({ ...regra, umidade_faixas: faixas, compra_faixas })
+
+    // Bloqueio de edicao: se a regra ja foi usada em colheitas,
+    // nao permitir alterar para evitar efeitos retroativos.
+    const used = db
+      .prepare(
+        `SELECT COUNT(*) as c
+         FROM viagem v
+         JOIN safra s ON s.id = v.safra_id
+         WHERE v.safra_id=@safra_id
+           AND v.destino_id=@destino_id
+           AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio`,
+      )
+      .get({
+        safra_id: regra.safra_id,
+        destino_id: regra.destino_id,
+        tipo_plantio: String(regra.tipo_plantio || '').trim().toUpperCase(),
+      })?.c
+
+    res.json({ ...regra, umidade_faixas: faixas, used_count: Number(used || 0) })
   },
 )
 
@@ -134,11 +119,56 @@ destinoRegrasRouter.post(
   const body = req.body
   const tipo_plantio = String(body.tipo_plantio || '').trim().toUpperCase()
 
+  // Se ja existe regra para esta combinacao e ela ja foi usada em colheitas,
+  // bloquear alteracao (upsert atualizaria retroativamente).
+  const existing = destinoRegraRepo.getBySafraDestinoPlantio({
+    safra_id: body.safra_id,
+    destino_id: body.destino_id,
+    tipo_plantio,
+  })
+  if (existing) {
+    const used = db
+      .prepare(
+        `SELECT COUNT(*) as c
+         FROM viagem v
+         JOIN safra s ON s.id = v.safra_id
+         WHERE v.safra_id=@safra_id
+           AND v.destino_id=@destino_id
+           AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio`,
+      )
+      .get({
+        safra_id: body.safra_id,
+        destino_id: body.destino_id,
+        tipo_plantio,
+      })?.c
+
+    if (Number(used || 0) > 0) {
+      throw conflict(
+        'Esta regra de destino ja esta sendo utilizada em registros de colheita.\nAlteracoes podem comprometer calculos historicos (ex.: umidade, descontos e limites).',
+        {
+          code: 'REGRA_DESTINO_EM_USO',
+          used_count: Number(used || 0),
+          safra_id: body.safra_id,
+          destino_id: body.destino_id,
+          tipo_plantio,
+          orientacao: [
+            'Corrigir os registros de colheita vinculados.',
+            'Ou criar uma nova regra de destino.',
+            'Ou copiar a safra para uma nova versao e ajustar os registros.',
+          ],
+          fluxo_seguro: [
+            'Criar copia da safra com outro nome',
+            'Ajustar as regras de destino da nova safra',
+            'Alterar os registros de colheita para apontar para a nova safra/regra',
+          ],
+        },
+      )
+    }
+  }
+
   const base = {
     safra_id: body.safra_id,
     destino_id: body.destino_id,
-    trava_sacas: body.trava_sacas ?? null,
-    valor_compra_por_saca: Number(body.valor_compra_por_saca ?? 120),
     custo_silo_por_saca: Number(body.custo_silo_por_saca || 0),
     custo_terceiros_por_saca: Number(body.custo_terceiros_por_saca || 0),
     impureza_limite_pct: normalizePercent100(
@@ -179,27 +209,8 @@ destinoRegrasRouter.post(
     destinoRegraRepo.replaceUmidadeFaixasPlantio(regra.id, faixasNorm)
   }
 
-  if (body.compra_faixas) {
-    let faixasNorm = body.compra_faixas
-      .map((f) => ({
-        sacas_gt: Number(f.sacas_gt || 0),
-        sacas_lte: f.sacas_lte === null || f.sacas_lte === undefined ? null : Number(f.sacas_lte),
-        preco_por_saca: Number(f.preco_por_saca || 0),
-      }))
-      .filter((f) => Number.isFinite(f.sacas_gt) && Number.isFinite(f.preco_por_saca))
-
-    faixasNorm = normalizeCompraFaixasWithContrato({
-      compra_faixas: faixasNorm,
-      contrato_sacas: base.trava_sacas,
-      preco_padrao: base.valor_compra_por_saca,
-    })
-
-    destinoRegraRepo.replaceCompraFaixasPlantio(regra.id, faixasNorm)
-  }
-
   const faixas = destinoRegraRepo.getUmidadeFaixasPlantio(regra.id)
-  const compra_faixas = destinoRegraRepo.getCompraFaixasPlantio(regra.id)
-  res.status(201).json({ ...regra, umidade_faixas: faixas, compra_faixas })
+  res.status(201).json({ ...regra, umidade_faixas: faixas })
   },
 )
 
@@ -217,6 +228,47 @@ destinoRegrasRouter.put(
 
     const exists = destinoRegraRepo.getPlantioById(id)
     if (!exists) throw notFound('Regra (plantio) nao encontrada')
+
+    // Regra obrigatoria: se ja existe qualquer colheita vinculada a esta regra,
+    // bloquear edicao para evitar alteracao retroativa.
+    const used = db
+      .prepare(
+        `SELECT COUNT(*) as c
+         FROM viagem v
+         JOIN safra s ON s.id = v.safra_id
+         WHERE v.safra_id=@safra_id
+           AND v.destino_id=@destino_id
+           AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio
+           AND v.id IS NOT NULL`,
+      )
+      .get({
+        safra_id: exists.safra_id,
+        destino_id: exists.destino_id,
+        tipo_plantio: String(exists.tipo_plantio || '').trim().toUpperCase(),
+      })?.c
+
+    if (Number(used || 0) > 0) {
+      throw conflict(
+        'Esta regra de destino ja esta sendo utilizada em registros de colheita.\nAlteracoes podem comprometer calculos historicos (ex.: umidade, descontos e limites).',
+        {
+          code: 'REGRA_DESTINO_EM_USO',
+          used_count: Number(used || 0),
+          safra_id: exists.safra_id,
+          destino_id: exists.destino_id,
+          tipo_plantio: String(exists.tipo_plantio || '').trim().toUpperCase(),
+          orientacao: [
+            'Corrigir os registros de colheita vinculados.',
+            'Ou criar uma nova regra de destino.',
+            'Ou copiar a safra para uma nova versao e ajustar os registros.',
+          ],
+          fluxo_seguro: [
+            'Criar copia da safra com outro nome',
+            'Ajustar as regras de destino da nova safra',
+            'Alterar os registros de colheita para apontar para a nova safra/regra',
+          ],
+        },
+      )
+    }
 
     // conflito de identidade (duplicacao)
     const other = db
@@ -245,8 +297,6 @@ destinoRegrasRouter.put(
     const base = {
       safra_id: body.safra_id,
       destino_id: body.destino_id,
-      trava_sacas: body.trava_sacas ?? null,
-      valor_compra_por_saca: Number(body.valor_compra_por_saca ?? 120),
       custo_silo_por_saca: Number(body.custo_silo_por_saca || 0),
       custo_terceiros_por_saca: Number(body.custo_terceiros_por_saca || 0),
       impureza_limite_pct: normalizePercent100(
@@ -288,31 +338,9 @@ destinoRegrasRouter.put(
         destinoRegraRepo.replaceUmidadeFaixasPlantio(Number(id), faixasNorm)
       }
 
-      if (body.compra_faixas) {
-        let faixasNorm = body.compra_faixas
-          .map((f) => ({
-            sacas_gt: Number(f.sacas_gt || 0),
-            sacas_lte:
-              f.sacas_lte === null || f.sacas_lte === undefined
-                ? null
-                : Number(f.sacas_lte),
-            preco_por_saca: Number(f.preco_por_saca || 0),
-          }))
-          .filter((f) => Number.isFinite(f.sacas_gt) && Number.isFinite(f.preco_por_saca))
-
-        faixasNorm = normalizeCompraFaixasWithContrato({
-          compra_faixas: faixasNorm,
-          contrato_sacas: base.trava_sacas,
-          preco_padrao: base.valor_compra_por_saca,
-        })
-
-        destinoRegraRepo.replaceCompraFaixasPlantio(Number(id), faixasNorm)
-      }
-
       const regra2 = destinoRegraRepo.getPlantioById(id)
       const faixas2 = destinoRegraRepo.getUmidadeFaixasPlantio(Number(id))
-      const compra2 = destinoRegraRepo.getCompraFaixasPlantio(Number(id))
-      return { ...regra2, umidade_faixas: faixas2, compra_faixas: compra2 }
+      return { ...regra2, umidade_faixas: faixas2 }
     })
 
     res.json(tx())
@@ -337,8 +365,6 @@ destinoRegrasRouter.get(
   if (!regra) return res.json(null)
 
   const faixas = destinoRegraRepo.getUmidadeFaixasPlantio(regra.id)
-  const compra_faixas = destinoRegraRepo.getCompraFaixasPlantio(regra.id)
-
-    res.json({ ...regra, umidade_faixas: faixas, compra_faixas })
+    res.json({ ...regra, umidade_faixas: faixas })
   },
 )

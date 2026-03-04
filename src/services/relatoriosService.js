@@ -237,20 +237,26 @@ export const relatoriosService = {
            d.id as destino_id,
            d.codigo as destino_codigo,
            d.local as destino_local,
-           r.trava_sacas as trava_sacas,
+           c.sacas_contratadas as trava_sacas,
            d.distancia_km as distancia_km,
            COALESCE(SUM(v.sacas), 0) as entrega_sacas,
            COALESCE(SUM(v.peso_limpo_seco_kg), 0) as peso_limpo_seco_kg
          FROM destino d
          LEFT JOIN (
-           SELECT destino_id, MAX(trava_sacas) as trava_sacas
-           FROM destino_regra_plantio
-           WHERE safra_id = @safra_id
-             AND (@tipo_plantio = '' OR tipo_plantio = @tipo_plantio)
-           GROUP BY destino_id
-         ) r ON r.destino_id = d.id
+           SELECT
+             c.destino_id,
+             c.safra_id,
+             c.tipo_plantio,
+             SUM(f.sacas) as sacas_contratadas
+           FROM contrato_silo c
+           JOIN contrato_silo_faixa f ON f.contrato_silo_id = c.id
+           GROUP BY c.destino_id, c.safra_id, c.tipo_plantio
+         ) c
+           ON c.destino_id = d.id
+          AND c.safra_id = @safra_id
+          AND (@tipo_plantio = '' OR c.tipo_plantio = @tipo_plantio)
          LEFT JOIN viagem v ON v.destino_id = d.id AND v.safra_id = @safra_id
-         GROUP BY d.id, r.trava_sacas
+         GROUP BY d.id, c.sacas_contratadas
          ORDER BY d.local`,
       )
       .all({ safra_id, tipo_plantio: tp })

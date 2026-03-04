@@ -7,6 +7,7 @@ import { conflict, unprocessable } from '../errors.js'
 import { normalizePercent100, round } from '../domain/normalize.js'
 import { db } from '../db/db.js'
 import { destinoRegraRepo } from '../repositories/destinoRegraRepo.js'
+import { contratoSiloRepo } from '../repositories/contratoSiloRepo.js'
 
 function toDbNumber(value, fieldName) {
   const n = Number(value)
@@ -415,11 +416,6 @@ export const viagemService = {
     const frete_por_saca =
       calc.sacas > 0 ? round(calc.sub_total_frete / calc.sacas, 6) : 0
 
-    function getCompraFaixas(regraPlantioId) {
-      if (!regraPlantioId) return []
-      return destinoRegraRepo.getCompraFaixasPlantio(regraPlantioId)
-    }
-
     function getEntregaAntesSacas() {
       // Ordenacao da colheita: data_saida + hora_saida + id
       // Se nao tiver data_saida, considera que entra por ultimo.
@@ -480,98 +476,88 @@ export const viagemService = {
       return Number(row?.entrega || 0)
     }
 
-    function computeCompraByFaixas({ entregueAntes, sacas, faixas }) {
+    const entregaAntes = regra ? getEntregaAntesSacas() : 0
+
+    function computeContratoByFaixas({ entregueAntes, sacas, faixas }) {
       const qty = Number(sacas || 0)
-      if (!Number.isFinite(qty) || qty <= 0) {
-        return {
-          entregueAntes: Number(entregueAntes || 0),
-          entregueDepois: Number(entregueAntes || 0),
-          precoMedio: 0,
-          total: 0,
-          detalhes: [],
-        }
-      }
-
-      const sorted = [...(faixas || [])]
-        .map((f) => ({
-          sacas_gt: Number(f.sacas_gt || 0),
-          sacas_lte:
-            f.sacas_lte === null || f.sacas_lte === undefined
-              ? null
-              : Number(f.sacas_lte),
-          preco_por_saca: Number(f.preco_por_saca || 0),
-        }))
-        .filter((f) => Number.isFinite(f.sacas_gt) && Number.isFinite(f.preco_por_saca))
-        .sort((a, b) => {
-          if (a.sacas_gt !== b.sacas_gt) return a.sacas_gt - b.sacas_gt
-          const ae = a.sacas_lte === null ? 1e18 : a.sacas_lte
-          const be = b.sacas_lte === null ? 1e18 : b.sacas_lte
-          return ae - be
-        })
-
-      // fallback (nunca deixa vazio)
-      if (!sorted.length) {
-        sorted.push({ sacas_gt: 0, sacas_lte: null, preco_por_saca: 0 })
-      }
-
       const start = Number(entregueAntes || 0)
+      if (!Number.isFinite(qty) || qty <= 0) {
+        return { dentro_sacas: 0, fora_sacas: 0, total: 0, detalhes: [], contrato_total: 0 }
+      }
+
+      const list = Array.isArray(faixas) ? faixas : []
+      const norm = list
+        .map((f) => ({
+          sacas: Number(f?.sacas || 0),
+          preco_por_saca: Number(f?.preco_por_saca || 0),
+        }))
+        .filter((f) => Number.isFinite(f.sacas) && f.sacas > 0 && Number.isFinite(f.preco_por_saca) && f.preco_por_saca >= 0)
+
+      if (!norm.length) {
+        return { dentro_sacas: 0, fora_sacas: qty, total: 0, detalhes: [], contrato_total: 0 }
+      }
+
+      // build cumulative ranges
+      let acc = 0
+      const ranges = norm.map((f) => {
+        const from = acc
+        acc += f.sacas
+        return { from, to: acc, preco_por_saca: f.preco_por_saca }
+      })
+      const contrato_total = acc
+
       const end = start + qty
       let total = 0
+      let dentro = 0
       const detalhes = []
-
-      for (const f of sorted) {
-        const faixaIni = Number(f.sacas_gt || 0)
-        const faixaFim = f.sacas_lte === null ? Infinity : Number(f.sacas_lte)
-        const ini = Math.max(start, faixaIni)
-        const fim = Math.min(end, faixaFim)
+      for (const r of ranges) {
+        const ini = Math.max(start, r.from)
+        const fim = Math.min(end, r.to)
         const q = Math.max(0, fim - ini)
         if (q <= 0) continue
-        total += q * Number(f.preco_por_saca || 0)
+        dentro += q
+        total += q * r.preco_por_saca
         detalhes.push({
           de_acumulado: ini,
           ate_acumulado: fim,
           sacas: round(q, 6),
-          preco_por_saca: round(Number(f.preco_por_saca || 0), 6),
+          preco_por_saca: round(Number(r.preco_por_saca || 0), 6),
         })
       }
 
-      // Se ficou algum "buraco" (faixas mal definidas), usa o ultimo preco
-      const somaDetalhes = detalhes.reduce((a, x) => a + Number(x.sacas || 0), 0)
-      const falta = Math.max(0, qty - somaDetalhes)
-      if (falta > 0) {
-        const last = sorted[sorted.length - 1]
-        total += falta * Number(last.preco_por_saca || 0)
-        detalhes.push({
-          de_acumulado: end - falta,
-          ate_acumulado: end,
-          sacas: round(falta, 6),
-          preco_por_saca: round(Number(last.preco_por_saca || 0), 6),
-        })
-      }
-
-      const precoMedio = qty > 0 ? total / qty : 0
+      const fora = Math.max(0, qty - dentro)
       return {
-        entregueAntes: round(start, 6),
-        entregueDepois: round(end, 6),
-        precoMedio: round(precoMedio, 6),
+        dentro_sacas: round(dentro, 6),
+        fora_sacas: round(fora, 6),
         total: round(total, 6),
         detalhes,
+        contrato_total,
       }
     }
 
-    const compra_faixas_db = regra ? getCompraFaixas(regra.id) : []
-    const compra_faixas = compra_faixas_db.length
-      ? compra_faixas_db
-      : regra
-        ? [{ sacas_gt: 0, sacas_lte: null, preco_por_saca: Number(regra.valor_compra_por_saca ?? 120) }]
-        : []
+    // Contrato de venda futura (trava): uma ou mais faixas (quantidade + preco travado)
+    const contrato = contratoSiloRepo.getOne({
+      safra_id: payload.safra_id,
+      destino_id: payload.destino_id,
+      tipo_plantio: payload.tipo_plantio,
+    })
 
-    const entregaAntes = regra ? getEntregaAntesSacas() : 0
-    const compraCalc = regra
-      ? computeCompraByFaixas({ entregueAntes: entregaAntes, sacas: calc.sacas, faixas: compra_faixas })
-      : { entregueAntes: null, entregueDepois: null, precoMedio: null, total: null, detalhes: [] }
+    const contratoFaixas = Array.isArray(contrato?.faixas) ? contrato.faixas : []
+    const contratoCalc = computeContratoByFaixas({
+      entregueAntes: entregaAntes,
+      sacas: calc.sacas,
+      faixas: contratoFaixas,
+    })
 
-    const valor_compra_por_saca = regra ? compraCalc.precoMedio : null
+    // Regra de negocio: preco vem somente do contrato.
+    // Se exceder contrato, nao calcula compra (e o salvar deve ser bloqueado em create/update).
+    const contratoExcedido = Number(contratoCalc.fora_sacas || 0) > 0
+    const compraTotal =
+      regra && !contratoExcedido ? round(Number(contratoCalc.total || 0), 6) : null
+    const valor_compra_por_saca =
+      regra && !contratoExcedido && calc.sacas > 0
+        ? round(compraTotal / calc.sacas, 6)
+        : null
 
     const despesas_silo_por_saca = round(
       (secagem_custo_por_saca || 0) + (custo_silo_por_saca || 0) + frete_por_saca,
@@ -641,11 +627,26 @@ export const viagemService = {
       // Venda (comparativo): usa valor de compra no silo e mostra o preco equivalente para terceiros
       valor_compra_por_saca,
       valor_compra_por_saca_aplicado: valor_compra_por_saca,
-      valor_compra_total: regra ? compraCalc.total : null,
-      valor_compra_detalhe_json: regra ? JSON.stringify(compraCalc.detalhes) : null,
-      valor_compra_entrega_antes: regra ? compraCalc.entregueAntes : null,
-      valor_compra_entrega_depois: regra ? compraCalc.entregueDepois : null,
-      valor_compra_detalhes: regra ? compraCalc.detalhes : [],
+      valor_compra_total: regra ? compraTotal : null,
+      valor_compra_detalhe_json: regra
+        ? JSON.stringify({
+            contrato: contrato
+              ? {
+                  sacas_total: round(Number(contratoCalc.contrato_total || 0), 6),
+                  entregue_antes: round(entregaAntes, 6),
+                  dentro_sacas: round(Number(contratoCalc.dentro_sacas || 0), 6),
+                  fora_sacas: round(Number(contratoCalc.fora_sacas || 0), 6),
+                  faixas: contratoFaixas,
+                }
+              : null,
+            fora_contrato_faixas: [],
+          })
+        : null,
+      valor_compra_entrega_antes: regra ? round(entregaAntes, 6) : null,
+      valor_compra_entrega_depois: regra ? round(entregaAntes + calc.sacas, 6) : null,
+      valor_compra_detalhes: regra
+        ? [...contratoCalc.detalhes.map((d) => ({ kind: 'contrato', ...d }))]
+        : [],
       frete_por_saca,
       despesas_silo_por_saca,
       despesas_terceiros_por_saca,
@@ -658,7 +659,7 @@ export const viagemService = {
       destino_regra_existe,
       umidade_faixas_qtd,
       umidade_origem,
-      trava_sacas: regra?.trava_sacas ?? null,
+      trava_sacas: contrato ? Number(contratoCalc.contrato_total || 0) : null,
       limites_origem,
     }
   },
@@ -675,16 +676,11 @@ export const viagemService = {
     if (!destino) throw unprocessable('Destino inexistente')
 
     const tp = String(tipo_plantio || '').trim().toUpperCase()
-    const regra = destinoRegraRepo.getBySafraDestinoPlantio({
-      safra_id,
-      destino_id,
-      tipo_plantio: tp,
-    })
-
-    // Regra de negocio (contrato): "trava_sacas" representa o volume contratado (sacas).
-    // Ate este volume, aplica-se o preco/condicao negociado. Acima, entra em regime "fora do contrato".
-    const contrato_sacas_raw = regra?.trava_sacas ?? null
-    if (contrato_sacas_raw === null || contrato_sacas_raw === undefined) return null
+    const contrato = contratoSiloRepo.getOne({ safra_id, destino_id, tipo_plantio: tp })
+    if (!contrato) return null
+    const faixas = Array.isArray(contrato.faixas) ? contrato.faixas : []
+    const contrato_total = faixas.reduce((a, f) => a + Number(f?.sacas || 0), 0)
+    const contrato_sacas_raw = contrato_total
 
     const whereExtra = exclude_id ? ' AND v.id <> @exclude_id' : ''
     const row = db
@@ -745,6 +741,15 @@ export const viagemService = {
       tipo_plantio: payload.tipo_plantio,
       sacas: payload.sacas,
     })
+
+    if (trava && Number(trava.fora_contrato_sacas || 0) > 0) {
+      throw conflict('Entrega excede o contrato. Cadastre mais sacas no contrato antes de salvar.', {
+        fora_contrato_sacas: trava.fora_contrato_sacas,
+        dentro_contrato_sacas: trava.dentro_contrato_sacas,
+        contrato_sacas: trava.contrato_sacas,
+        entrega_atual_sacas: trava.entrega_atual_sacas,
+      })
+    }
     try {
       const tx = db.transaction(() => {
         const row = viagemRepo.create(payload)
@@ -785,6 +790,15 @@ export const viagemService = {
       exclude_id: id,
     })
 
+    if (trava && Number(trava.fora_contrato_sacas || 0) > 0) {
+      throw conflict('Entrega excede o contrato. Cadastre mais sacas no contrato antes de salvar.', {
+        fora_contrato_sacas: trava.fora_contrato_sacas,
+        dentro_contrato_sacas: trava.dentro_contrato_sacas,
+        contrato_sacas: trava.contrato_sacas,
+        entrega_atual_sacas: trava.entrega_atual_sacas,
+      })
+    }
+
     try {
       const tx = db.transaction(() => {
         viagemRepo.update(id, payload)
@@ -808,131 +822,30 @@ export const viagemService = {
     }
   },
 
-  recalcularPrecosCompraSilo({ safra_id, destino_id, tipo_plantio }) {
-    const sid = Number(safra_id)
-    const did = Number(destino_id)
-    const tp = String(tipo_plantio || '').trim().toUpperCase()
-    if (!Number.isInteger(sid) || sid <= 0) throw unprocessable('safra_id invalido')
-    if (!Number.isInteger(did) || did <= 0) throw unprocessable('destino_id invalido')
-    if (!tp) throw unprocessable('tipo_plantio obrigatorio')
+  // Recalcula os campos materializados das colheitas (viagens) usando as regras atuais.
+  // Observacao: preserva os valores informados pelo usuario (pesos/percentuais e umidade_desc_pct_manual),
+  // e re-aplica regras/contratos/fretes para re-materializar sacas, descontos, custos e compra.
+  recalcularTodas({ safra_id, destino_id, tipo_plantio } = {}) {
+    const sid = safra_id === null || safra_id === undefined || safra_id === '' ? null : Number(safra_id)
+    const did = destino_id === null || destino_id === undefined || destino_id === '' ? null : Number(destino_id)
+    const tp = tipo_plantio === null || tipo_plantio === undefined ? null : String(tipo_plantio || '').trim().toUpperCase()
 
-    const regra = destinoRegraRepo.getBySafraDestinoPlantio({
-      safra_id: sid,
-      destino_id: did,
-      tipo_plantio: tp,
-    })
-    if (!regra) {
-      throw unprocessable('Nao existe regra para (safra, destino, tipo_plantio)')
-    }
+    if (sid !== null && (!Number.isInteger(sid) || sid <= 0)) throw unprocessable('safra_id invalido')
+    if (did !== null && (!Number.isInteger(did) || did <= 0)) throw unprocessable('destino_id invalido')
+    if (tp !== null && !tp) throw unprocessable('tipo_plantio invalido')
 
-    const faixasDb = destinoRegraRepo.getCompraFaixasPlantio(regra.id) || []
-    const faixas = (faixasDb.length
-      ? faixasDb
-      : [
-          {
-            sacas_gt: 0,
-            sacas_lte: null,
-            preco_por_saca: Number(regra.valor_compra_por_saca ?? 120),
-          },
-        ]
-    )
-      .map((f) => ({
-        sacas_gt: Number(f.sacas_gt || 0),
-        sacas_lte:
-          f.sacas_lte === null || f.sacas_lte === undefined
-            ? null
-            : Number(f.sacas_lte),
-        preco_por_saca: Number(f.preco_por_saca || 0),
-      }))
-      .filter((f) => Number.isFinite(f.sacas_gt) && Number.isFinite(f.preco_por_saca))
-      .sort((a, b) => {
-        if (a.sacas_gt !== b.sacas_gt) return a.sacas_gt - b.sacas_gt
-        const ae = a.sacas_lte === null ? 1e18 : a.sacas_lte
-        const be = b.sacas_lte === null ? 1e18 : b.sacas_lte
-        return ae - be
-      })
-
-    function computeCompraByFaixas({ entregueAntes, sacas }) {
-      const qty = Number(sacas || 0)
-      const start = Number(entregueAntes || 0)
-      if (!Number.isFinite(qty) || qty <= 0) {
-        return { entregueAntes: start, entregueDepois: start, precoMedio: 0, total: 0, detalhes: [] }
-      }
-
-      const end = start + qty
-      let total = 0
-      const detalhes = []
-
-      for (const f of faixas) {
-        const faixaIni = Number(f.sacas_gt || 0)
-        const faixaFim = f.sacas_lte === null ? Infinity : Number(f.sacas_lte)
-        const ini = Math.max(start, faixaIni)
-        const fim = Math.min(end, faixaFim)
-        const q = Math.max(0, fim - ini)
-        if (q <= 0) continue
-        total += q * Number(f.preco_por_saca || 0)
-        detalhes.push({
-          de_acumulado: ini,
-          ate_acumulado: fim,
-          sacas: round(q, 6),
-          preco_por_saca: round(Number(f.preco_por_saca || 0), 6),
-        })
-      }
-
-      const somaDetalhes = detalhes.reduce((a, x) => a + Number(x.sacas || 0), 0)
-      const falta = Math.max(0, qty - somaDetalhes)
-      if (falta > 0) {
-        const last = faixas[faixas.length - 1]
-        total += falta * Number(last.preco_por_saca || 0)
-        detalhes.push({
-          de_acumulado: end - falta,
-          ate_acumulado: end,
-          sacas: round(falta, 6),
-          preco_por_saca: round(Number(last.preco_por_saca || 0), 6),
-        })
-      }
-
-      const precoMedio = qty > 0 ? total / qty : 0
-      return {
-        entregueAntes: round(start, 6),
-        entregueDepois: round(end, 6),
-        precoMedio: round(precoMedio, 6),
-        total: round(total, 6),
-        detalhes,
-      }
-    }
-
-    const viagens = db
+    const rows = db
       .prepare(
-        `SELECT
-           v.id,
-           v.ficha,
-           v.motorista_id,
-           v.carga_total_kg,
-           v.tara_kg,
-           v.umidade_pct,
-           v.umidade_desc_pct_manual,
-           v.impureza_pct,
-           v.ardidos_pct,
-           v.queimados_pct,
-           v.avariados_pct,
-           v.esverdiados_pct,
-           v.quebrados_pct,
-           v.impureza_limite_pct,
-           v.ardidos_limite_pct,
-           v.queimados_limite_pct,
-           v.avariados_limite_pct,
-           v.esverdiados_limite_pct,
-           v.quebrados_limite_pct,
-           v.frete_tabela,
-           v.data_saida,
-           v.hora_saida
+        `SELECT v.*,
+                s.plantio as safra_plantio
          FROM viagem v
          JOIN safra s ON s.id = v.safra_id
-         WHERE v.safra_id=@safra_id
-           AND v.destino_id=@destino_id
-           AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio
+         WHERE (@safra_id IS NULL OR v.safra_id = @safra_id)
+           AND (@destino_id IS NULL OR v.destino_id = @destino_id)
+           AND (@tipo_plantio IS NULL OR UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio)
          ORDER BY
+           v.destino_id ASC,
+           UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) ASC,
            CASE WHEN v.data_saida IS NULL OR v.data_saida='' THEN 1 ELSE 0 END,
            v.data_saida ASC,
            COALESCE(v.hora_saida, '99:99') ASC,
@@ -940,156 +853,94 @@ export const viagemService = {
       )
       .all({ safra_id: sid, destino_id: did, tipo_plantio: tp })
 
-    const upd = db.prepare(
-      `UPDATE viagem
-       SET
-         peso_bruto_kg=@peso_bruto_kg,
-         umidade_desc_pct=@umidade_desc_pct,
-         umidade_kg=@umidade_kg,
-         impureza_kg=@impureza_kg,
-         ardidos_kg=@ardidos_kg,
-         queimados_kg=@queimados_kg,
-         avariados_kg=@avariados_kg,
-         esverdiados_kg=@esverdiados_kg,
-         quebrados_kg=@quebrados_kg,
-         peso_limpo_seco_kg=@peso_limpo_seco_kg,
-         sacas=@sacas,
-         sacas_frete=@sacas_frete,
-         frete_tabela=@frete_tabela,
-         sub_total_frete=@sub_total_frete,
-         secagem_custo_por_saca=@secagem_custo_por_saca,
-         sub_total_secagem=@sub_total_secagem,
-         custo_silo_por_saca=@custo_silo_por_saca,
-         sub_total_custo_silo=@sub_total_custo_silo,
-         abatimento_total_silo=@abatimento_total_silo,
-         abatimento_por_saca_silo=@abatimento_por_saca_silo,
-         custo_terceiros_por_saca=@custo_terceiros_por_saca,
-         sub_total_custo_terceiros=@sub_total_custo_terceiros,
-         abatimento_total_terceiros=@abatimento_total_terceiros,
-         abatimento_por_saca_terceiros=@abatimento_por_saca_terceiros,
+    const errors = []
+    let updated = 0
+    let skipped = 0
 
-         valor_compra_por_saca_aplicado=@valor_compra_por_saca_aplicado,
-         valor_compra_total=@valor_compra_total,
-         valor_compra_detalhe_json=@valor_compra_detalhe_json,
-         valor_compra_entrega_antes=@valor_compra_entrega_antes,
-         valor_compra_entrega_depois=@valor_compra_entrega_depois,
-         updated_at=datetime('now')
-       WHERE id=@id`,
-    )
+    const toPct100 = (frac) => {
+      if (frac === null || frac === undefined) return null
+      const n = Number(frac)
+      if (!Number.isFinite(n)) return null
+      return n * 100
+    }
 
     const tx = db.transaction(() => {
-      let entregue = 0
-      let totalSacas = 0
-      for (const v of viagens) {
-        // Recalcular sacas/umidade/frete/custos com base nas regras atuais
-        const faixasUmid = destinoRegraRepo.getUmidadeFaixasPlantio(regra.id) || []
-        const faixaUmid = this.resolveUmidadeFaixa({
-          umidade_pct: Number(v.umidade_pct || 0),
-          faixas: faixasUmid,
-        })
+      for (const v of rows) {
+        try {
+          // Converte fracoes armazenadas (0..1) de volta para 0..100,
+          // pois buildPayload normaliza em normalizePercent100.
+          const input = {
+            ficha: v.ficha,
+            safra_id: Number(v.safra_id),
+            tipo_plantio: v.tipo_plantio || null,
+            talhao_id: Number(v.talhao_id),
+            talhoes: undefined, // nao recalcular rateio em lote
+            local: v.local ?? null,
+            destino_id: Number(v.destino_id),
+            motorista_id: Number(v.motorista_id),
+            placa: v.placa ?? null,
+            data_saida: v.data_saida ?? null,
+            hora_saida: v.hora_saida ?? null,
+            data_entrega: v.data_entrega ?? null,
+            hora_entrega: v.hora_entrega ?? null,
+            carga_total_kg: Number(v.carga_total_kg || 0),
+            tara_kg: Number(v.tara_kg || 0),
 
-        const umidade_desc_pct_sugerida = faixaUmid ? Number(faixaUmid.desconto_pct || 0) : 0
-        const secagem_custo_por_saca = faixaUmid ? Number(faixaUmid.custo_secagem_por_saca || 0) : 0
+            umidade_pct: toPct100(v.umidade_pct),
+            umidade_desc_pct_manual:
+              v.umidade_desc_pct_manual === null || v.umidade_desc_pct_manual === undefined
+                ? null
+                : toPct100(v.umidade_desc_pct_manual),
 
-        const freteAtual = freteRepo.getValor({
-          safra_id: sid,
-          motorista_id: Number(v.motorista_id),
-          destino_id: did,
-        })
-        const frete_tabela = freteAtual === null ? Number(v.frete_tabela || 0) : Number(freteAtual)
+            impureza_pct: toPct100(v.impureza_pct),
+            ardidos_pct: toPct100(v.ardidos_pct),
+            queimados_pct: toPct100(v.queimados_pct),
+            avariados_pct: toPct100(v.avariados_pct),
+            esverdiados_pct: toPct100(v.esverdiados_pct),
+            quebrados_pct: toPct100(v.quebrados_pct),
 
-        const calc = calcularViagem({
-          carga_total_kg: Number(v.carga_total_kg || 0),
-          tara_kg: Number(v.tara_kg || 0),
-          umidade_pct: Number(v.umidade_pct || 0),
-          umidade_desc_pct: umidade_desc_pct_sugerida,
-          umidade_desc_pct_manual:
-            v.umidade_desc_pct_manual === null || v.umidade_desc_pct_manual === undefined
-              ? null
-              : Number(v.umidade_desc_pct_manual),
-          impureza_pct: Number(v.impureza_pct || 0),
-          ardidos_pct: Number(v.ardidos_pct || 0),
-          queimados_pct: Number(v.queimados_pct || 0),
-          avariados_pct: Number(v.avariados_pct || 0),
-          esverdiados_pct: Number(v.esverdiados_pct || 0),
-          quebrados_pct: Number(v.quebrados_pct || 0),
-          impureza_limite_pct: Number(v.impureza_limite_pct || 0),
-          ardidos_limite_pct: Number(v.ardidos_limite_pct || 0),
-          queimados_limite_pct: Number(v.queimados_limite_pct || 0),
-          avariados_limite_pct: Number(v.avariados_limite_pct || 0),
-          esverdiados_limite_pct: Number(v.esverdiados_limite_pct || 0),
-          quebrados_limite_pct: Number(v.quebrados_limite_pct || 0),
-          frete_tabela,
-        })
+            // Limites: nao enviar => usa regra atual.
+            // (sem flags antigas, nao da para saber se algum limite foi ajustado manualmente)
+            impureza_limite_pct: undefined,
+            ardidos_limite_pct: undefined,
+            queimados_limite_pct: undefined,
+            avariados_limite_pct: undefined,
+            esverdiados_limite_pct: undefined,
+            quebrados_limite_pct: undefined,
+          }
 
-        const sacas = Number(calc.sacas || 0)
-        const sub_total_secagem = round(sacas * secagem_custo_por_saca, 6)
-
-        const custo_silo_por_saca = Number(regra.custo_silo_por_saca || 0)
-        const custo_terceiros_por_saca = Number(regra.custo_terceiros_por_saca || 0)
-
-        const sub_total_custo_silo = round(sacas * custo_silo_por_saca, 6)
-        const sub_total_custo_terceiros = round(sacas * custo_terceiros_por_saca, 6)
-
-        const abatimento_total_silo = round(
-          Number(calc.sub_total_frete || 0) + sub_total_secagem + sub_total_custo_silo,
-          6,
-        )
-        const abatimento_total_terceiros = round(
-          Number(calc.sub_total_frete || 0) + sub_total_secagem + sub_total_custo_terceiros,
-          6,
-        )
-
-        const abatimento_por_saca_silo = sacas > 0 ? round(abatimento_total_silo / sacas, 6) : 0
-        const abatimento_por_saca_terceiros = sacas > 0 ? round(abatimento_total_terceiros / sacas, 6) : 0
-
-        const c = computeCompraByFaixas({ entregueAntes: entregue, sacas })
-        upd.run({
-          id: v.id,
-          peso_bruto_kg: calc.peso_bruto_kg,
-          umidade_desc_pct: calc.umidade_desc_pct,
-          umidade_kg: calc.umidade_kg,
-          impureza_kg: calc.impureza_kg,
-          ardidos_kg: calc.ardidos_kg,
-          queimados_kg: calc.queimados_kg,
-          avariados_kg: calc.avariados_kg,
-          esverdiados_kg: calc.esverdiados_kg,
-          quebrados_kg: calc.quebrados_kg,
-          peso_limpo_seco_kg: calc.peso_limpo_seco_kg,
-          sacas: calc.sacas,
-          sacas_frete: calc.sacas_frete,
-          frete_tabela: calc.frete_tabela,
-          sub_total_frete: calc.sub_total_frete,
-          secagem_custo_por_saca: round(secagem_custo_por_saca, 6),
-          sub_total_secagem,
-          custo_silo_por_saca: round(custo_silo_por_saca, 6),
-          sub_total_custo_silo,
-          abatimento_total_silo,
-          abatimento_por_saca_silo,
-          custo_terceiros_por_saca: round(custo_terceiros_por_saca, 6),
-          sub_total_custo_terceiros,
-          abatimento_total_terceiros,
-          abatimento_por_saca_terceiros,
-          valor_compra_por_saca_aplicado: c.precoMedio,
-          valor_compra_total: c.total,
-          valor_compra_detalhe_json: JSON.stringify(c.detalhes || []),
-          valor_compra_entrega_antes: c.entregueAntes,
-          valor_compra_entrega_depois: c.entregueDepois,
-        })
-        entregue += Number.isFinite(sacas) ? sacas : 0
-        totalSacas += Number.isFinite(sacas) ? sacas : 0
+          const payload = this.buildPayload(input, { current_id: Number(v.id), exclude_id: Number(v.id) })
+          viagemRepo.update(Number(v.id), payload)
+          updated++
+        } catch (e) {
+          skipped++
+          errors.push({
+            id: Number(v.id),
+            ficha: String(v.ficha || ''),
+            safra_id: Number(v.safra_id),
+            destino_id: Number(v.destino_id),
+            tipo_plantio: String(v.tipo_plantio || '').trim().toUpperCase() || null,
+            message: String(e?.message || e),
+            details: e?.details || null,
+          })
+        }
       }
-      return { updated: viagens.length, total_sacas: round(totalSacas, 6) }
     })
 
-    const r = tx()
+    tx()
+
     return {
-      ...r,
-      safra_id: sid,
-      destino_id: did,
-      tipo_plantio: tp,
-      destino_regra_plantio_id: regra.id,
-      faixas: faixas.length,
+      scope: {
+        safra_id: sid,
+        destino_id: did,
+        tipo_plantio: tp,
+      },
+      total: rows.length,
+      updated,
+      skipped,
+      errors_count: errors.length,
+      // evita payload gigante; UI pode pedir de novo filtrando
+      errors: errors.slice(0, 50),
     }
   },
 
@@ -1210,73 +1061,79 @@ export const viagemService = {
       return Number(row?.entrega || 0)
     }
 
-    function computeCompraByFaixas({ entregueAntes, sacas, faixas }) {
+    function computeContratoByFaixas({ entregueAntes, sacas, faixas }) {
       const qty = Number(sacas || 0)
+      const start = Number(entregueAntes || 0)
       if (!Number.isFinite(qty) || qty <= 0) {
         return {
-          entregueAntes: Number(entregueAntes || 0),
-          entregueDepois: Number(entregueAntes || 0),
+          entregueAntes: round(start, 6),
+          entregueDepois: round(start, 6),
           precoMedio: 0,
           total: 0,
           detalhes: [],
+          dentro_sacas: 0,
+          fora_sacas: 0,
+          contrato_total: 0,
         }
       }
 
-      const sorted = [...(faixas || [])]
+      const end = start + qty
+
+      const list = Array.isArray(faixas) ? faixas : []
+      const norm = list
         .map((f) => ({
-          sacas_gt: Number(f.sacas_gt || 0),
-          sacas_lte:
-            f.sacas_lte === null || f.sacas_lte === undefined
-              ? null
-              : Number(f.sacas_lte),
-          preco_por_saca: Number(f.preco_por_saca || 0),
+          sacas: Number(f?.sacas || 0),
+          preco_por_saca: Number(f?.preco_por_saca || 0),
         }))
         .filter(
-          (f) => Number.isFinite(f.sacas_gt) && Number.isFinite(f.preco_por_saca),
+          (f) =>
+            Number.isFinite(f.sacas) &&
+            f.sacas > 0 &&
+            Number.isFinite(f.preco_por_saca) &&
+            f.preco_por_saca >= 0,
         )
-        .sort((a, b) => {
-          if (a.sacas_gt !== b.sacas_gt) return a.sacas_gt - b.sacas_gt
-          const ae = a.sacas_lte === null ? 1e18 : a.sacas_lte
-          const be = b.sacas_lte === null ? 1e18 : b.sacas_lte
-          return ae - be
-        })
 
-      if (!sorted.length) sorted.push({ sacas_gt: 0, sacas_lte: null, preco_por_saca: 0 })
+      if (!norm.length) {
+        return {
+          entregueAntes: round(start, 6),
+          entregueDepois: round(end, 6),
+          precoMedio: 0,
+          total: 0,
+          detalhes: [],
+          dentro_sacas: 0,
+          fora_sacas: round(qty, 6),
+          contrato_total: 0,
+        }
+      }
 
-      const start = Number(entregueAntes || 0)
-      const end = start + qty
+      // build cumulative ranges (abate em ordem)
+      let acc = 0
+      const ranges = norm.map((f) => {
+        const from = acc
+        acc += f.sacas
+        return { from, to: acc, preco_por_saca: f.preco_por_saca }
+      })
+      const contrato_total = acc
+
       let total = 0
+      let dentro = 0
       const detalhes = []
-
-      for (const f of sorted) {
-        const faixaIni = Number(f.sacas_gt || 0)
-        const faixaFim = f.sacas_lte === null ? Infinity : Number(f.sacas_lte)
-        const ini = Math.max(start, faixaIni)
-        const fim = Math.min(end, faixaFim)
+      for (const r of ranges) {
+        const ini = Math.max(start, r.from)
+        const fim = Math.min(end, r.to)
         const q = Math.max(0, fim - ini)
         if (q <= 0) continue
-        total += q * Number(f.preco_por_saca || 0)
+        dentro += q
+        total += q * r.preco_por_saca
         detalhes.push({
           de_acumulado: ini,
           ate_acumulado: fim,
           sacas: round(q, 6),
-          preco_por_saca: round(Number(f.preco_por_saca || 0), 6),
+          preco_por_saca: round(Number(r.preco_por_saca || 0), 6),
         })
       }
 
-      const somaDetalhes = detalhes.reduce((a, x) => a + Number(x.sacas || 0), 0)
-      const falta = Math.max(0, qty - somaDetalhes)
-      if (falta > 0) {
-        const last = sorted[sorted.length - 1]
-        total += falta * Number(last.preco_por_saca || 0)
-        detalhes.push({
-          de_acumulado: end - falta,
-          ate_acumulado: end,
-          sacas: round(falta, 6),
-          preco_por_saca: round(Number(last.preco_por_saca || 0), 6),
-        })
-      }
-
+      const fora = Math.max(0, qty - dentro)
       const precoMedio = qty > 0 ? total / qty : 0
       return {
         entregueAntes: round(start, 6),
@@ -1284,6 +1141,9 @@ export const viagemService = {
         precoMedio: round(precoMedio, 6),
         total: round(total, 6),
         detalhes,
+        dentro_sacas: round(dentro, 6),
+        fora_sacas: round(fora, 6),
+        contrato_total: round(contrato_total, 6),
       }
     }
 
@@ -1315,25 +1175,26 @@ export const viagemService = {
       const custo_silo_por_saca = Number(r.custo_silo_por_saca || 0)
       const sub_total_custo_silo = round(calc.sacas * custo_silo_por_saca, 6)
 
-      const compra_faixas_db = destinoRegraRepo.getCompraFaixasPlantio(r.id) || []
-      const compra_faixas = compra_faixas_db.length
-        ? compra_faixas_db
-        : [
-            {
-              sacas_gt: 0,
-              sacas_lte: null,
-              preco_por_saca: Number(r.valor_compra_por_saca ?? 120),
-            },
-          ]
-
       const entregaAntes = getEntregaAntesSacas({ destino_id: r.destino_id })
-      const compraCalc = computeCompraByFaixas({
+
+      const contrato = contratoSiloRepo.getOne({
+        safra_id,
+        destino_id: Number(r.destino_id),
+        tipo_plantio,
+      })
+      const contratoFaixas = Array.isArray(contrato?.faixas) ? contrato.faixas : []
+
+      const contratoCalc = computeContratoByFaixas({
         entregueAntes: entregaAntes,
         sacas: calc.sacas,
-        faixas: compra_faixas,
+        faixas: contratoFaixas,
       })
 
-      const valor_compra_por_saca = compraCalc.precoMedio
+      const contratoExcedido = Number(contratoCalc.fora_sacas || 0) > 0
+      const preco_compra_por_saca =
+        contrato && !contratoExcedido ? Number(contratoCalc.precoMedio || 0) : null
+      const valor_compra_total =
+        contrato && !contratoExcedido ? Number(contratoCalc.total || 0) : null
 
       // Frete (por motorista x destino)
       const frete_tabela = freteRepo.getValor({
@@ -1350,19 +1211,20 @@ export const viagemService = {
       // - preco_liquido_sem_frete: compra - secagem - custos do silo
       // - total_sem_frete: sacas * preco_liquido_sem_frete
       // - total_com_frete: total_sem_frete - frete
-      const preco_compra_por_saca = valor_compra_por_saca
-      const preco_liquido_sem_frete_por_saca = round(
-        preco_compra_por_saca - (secagem_custo_por_saca || 0) - (custo_silo_por_saca || 0),
-        6,
-      )
+      const preco_liquido_sem_frete_por_saca =
+        preco_compra_por_saca === null
+          ? null
+          : round(
+              preco_compra_por_saca - (secagem_custo_por_saca || 0) - (custo_silo_por_saca || 0),
+              6,
+            )
 
-      const valor_compra_total = compraCalc.total
-      const valor_final_total_sem_frete = round(
-        calc.sacas * preco_liquido_sem_frete_por_saca,
-        6,
-      )
+      const valor_final_total_sem_frete =
+        preco_liquido_sem_frete_por_saca === null
+          ? null
+          : round(calc.sacas * preco_liquido_sem_frete_por_saca, 6)
       const valor_final_total_com_frete =
-        sub_total_frete === null
+        sub_total_frete === null || valor_final_total_sem_frete === null
           ? null
           : round(valor_final_total_sem_frete - sub_total_frete, 6)
 
@@ -1408,9 +1270,17 @@ export const viagemService = {
 
       // Ordenar por valor final com frete quando existir; senao, por valor final sem frete
       .sort((a, b) => {
-        const av = a.valor_final_total_com_frete === null ? a.valor_final_total_sem_frete : a.valor_final_total_com_frete
-        const bv = b.valor_final_total_com_frete === null ? b.valor_final_total_sem_frete : b.valor_final_total_com_frete
-        return Number(bv || 0) - Number(av || 0)
+        const av =
+          a.valor_final_total_com_frete === null
+            ? a.valor_final_total_sem_frete
+            : a.valor_final_total_com_frete
+        const bv =
+          b.valor_final_total_com_frete === null
+            ? b.valor_final_total_sem_frete
+            : b.valor_final_total_com_frete
+        const aKey = av === null || av === undefined ? -1e18 : Number(av || 0)
+        const bKey = bv === null || bv === undefined ? -1e18 : Number(bv || 0)
+        return bKey - aKey
       })
 
     return {

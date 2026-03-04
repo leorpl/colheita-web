@@ -13,6 +13,7 @@ import { quitacoesMotoristasRouter } from './quitacoesMotoristas.js'
 import { publicRouter } from './public.js'
 import { authRouter } from './auth.js'
 import { usersRouter } from './users.js'
+import { contratosSiloRouter } from './contratosSilo.js'
 import { requireAuth } from '../../middleware/auth.js'
 
 export const apiRouter = Router()
@@ -38,6 +39,7 @@ apiRouter.use('/motoristas', motoristasRouter)
 apiRouter.use('/tipos-plantio', tiposPlantioRouter)
 apiRouter.use('/fretes', fretesRouter)
 apiRouter.use('/destino-regras', destinoRegrasRouter)
+apiRouter.use('/contratos-silo', contratosSiloRouter)
 apiRouter.use('/talhao-safra', talhaoSafraRouter)
 apiRouter.use('/viagens', viagensRouter)
 apiRouter.use('/relatorios', relatoriosRouter)

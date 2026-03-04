@@ -11,6 +11,7 @@ export const viagensRouter = Router()
 
 const ViagemBody = ViagemSchemas.Body
 const PreviewBody = ViagemSchemas.PreviewBody
+const RecalcAllBody = ViagemSchemas.RecalcAllBody
 
 viagensRouter.post(
   '/preview',
@@ -79,14 +80,14 @@ viagensRouter.post(
   },
 )
 
-const RecalcCompraBody = ViagemSchemas.RecalcCompraBody
-
+// Recalcular colheitas com base nas regras atuais.
+// Usado quando houve ajustes de regras/regras de negocio e precisa re-materializar campos calculados.
 viagensRouter.post(
-  '/recalcular-compra',
+  '/recalcular-todas',
   requirePerm(Permissions.CONFIG_WRITE),
-  validateBody(RecalcCompraBody),
+  validateBody(RecalcAllBody),
   (req, res) => {
-    const r = viagemService.recalcularPrecosCompraSilo(req.body)
+    const r = viagemService.recalcularTodas(req.body)
     res.status(201).json(r)
   },
 )

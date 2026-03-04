@@ -279,10 +279,12 @@ export const ViagemSchemas = {
 
   PreviewBody: null,
   CompareBody: null,
-  RecalcCompraBody: z.object({
-    safra_id: z.coerce.number().int().positive(),
-    destino_id: z.coerce.number().int().positive(),
-    tipo_plantio: z.string().trim().min(1).max(MAX.short),
+
+  RecalcAllBody: z.object({
+    // Se omitir, recalcula tudo.
+    safra_id: z.coerce.number().int().positive().optional(),
+    destino_id: z.coerce.number().int().positive().optional(),
+    tipo_plantio: z.preprocess(emptyToUndefined, z.string().trim().min(1).max(MAX.short).optional()),
   }),
 
   ListQuery: z.object({
@@ -424,20 +426,6 @@ export const DestinoRegrasSchemas = {
     safra_id: z.coerce.number().int().positive(),
     destino_id: z.coerce.number().int().positive(),
     tipo_plantio: z.string().trim().min(1).max(MAX.short),
-    trava_sacas: z.union([z.coerce.number().min(0).max(9_999_999), z.null()]).optional().nullable(),
-
-    valor_compra_por_saca: z.coerce.number().min(0).max(999_999).optional().nullable(),
-
-    compra_faixas: z
-      .array(
-        z.object({
-          sacas_gt: z.coerce.number().min(0).max(9_999_999),
-          sacas_lte: z.union([z.coerce.number().min(0).max(9_999_999), z.null()]).optional().nullable(),
-          preco_por_saca: z.coerce.number().min(0).max(999_999),
-        }),
-      )
-      .max(500)
-      .optional(),
 
     custo_silo_por_saca: z.coerce.number().min(0).max(999_999).optional().nullable(),
     custo_terceiros_por_saca: z.coerce.number().min(0).max(999_999).optional().nullable(),

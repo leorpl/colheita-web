@@ -286,6 +286,13 @@ tbody tr.hum-high td.actions{background:rgba(255,255,255,.86)}
 .grid-in{width:84px;padding:7px 8px;border-radius:10px;border:1px solid rgba(15,26,22,.16);background:rgba(255,255,255,.72);font-family:var(--mono);font-size:12px}
 .grid-in:focus{outline:none;border-color:rgba(209,154,43,.55);box-shadow:0 0 0 3px rgba(209,154,43,.18)}
 
+/* Campos ajustados manualmente (romaneio) */
+input[data-manual="1"],
+select[data-manual="1"],
+textarea[data-manual="1"]{
+  background:#fff3c4 !important;
+}
+
 tr.grid-skip{opacity:.45}
 tr.grid-skip .grid-in{background:rgba(255,255,255,.45)}
 code.mono{font-family:var(--mono);font-size:12px}

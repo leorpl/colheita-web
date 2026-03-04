@@ -37,9 +37,11 @@
 - `frete` (UNIQUE safra_id+motorista_id+destino_id)
 - `destino_regra_plantio` (regras por safra+destino+tipo_plantio)
 - `umidade_faixa_plantio` (faixas de umidade/desc + custo de secagem por saca)
-- `destino_compra_faixa_plantio` (preco de compra por faixa de sacas acumuladas)
+- `contrato_silo` (cabecalho do contrato por safra+destino+tipo_plantio)
+- `contrato_silo_faixa` (faixas do contrato: sacas + preco travado)
 - `talhao_safra` (% area colhida por talhao na safra)
 - `viagem` (lancamentos + campos calculados e custos)
+- `viagem_talhao` (rateio de uma viagem em multiplos talhoes)
 - `motorista_quitacao` (pagamentos por periodo)
 - `usuario` e `usuario_sessao` (auth por cookie)
 
@@ -67,7 +69,8 @@
 - Edicao: `PUT /api/viagens/:id` idem, com exclusao do proprio id no acumulado.
 
 ### 4.4 Regras do destino (safra+destino+tipo_plantio)
-- Upsert: `POST /api/destino-regras` grava em `destino_regra_plantio` e substitui faixas (`umidade_faixa_plantio`) e faixas de compra (`destino_compra_faixa_plantio`).
+- Upsert: `POST /api/destino-regras` grava em `destino_regra_plantio` e substitui faixas de umidade (`umidade_faixa_plantio`).
+- Contratos (travas/preco travado): `POST /api/contratos-silo` grava em `contrato_silo` e substitui `contrato_silo_faixa`.
 - Get one: `GET /api/destino-regras/one?safra_id=..&destino_id=..&tipo_plantio=..`.
 - List: `GET /api/destino-regras/plantio`.
 
@@ -98,8 +101,8 @@
 - Custos adicionais:
   - secagem: `sacas (limpa/seca) * custo_secagem_por_saca` (vem da faixa de umidade).
   - custo silo / terceiros: por saca limpa/seca (vem da regra).
-- Compra por faixas (sacas acumuladas): aplica `destino_compra_faixa_plantio` ordenando por data/hora/id para obter preco medio por saca e total.
-- Trava (limite de entrega): compara soma de `viagem.sacas` (por safra+destino+tipo_plantio) com `destino_regra_plantio.trava_sacas`.
+ - Compra no silo: preco vem do contrato (`contrato_silo_faixa`) abatendo faixas em ordem; se exceder o total contratado, o backend bloqueia o salvamento do lancamento.
+ - Trava (limite de entrega): compara soma de `viagem.sacas` (por safra+destino+tipo_plantio) com a soma de sacas do contrato.
 
 ## 6) Observabilidade e erros
 - Logger: Pino (`colheita-web/src/logger.js`) + `pino-http`.

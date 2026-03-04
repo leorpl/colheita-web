@@ -147,18 +147,6 @@ export function migrate() {
       FOREIGN KEY (destino_regra_plantio_id) REFERENCES destino_regra_plantio(id) ON DELETE CASCADE
     );
 
-    -- Preco de compra do silo por faixas de volume (sacas acumuladas)
-    CREATE TABLE IF NOT EXISTS destino_compra_faixa_plantio (
-      id INTEGER PRIMARY KEY,
-      destino_regra_plantio_id INTEGER NOT NULL,
-      sacas_gt REAL NOT NULL,
-      sacas_lte REAL,
-      preco_por_saca REAL NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT,
-      FOREIGN KEY (destino_regra_plantio_id) REFERENCES destino_regra_plantio(id) ON DELETE CASCADE
-    );
-
     CREATE TABLE IF NOT EXISTS umidade_faixa (
       id INTEGER PRIMARY KEY,
       destino_regra_id INTEGER NOT NULL,
@@ -488,13 +476,45 @@ export function migrate() {
   db.exec(
     'CREATE INDEX IF NOT EXISTS idx_destino_regra_plantio_safra_destino ON destino_regra_plantio(safra_id, destino_id)',
   )
+
+  // contratos (trava) por safra+destino+plantio
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contrato_silo (
+      id INTEGER PRIMARY KEY,
+      safra_id INTEGER NOT NULL,
+      destino_id INTEGER NOT NULL,
+      tipo_plantio TEXT NOT NULL,
+      sacas_contratadas REAL NOT NULL,
+      preco_travado_por_saca REAL NOT NULL,
+      observacoes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      UNIQUE (safra_id, destino_id, tipo_plantio),
+      FOREIGN KEY (safra_id) REFERENCES safra(id) ON DELETE CASCADE,
+      FOREIGN KEY (destino_id) REFERENCES destino(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_contrato_silo_key ON contrato_silo(safra_id, destino_id, tipo_plantio);
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contrato_silo_faixa (
+      id INTEGER PRIMARY KEY,
+      contrato_silo_id INTEGER NOT NULL,
+      ordem INTEGER NOT NULL,
+      sacas REAL NOT NULL,
+      preco_por_saca REAL NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      UNIQUE (contrato_silo_id, ordem),
+      FOREIGN KEY (contrato_silo_id) REFERENCES contrato_silo(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_contrato_silo_faixa_contrato ON contrato_silo_faixa(contrato_silo_id);
+  `)
   db.exec(
     'CREATE INDEX IF NOT EXISTS idx_umidade_faixa_plantio_regra ON umidade_faixa_plantio(destino_regra_plantio_id)',
   )
 
-  db.exec(
-    'CREATE INDEX IF NOT EXISTS idx_destino_compra_faixa_plantio_regra ON destino_compra_faixa_plantio(destino_regra_plantio_id)',
-  )
+  // (removido) destino_compra_faixa_plantio
 
   // incremental columns for destino_regra_plantio
   if (!hasColumn('destino_regra_plantio', 'valor_compra_por_saca')) {
@@ -503,16 +523,50 @@ export function migrate() {
     )
   }
 
-  // Seed: para cada regra, garantir pelo menos 1 faixa de compra
-  // (mantem compatibilidade com campo valor_compra_por_saca)
-  db.exec(`
-    INSERT INTO destino_compra_faixa_plantio (destino_regra_plantio_id, sacas_gt, sacas_lte, preco_por_saca, updated_at)
-    SELECT rp.id, 0, NULL, rp.valor_compra_por_saca, datetime('now')
-    FROM destino_regra_plantio rp
-    WHERE NOT EXISTS (
-      SELECT 1 FROM destino_compra_faixa_plantio f WHERE f.destino_regra_plantio_id = rp.id
-    );
-  `)
+  // (removido) seed de faixas de compra do silo
+
+  // Cleanup: tabela antiga de compra por faixas (nao usada)
+  try {
+    db.exec('DROP TABLE IF EXISTS destino_compra_faixa_plantio')
+  } catch {
+    // ignore
+  }
+
+  // Backfill: contratos a partir das regras antigas (trava_sacas + valor_compra_por_saca)
+  try {
+    db.exec(`
+      INSERT OR IGNORE INTO contrato_silo (
+        safra_id, destino_id, tipo_plantio,
+        sacas_contratadas, preco_travado_por_saca,
+        observacoes, updated_at
+      )
+      SELECT
+        safra_id, destino_id, tipo_plantio,
+        trava_sacas,
+        COALESCE(valor_compra_por_saca, 120),
+        'Backfill automatico (destino_regra_plantio)',
+        datetime('now')
+      FROM destino_regra_plantio
+      WHERE trava_sacas IS NOT NULL AND trava_sacas > 0;
+    `)
+  } catch {
+    // opcional
+  }
+
+  // Backfill: criar faixa #1 a partir do contrato legado (sacas_contratadas/preco_travado_por_saca)
+  try {
+    db.exec(`
+      INSERT OR IGNORE INTO contrato_silo_faixa (
+        contrato_silo_id, ordem, sacas, preco_por_saca, updated_at
+      )
+      SELECT
+        c.id, 1, c.sacas_contratadas, c.preco_travado_por_saca, datetime('now')
+      FROM contrato_silo c
+      WHERE c.sacas_contratadas IS NOT NULL AND c.sacas_contratadas > 0;
+    `)
+  } catch {
+    // opcional
+  }
 
   // incremental columns for viagem (compra por faixa)
   if (!hasColumn('viagem', 'valor_compra_por_saca_aplicado')) {
