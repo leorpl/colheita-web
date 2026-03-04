@@ -3947,16 +3947,16 @@ async function renderColheitaBase(variant) {
             </div>
           </div>
 
-          <div class="form-card">
+          <div class="form-card rateio-cardx">
             <div class="card-head">
-              <div>
+              <div class="rateio-head-left">
                 <div class="card-title">Rateio por talhao</div>
-                <div class="hint">Talhao | % | kg. Use % antes do peso bruto; com peso bruto, o sistema ajusta kg.</div>
+                <div class="rateio-sub">Talhao | % | kg. Use % antes do peso bruto; com peso bruto, o sistema ajusta kg.</div>
               </div>
-              <div class="card-actions">
-                <div class="mini">
-                  <div class="label">Ordenar</div>
-                  <select name="talhao_sort">
+              <div class="rateio-head-right">
+                <div class="rateio-ctl">
+                  <span class="rateio-ctl-label">Ordenar</span>
+                  <select name="talhao_sort" aria-label="Ordenar talhoes">
                     <option value="nome" selected>Nome</option>
                     <option value="local">Local</option>
                   </select>
@@ -4212,7 +4212,6 @@ async function renderColheitaBase(variant) {
       const okKg = baseKg ? Math.abs(sumKg - baseKg) <= 2 : true
       const ok = okPct && okKg
 
-      const dotClass = ok ? '' : 'warn'
       const baseTxt = baseKg ? `${fmtNum(baseKg, 0)} kg` : '-'
       const kgTxt = sumKg > 0 ? `${fmtNum(sumKg, 0)} kg` : '-'
       const note = baseKg
@@ -4222,17 +4221,14 @@ async function renderColheitaBase(variant) {
         : ' Sem peso bruto: use % como estimativa.'
 
       rateioInfo.innerHTML = `
-        <span class="pill">
-          <span class="dot ${dotClass}"></span>
-          <span>
-            Soma: <b>${fmtNum(sumPct, 2)}%</b>
-            <span class="hint" style="margin:0">|</span>
-            kg: <b>${kgTxt}</b>
-            <span class="hint" style="margin:0">|</span>
-            peso bruto: <b>${baseTxt}</b>
-            <span style="color:var(--muted)">${escapeHtml(note)}</span>
-          </span>
-        </span>
+        <div class="rateio-summary ${ok ? 'ok' : 'warn'}">
+          <div class="rateio-summary-main">
+            <span class="pill"><span class="dot ${ok ? '' : 'warn'}"></span><span>Soma <b>${fmtNum(sumPct, 2)}%</b></span></span>
+            <span class="pill"><span class="dot"></span><span>kg <b>${kgTxt}</b></span></span>
+            <span class="pill"><span class="dot"></span><span>peso bruto <b>${baseTxt}</b></span></span>
+          </div>
+          <div class="rateio-summary-note">${escapeHtml(note)}</div>
+        </div>
       `.trim()
     }
 
@@ -4990,7 +4986,7 @@ async function renderColheitaBase(variant) {
           <input data-role="kg" aria-label="Quilos" type="text" inputmode="numeric" pattern="[0-9.,]*" placeholder="0" />
         </div>
         <div class="rateio-cell" data-cell="rm">
-          <button class="btn ghost small" type="button" data-role="rm" aria-label="Remover talhão">Remover</button>
+          <button class="btn ghost small rateio-rm" type="button" data-role="rm" aria-label="Remover talhao" title="Remover">x</button>
         </div>
       `.trim()
 

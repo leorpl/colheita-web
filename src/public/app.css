@@ -439,6 +439,35 @@ code.mono{font-family:var(--mono);font-size:12px}
 
 .pill-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
 
+/* Rateio card refinements */
+.rateio-cardx .card-head{align-items:center}
+.rateio-cardx .card-title{font-size:18px;font-weight:600}
+.rateio-head-left{min-width:220px}
+.rateio-sub{margin-top:4px;font-size:13px;color:rgba(14,21,18,.62)}
+.rateio-head-right{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.rateio-ctl{display:flex;gap:8px;align-items:center}
+.rateio-ctl-label{font-size:12px;color:rgba(14,21,18,.62)}
+.rateio-cardx select[name="talhao_sort"]{min-width:160px}
+
+.rateio-cardx .rateio-grid{grid-template-columns:minmax(260px, 1fr) 120px 140px 56px}
+.rateio-cardx .rateio-header{padding:12px 16px 10px;margin:0;border-bottom:1px solid rgba(15,26,22,.10)}
+.rateio-cardx .rateio-header > div{font-size:13px;font-weight:600;color:rgba(14,21,18,.70)}
+
+.rateio-cardx .rateio-body{gap:12px}
+.rateio-cardx .rateio-item{background:rgba(255,255,255,.92);border-color:rgba(15,26,22,.12)}
+.rateio-cardx .rateio-item:hover{background:rgba(255,255,255,.98)}
+
+.rateio-cardx .rateio-cell[data-cell="pct"],
+.rateio-cardx .rateio-cell[data-cell="kg"]{align-self:stretch;display:flex;align-items:center}
+
+.rateio-cardx .rateio-rm{padding:7px 10px;min-width:44px}
+
+.rateio-summary{padding:10px 12px;border-radius:14px;border:1px solid rgba(15,26,22,.12);background:rgba(255,255,255,.80)}
+.rateio-summary.ok{border-color:rgba(30,106,77,.28);background:rgba(30,106,77,.06)}
+.rateio-summary.warn{border-color:rgba(209,154,43,.38);background:rgba(209,154,43,.10)}
+.rateio-summary-main{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.rateio-summary-note{margin-top:6px;font-size:12px;color:var(--muted)}
+
 /* numeric field density in colheita cards */
 .colheita-form input[name$="_pct"],
 .colheita-form input[name$="_pct_manual"],
@@ -463,9 +492,14 @@ code.mono{font-family:var(--mono);font-size:12px}
 .rateio-cell input,.rateio-cell select{width:100%}
 
 @media (max-width: 980px){
-  .rateio-grid{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
-  .rateio-header{display:none}
-  .rateio-item{padding:12px}
+  .rateio-cardx .rateio-grid{grid-template-columns:1fr 1fr;grid-template-areas:"talhao talhao" "pct kg" "rm rm"}
+  .rateio-cardx .rateio-header{display:none}
+  .rateio-cardx .rateio-item{padding:12px}
+  .rateio-cardx .rateio-cell[data-cell="talhao"]{grid-area:talhao}
+  .rateio-cardx .rateio-cell[data-cell="pct"]{grid-area:pct}
+  .rateio-cardx .rateio-cell[data-cell="kg"]{grid-area:kg}
+  .rateio-cardx .rateio-cell[data-cell="rm"]{grid-area:rm;justify-content:stretch}
+  .rateio-cardx .rateio-rm{width:100%}
 }
 .col6{grid-column:span 6}
 .col4{grid-column:span 4}
