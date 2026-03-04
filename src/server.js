@@ -7,9 +7,8 @@ migrate()
 
 const app = createApp()
 
-app.listen(env.PORT, env.HOST, () => {
-  logger.info(
-    { port: env.PORT, host: env.HOST, db: env.DB_PATH },
-    'server listening',
-  )
+const host = process.env.RENDER ? '0.0.0.0' : env.HOST
+
+app.listen(env.PORT, host, () => {
+  logger.info({ port: env.PORT, host, db: env.DB_PATH }, 'server listening')
 })
