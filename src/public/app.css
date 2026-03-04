@@ -152,6 +152,19 @@ body.nav-collapsed .nav{display:none}
 .field{display:flex;flex-direction:column;gap:6px}
 .label{font-size:12px;color:var(--muted)}
 
+/* Forms: consistent grid sizing */
+.field > input,
+.field > select,
+.field > textarea{width:100%}
+
+/* Numeric readability */
+input[inputmode="numeric"],
+input[inputmode="decimal"],
+input[type="number"]{text-align:right;font-variant-numeric:tabular-nums}
+
+/* Calculated (readonly) fields */
+input[readonly][name^="calc_"]{background:rgba(15,26,22,.06);border-color:rgba(15,26,22,.14);color:rgba(14,21,18,.88)}
+
 input,select,textarea{
   font:inherit;
   padding:10px 10px;
@@ -426,6 +439,9 @@ code.mono{font-family:var(--mono);font-size:12px}
 .rateio-title{font-family:var(--serif);font-size:14px;color:rgba(14,21,18,.88)}
 .rateio-sub{margin-top:3px;color:var(--muted);font-size:12px;max-width:62ch}
 .rateio-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rateio-actions .mini{display:flex;flex-direction:column;gap:6px}
+.rateio-actions .mini .label{margin:0}
+.rateio-actions select{padding:8px 10px;border-radius:12px}
 
 .rateio-body{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .rateio-grid{

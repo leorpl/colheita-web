@@ -407,21 +407,7 @@ function formField({
   </div>`
 }
 
-function pctKgField({
-  label,
-  pctName,
-  pctValue,
-  kgName,
-  kgValue,
-  span = 'col3',
-}) {
-  return `<div class="field ${span}">
-    <div class="label">${label}</div>
-    <input name="${escapeHtml(pctName)}" type="text" inputmode="decimal" pattern="[0-9.,]*" value="${escapeHtml(pctValue ?? '')}" />
-    <div class="hint" style="margin-top:6px">${escapeHtml(label.replace('%', '').trim())} (kg)</div>
-    <input name="${escapeHtml(kgName)}" type="text" value="${escapeHtml(kgValue ?? '')}" readonly />
-  </div>`
-}
+
 
 function selectField({ label, name, options, value, span = 'col6' }) {
   const opts = options
@@ -3900,17 +3886,17 @@ async function renderColheitaBase(variant) {
       umidade_desc_pct_manual: '',
 
       // Campos calculados (somente visual - nao editar)
-      calc_peso_bruto_kg: '',
-      calc_umidade_kg: '',
-      calc_peso_limpo_seco_kg: '',
-      calc_sacas: '',
+      calc_peso_bruto_kg: '-',
+      calc_umidade_kg: '-',
+      calc_peso_limpo_seco_kg: '-',
+      calc_sacas: '-',
 
-      calc_impureza_kg: '',
-      calc_ardidos_kg: '',
-      calc_queimados_kg: '',
-      calc_avariados_kg: '',
-      calc_esverdiados_kg: '',
-      calc_quebrados_kg: '',
+      calc_impureza_kg: '-',
+      calc_ardidos_kg: '-',
+      calc_queimados_kg: '-',
+      calc_avariados_kg: '-',
+      calc_esverdiados_kg: '-',
+      calc_quebrados_kg: '-',
     }
 
     const safraPlantioSuggested =
@@ -3945,40 +3931,49 @@ async function renderColheitaBase(variant) {
         }
         <div class="form-grid" id="vForm">
           ${sectionTitle('Identificacao')}
-          ${formField({ label: 'Ficha', name: 'ficha', value: base.ficha, placeholder: '001', span: 'col3' })}
+          ${formField({ label: 'Ficha', name: 'ficha', value: base.ficha, placeholder: '001', span: 'col2' })}
           ${selectField({ label: 'Safra', name: 'safra_id', options: safraOpts, value: base.safra_id, span: 'col3' })}
-          ${selectField({ label: 'Plantio', name: 'tipo_plantio', options: plantioOpts, value: plantioValue, span: 'col3' })}
-          ${formField({ label: 'Local', name: 'local', value: base.local ?? '', placeholder: '', span: 'col3' })}
+          ${selectField({ label: 'Plantio', name: 'tipo_plantio', options: plantioOpts, value: plantioValue, span: 'col2' })}
+          ${formField({ label: 'Local', name: 'local', value: base.local ?? '', placeholder: '', span: 'col2' })}
+          ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOpts, value: base.destino_id, span: 'col3' })}
 
-           ${selectField({ label: 'Ordenar talhões', name: 'talhao_sort', options: [{ value: 'nome', label: 'Por nome' }, { value: 'local', label: 'Por local' }], value: 'nome', span: 'col3' })}
-           <div class="field col9">
-             <div class="rateio-card">
-               <div class="rateio-head">
-                 <div>
-                   <div class="rateio-title">Talhões (rateio)</div>
-                   <div class="rateio-sub">Use % (estimativa) antes do peso bruto; quando houver peso bruto, o sistema calcula/ajusta kg e valida o fechamento.</div>
-                 </div>
-                 <div class="rateio-actions">
-                   <button class="btn ghost small" type="button" id="btnAddTalhao">Adicionar</button>
-                   <button class="btn ghost small" type="button" id="btnFillRest">Restante</button>
-                 </div>
-               </div>
-               <div class="rateio-grid rateio-header">
-                 <div>Talhão</div>
-                 <div>%</div>
-                 <div>kg</div>
-                 <div></div>
-               </div>
-               <div id="rateioTalhoes" class="rateio-body"></div>
-               <div class="rateio-foot">
-                 <div id="rateioInfo"></div>
-               </div>
-             </div>
-           </div>
-          ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOpts, value: base.destino_id, span: 'col6' })}
+          ${sectionTitle('Rateio de talhoes')}
+          <div class="field col12">
+            <div class="rateio-card">
+              <div class="rateio-head">
+                <div>
+                  <div class="rateio-title">Rateio de talhoes</div>
+                  <div class="rateio-sub">Use % antes do peso bruto; quando houver peso bruto, o sistema calcula/ajusta kg e valida o fechamento.</div>
+                </div>
+                <div class="rateio-actions">
+                  <div class="mini">
+                    <div class="label">Ordenar</div>
+                    <select name="talhao_sort">
+                      <option value="nome" selected>Por nome</option>
+                      <option value="local">Por local</option>
+                    </select>
+                  </div>
+                  <button class="btn ghost small" type="button" id="btnAddTalhao">Adicionar</button>
+                  <button class="btn ghost small" type="button" id="btnFillRest">Restante</button>
+                </div>
+              </div>
+              <div class="rateio-grid rateio-header">
+                <div>Talhão</div>
+                <div>%</div>
+                <div>kg</div>
+                <div></div>
+              </div>
+              <div id="rateioTalhoes" class="rateio-body"></div>
+              <div class="rateio-foot">
+                <div id="rateioInfo"></div>
+              </div>
+            </div>
+          </div>
+
+          ${sectionTitle('Motorista')}
           ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOpts, value: base.motorista_id, span: 'col6' })}
 
-          ${sectionTitle('Regras e limites do destino')}
+          ${sectionTitle('Contrato e regras do destino')}
           <div class="field col12">
             <div class="label">Contrato do destino</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
@@ -3999,23 +3994,22 @@ async function renderColheitaBase(variant) {
           ${formField({ label: 'Esverdiados limite %', name: 'esverdiados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.esverdiados_limite_pct ?? '0.00', span: 'col2' })}
           ${formField({ label: 'Quebrados limite %', name: 'quebrados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.quebrados_limite_pct ?? '0.00', span: 'col2' })}
 
-          ${sectionTitle('Data e transporte')}
-          ${formField({ label: 'Placa', name: 'placa', value: base.placa ?? '', placeholder: 'AAA0A00', span: 'col4' })}
-          ${formField({ label: 'Data saida', name: 'data_saida', type: 'date', value: base.data_saida ?? '', span: 'col4' })}
-          ${formField({ label: 'Hora saida', name: 'hora_saida', type: 'time', value: base.hora_saida ?? '', span: 'col4' })}
-           ${formField({ label: 'Data entrega', name: 'data_entrega', type: 'date', value: base.data_entrega ?? '', span: 'col6' })}
-           ${formField({ label: 'Hora entrega', name: 'hora_entrega', type: 'time', value: base.hora_entrega ?? '', span: 'col6' })}
+          ${sectionTitle('Transporte')}
+          ${formField({ label: 'Placa', name: 'placa', value: base.placa ?? '', placeholder: 'AAA0A00', span: 'col3' })}
+          ${formField({ label: 'Data saida', name: 'data_saida', type: 'date', value: base.data_saida ?? '', span: 'col3' })}
+          ${formField({ label: 'Hora saida', name: 'hora_saida', type: 'time', value: base.hora_saida ?? '', span: 'col2' })}
+          ${formField({ label: 'Data entrega', name: 'data_entrega', type: 'date', value: base.data_entrega ?? '', span: 'col2' })}
+          ${formField({ label: 'Hora entrega', name: 'hora_entrega', type: 'time', value: base.hora_entrega ?? '', span: 'col2' })}
 
-          ${sectionTitle('Pesagem e umidade')}
-          ${formField({ label: 'Carga total (kg)', name: 'carga_total_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.carga_total_kg, span: 'col3' })}
-          ${formField({ label: 'Tara (kg)', name: 'tara_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.tara_kg, span: 'col3' })}
-          ${formField({ label: `Umidade % ${helpTip('Valor informado pela amostra do silo (laboratorio).')}`, name: 'umidade_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_pct, span: 'col3' })}
-          ${formField({ label: `Desconto umidade % ${helpTip('Sugerido automaticamente pela tabela do destino (por safra) a partir da umidade informada. Voce pode ajustar; se ficar diferente da tabela, o campo fica amarelo.')}`, name: 'umidade_desc_pct_manual', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_desc_pct_manual ?? '', span: 'col3' })}
+          ${sectionTitle('Pesagem')}
+          ${formField({ label: 'Carga total (kg)', name: 'carga_total_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.carga_total_kg, span: 'col4' })}
+          ${formField({ label: 'Tara (kg)', name: 'tara_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.tara_kg, span: 'col4' })}
+          ${formField({ label: `Peso bruto (kg) ${helpTip('Calculado: carga total - tara.')}`, name: 'calc_peso_bruto_kg', type: 'text', value: base.calc_peso_bruto_kg ?? '', span: 'col4', readonly: true })}
 
-          ${formField({ label: `Peso bruto (kg) ${helpTip('Calculado: carga total - tara.')}`, name: 'calc_peso_bruto_kg', type: 'text', value: base.calc_peso_bruto_kg ?? '', span: 'col3', readonly: true })}
-          ${formField({ label: `Umidade (kg) ${helpTip('Calculado a partir do peso bruto e desconto de umidade aplicado.')}`, name: 'calc_umidade_kg', type: 'text', value: base.calc_umidade_kg ?? '', span: 'col3', readonly: true })}
-          ${formField({ label: `Peso limpo/seco (kg) ${helpTip('Peso liquido apos descontos (umidade + qualidade).')}`, name: 'calc_peso_limpo_seco_kg', type: 'text', value: base.calc_peso_limpo_seco_kg ?? '', span: 'col3', readonly: true })}
-          ${formField({ label: `Sacas (sc) ${helpTip('Calculado: peso limpo/seco / 60.')}`, name: 'calc_sacas', type: 'text', value: base.calc_sacas ?? '', span: 'col3', readonly: true })}
+          ${sectionTitle('Umidade')}
+          ${formField({ label: `Umidade % ${helpTip('Valor informado pela amostra do silo (laboratorio).')}`, name: 'umidade_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_pct, span: 'col4' })}
+          ${formField({ label: `Desconto umidade % ${helpTip('Sugerido automaticamente pela tabela do destino (por safra) a partir da umidade informada. Voce pode ajustar; se ficar diferente da tabela, o campo fica amarelo.')}`, name: 'umidade_desc_pct_manual', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.umidade_desc_pct_manual ?? '', span: 'col4' })}
+          ${formField({ label: `Umidade (kg) ${helpTip('Calculado a partir do peso bruto e desconto de umidade aplicado.')}`, name: 'calc_umidade_kg', type: 'text', value: base.calc_umidade_kg ?? '', span: 'col4', readonly: true })}
 
           ${sectionTitle('Qualidade (amostra do silo)')}
           <div class="field col12" style="margin-top:-6px">
@@ -4024,12 +4018,23 @@ async function renderColheitaBase(variant) {
             </div>
             <div class="hint" style="margin-top:6px">Simula quantas sacas (limpa/seca) dariam em outros destinos com regras cadastradas para esta safra e plantio. Nao salva nada.</div>
           </div>
-          ${pctKgField({ label: 'Impureza %', pctName: 'impureza_pct', pctValue: base.impureza_pct, kgName: 'calc_impureza_kg', kgValue: base.calc_impureza_kg, span: 'col2' })}
-          ${pctKgField({ label: 'Ardidos %', pctName: 'ardidos_pct', pctValue: base.ardidos_pct, kgName: 'calc_ardidos_kg', kgValue: base.calc_ardidos_kg, span: 'col2' })}
-          ${pctKgField({ label: 'Queimados %', pctName: 'queimados_pct', pctValue: base.queimados_pct, kgName: 'calc_queimados_kg', kgValue: base.calc_queimados_kg, span: 'col2' })}
-          ${pctKgField({ label: 'Avariados %', pctName: 'avariados_pct', pctValue: base.avariados_pct, kgName: 'calc_avariados_kg', kgValue: base.calc_avariados_kg, span: 'col2' })}
-          ${pctKgField({ label: 'Esverdiados %', pctName: 'esverdiados_pct', pctValue: base.esverdiados_pct, kgName: 'calc_esverdiados_kg', kgValue: base.calc_esverdiados_kg, span: 'col2' })}
-          ${pctKgField({ label: 'Quebrados %', pctName: 'quebrados_pct', pctValue: base.quebrados_pct, kgName: 'calc_quebrados_kg', kgValue: base.calc_quebrados_kg, span: 'col2' })}
+          ${formField({ label: 'Impureza %', name: 'impureza_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.impureza_pct, span: 'col2' })}
+          ${formField({ label: 'Ardidos %', name: 'ardidos_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.ardidos_pct, span: 'col2' })}
+          ${formField({ label: 'Queimados %', name: 'queimados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.queimados_pct, span: 'col2' })}
+          ${formField({ label: 'Avariados %', name: 'avariados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.avariados_pct, span: 'col2' })}
+          ${formField({ label: 'Esverdiados %', name: 'esverdiados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.esverdiados_pct, span: 'col2' })}
+          ${formField({ label: 'Quebrados %', name: 'quebrados_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.quebrados_pct, span: 'col2' })}
+
+          ${formField({ label: 'Impureza (kg)', name: 'calc_impureza_kg', type: 'text', value: base.calc_impureza_kg, span: 'col2', readonly: true })}
+          ${formField({ label: 'Ardidos (kg)', name: 'calc_ardidos_kg', type: 'text', value: base.calc_ardidos_kg, span: 'col2', readonly: true })}
+          ${formField({ label: 'Queimados (kg)', name: 'calc_queimados_kg', type: 'text', value: base.calc_queimados_kg, span: 'col2', readonly: true })}
+          ${formField({ label: 'Avariados (kg)', name: 'calc_avariados_kg', type: 'text', value: base.calc_avariados_kg, span: 'col2', readonly: true })}
+          ${formField({ label: 'Esverdiados (kg)', name: 'calc_esverdiados_kg', type: 'text', value: base.calc_esverdiados_kg, span: 'col2', readonly: true })}
+          ${formField({ label: 'Quebrados (kg)', name: 'calc_quebrados_kg', type: 'text', value: base.calc_quebrados_kg, span: 'col2', readonly: true })}
+
+          ${sectionTitle('Resultado')}
+          ${formField({ label: `Peso limpo/seco (kg) ${helpTip('Peso liquido apos descontos (umidade + qualidade).')}`, name: 'calc_peso_limpo_seco_kg', type: 'text', value: base.calc_peso_limpo_seco_kg ?? '', span: 'col6', readonly: true })}
+          ${formField({ label: `Sacas (sc) ${helpTip('Calculado: peso limpo/seco / 60.')}`, name: 'calc_sacas', type: 'text', value: base.calc_sacas ?? '', span: 'col6', readonly: true })}
         </div>
         ${
           variant !== 'rev01'
@@ -4393,6 +4398,17 @@ async function renderColheitaBase(variant) {
       return anyDiff
     }
 
+    function restoreLimitIfCleared(el) {
+      if (!el) return
+      const raw = String(el.value ?? '').trim()
+      if (raw) return
+      const suggested = Number(el.dataset.suggestedHundredths ?? '')
+      if (!Number.isFinite(suggested)) return
+      el.value = (suggested / 100).toFixed(2)
+      el.dataset.userEdited = '0'
+      el.dataset.manual = '0'
+    }
+
     function setLocalFromTalhao() {
       const tid = Number(collectRateioTalhoes()?.[0]?.talhao_id)
       const t = cache.talhoes.find((x) => x.id === tid)
@@ -4673,17 +4689,17 @@ async function renderColheitaBase(variant) {
         }
 
         if (!p) {
-          setVal('calc_peso_bruto_kg', '')
-          setVal('calc_umidade_kg', '')
-          setVal('calc_peso_limpo_seco_kg', '')
-          setVal('calc_sacas', '')
+          setVal('calc_peso_bruto_kg', '-')
+          setVal('calc_umidade_kg', '-')
+          setVal('calc_peso_limpo_seco_kg', '-')
+          setVal('calc_sacas', '-')
 
-          setVal('calc_impureza_kg', '')
-          setVal('calc_ardidos_kg', '')
-          setVal('calc_queimados_kg', '')
-          setVal('calc_avariados_kg', '')
-          setVal('calc_esverdiados_kg', '')
-          setVal('calc_quebrados_kg', '')
+          setVal('calc_impureza_kg', '-')
+          setVal('calc_ardidos_kg', '-')
+          setVal('calc_queimados_kg', '-')
+          setVal('calc_avariados_kg', '-')
+          setVal('calc_esverdiados_kg', '-')
+          setVal('calc_quebrados_kg', '-')
           return
         }
 
@@ -4691,48 +4707,48 @@ async function renderColheitaBase(variant) {
           'calc_peso_bruto_kg',
           Number.isFinite(Number(p.peso_bruto_kg))
             ? fmtNum(Number(p.peso_bruto_kg), 0)
-            : '',
+            : '-',
         )
         setVal(
           'calc_umidade_kg',
           Number.isFinite(Number(p.umidade_kg))
             ? fmtNum(Number(p.umidade_kg), 0)
-            : '',
+            : '-',
         )
         setVal(
           'calc_peso_limpo_seco_kg',
           Number.isFinite(Number(p.peso_limpo_seco_kg))
             ? fmtNum(Number(p.peso_limpo_seco_kg), 0)
-            : '',
+            : '-',
         )
         setVal(
           'calc_sacas',
-          Number.isFinite(Number(p.sacas)) ? fmtNum(Number(p.sacas), 2) : '',
+          Number.isFinite(Number(p.sacas)) ? fmtNum(Number(p.sacas), 2) : '-',
         )
 
         setVal(
           'calc_impureza_kg',
-          Number.isFinite(Number(p.impureza_kg)) ? fmtNum(Number(p.impureza_kg), 0) : '',
+          Number.isFinite(Number(p.impureza_kg)) ? fmtNum(Number(p.impureza_kg), 0) : '-',
         )
         setVal(
           'calc_ardidos_kg',
-          Number.isFinite(Number(p.ardidos_kg)) ? fmtNum(Number(p.ardidos_kg), 0) : '',
+          Number.isFinite(Number(p.ardidos_kg)) ? fmtNum(Number(p.ardidos_kg), 0) : '-',
         )
         setVal(
           'calc_queimados_kg',
-          Number.isFinite(Number(p.queimados_kg)) ? fmtNum(Number(p.queimados_kg), 0) : '',
+          Number.isFinite(Number(p.queimados_kg)) ? fmtNum(Number(p.queimados_kg), 0) : '-',
         )
         setVal(
           'calc_avariados_kg',
-          Number.isFinite(Number(p.avariados_kg)) ? fmtNum(Number(p.avariados_kg), 0) : '',
+          Number.isFinite(Number(p.avariados_kg)) ? fmtNum(Number(p.avariados_kg), 0) : '-',
         )
         setVal(
           'calc_esverdiados_kg',
-          Number.isFinite(Number(p.esverdiados_kg)) ? fmtNum(Number(p.esverdiados_kg), 0) : '',
+          Number.isFinite(Number(p.esverdiados_kg)) ? fmtNum(Number(p.esverdiados_kg), 0) : '-',
         )
         setVal(
           'calc_quebrados_kg',
-          Number.isFinite(Number(p.quebrados_kg)) ? fmtNum(Number(p.quebrados_kg), 0) : '',
+          Number.isFinite(Number(p.quebrados_kg)) ? fmtNum(Number(p.quebrados_kg), 0) : '-',
         )
       }
 
@@ -4914,7 +4930,7 @@ async function renderColheitaBase(variant) {
           `<span class="pill"><span class="dot bad"></span><span>${escapeHtml(e.message)}</span></span>`,
         )
       }
-    }, 250)
+    }, 160)
 
     function syncRowFromPct(row) {
       const baseKg = getPesoBaseKg()
@@ -4983,12 +4999,14 @@ async function renderColheitaBase(variant) {
         inPct.addEventListener('input', () => {
           syncRowFromPct(row)
           updateRateioInfo()
+          runPreview()
         })
       }
       if (inKg) {
         inKg.addEventListener('input', () => {
           syncRowFromKg(row)
           updateRateioInfo()
+          runPreview()
         })
       }
 
@@ -5117,6 +5135,12 @@ async function renderColheitaBase(variant) {
       el.addEventListener('input', () => {
         updateLimitHighlight()
       })
+      // se o usuario apagar o valor manual, volta para o sugerido pela regra
+      el.addEventListener('blur', () => {
+        restoreLimitIfCleared(el)
+        updateLimitHighlight()
+        runPreview()
+      })
     }
 
     if (rateioWrap) {
@@ -5161,6 +5185,9 @@ async function renderColheitaBase(variant) {
     vForm.querySelectorAll('input,select,textarea').forEach((el) => {
       el.addEventListener('input', runPreview)
       el.addEventListener('change', runPreview)
+      // alguns navegadores/teclados disparam melhor em keyup/paste
+      el.addEventListener('keyup', runPreview)
+      el.addEventListener('paste', () => window.setTimeout(runPreview, 0))
     })
 
     runPreview()
