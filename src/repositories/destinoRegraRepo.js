@@ -89,6 +89,29 @@ export const destinoRegraRepo = {
     })
   },
 
+  updatePlantioById(id, data) {
+    db.prepare(
+      `UPDATE destino_regra_plantio
+       SET safra_id=@safra_id,
+           destino_id=@destino_id,
+           tipo_plantio=@tipo_plantio,
+           trava_sacas=@trava_sacas,
+           valor_compra_por_saca=@valor_compra_por_saca,
+           custo_silo_por_saca=@custo_silo_por_saca,
+           custo_terceiros_por_saca=@custo_terceiros_por_saca,
+           impureza_limite_pct=@impureza_limite_pct,
+           ardidos_limite_pct=@ardidos_limite_pct,
+           queimados_limite_pct=@queimados_limite_pct,
+           avariados_limite_pct=@avariados_limite_pct,
+           esverdiados_limite_pct=@esverdiados_limite_pct,
+           quebrados_limite_pct=@quebrados_limite_pct,
+           updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({ ...data, id })
+
+    return this.getPlantioById(id)
+  },
+
   listBySafra({ safra_id }) {
     return db
       .prepare(
@@ -102,14 +125,6 @@ export const destinoRegraRepo = {
   },
 
   listPlantio({ safra_id } = {}) {
-    const where = []
-    const params = {}
-    if (safra_id) {
-      where.push('rp.safra_id = @safra_id')
-      params.safra_id = safra_id
-    }
-    const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : ''
-
     return db
       .prepare(
         `SELECT
@@ -118,13 +133,13 @@ export const destinoRegraRepo = {
          FROM destino_regra_plantio rp
          JOIN safra s ON s.id = rp.safra_id
          JOIN destino d ON d.id = rp.destino_id
-         ${sqlWhere}
-         ORDER BY
-           CASE WHEN rp.updated_at IS NULL OR rp.updated_at='' THEN 1 ELSE 0 END,
-           rp.updated_at DESC,
-           rp.id DESC`,
+          WHERE (@safra_id IS NULL OR rp.safra_id = @safra_id)
+          ORDER BY
+            CASE WHEN rp.updated_at IS NULL OR rp.updated_at='' THEN 1 ELSE 0 END,
+            rp.updated_at DESC,
+            rp.id DESC`,
       )
-      .all(params)
+      .all({ safra_id: safra_id ?? null })
   },
 
   listPlantioBySafraTipo({ safra_id, tipo_plantio }) {

@@ -35,3 +35,7 @@ export function unauthorized(message = 'Nao autenticado', details) {
 export function forbidden(message = 'Sem permissao', details) {
   return new AppError(message, 403, details)
 }
+
+export function tooManyRequests(message = 'Muitas requisicoes', details) {
+  return new AppError(message, 429, details)
+}

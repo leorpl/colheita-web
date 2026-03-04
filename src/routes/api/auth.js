@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { z } from 'zod'
 
 import { env } from '../../config/env.js'
 import { validateBody } from '../../middleware/validate.js'
@@ -9,13 +8,11 @@ import { buildCookie, newToken, sha256Hex } from '../../auth/cookies.js'
 import { verifyPassword } from '../../auth/password.js'
 import { unauthorized } from '../../errors.js'
 import { permsForRole } from '../../auth/permissions.js'
+import { AuthSchemas } from '../../validation/apiSchemas.js'
 
 export const authRouter = Router()
 
-const LoginBody = z.object({
-  username: z.string().trim().min(1),
-  password: z.string().min(1),
-})
+const LoginBody = AuthSchemas.LoginBody
 
 authRouter.post('/login', validateBody(LoginBody), (req, res) => {
   if (Number(env.AUTH_ENABLED) !== 1) {
@@ -43,6 +40,8 @@ authRouter.post('/login', validateBody(LoginBody), (req, res) => {
       name: env.SESSION_COOKIE_NAME,
       value: token,
       maxAgeSeconds: ttlDays * 86400,
+      secure: Number(env.COOKIE_SECURE) === 1,
+      sameSite: env.COOKIE_SAMESITE,
     }),
   )
 
@@ -68,7 +67,13 @@ authRouter.post('/logout', (req, res) => {
   }
   res.setHeader(
     'Set-Cookie',
-    buildCookie({ name: env.SESSION_COOKIE_NAME, value: '', maxAgeSeconds: 0 }),
+    buildCookie({
+      name: env.SESSION_COOKIE_NAME,
+      value: '',
+      maxAgeSeconds: 0,
+      secure: Number(env.COOKIE_SECURE) === 1,
+      sameSite: env.COOKIE_SAMESITE,
+    }),
   )
   res.json({ ok: true })
 })

@@ -36,6 +36,21 @@ function getUserFromRequest(req) {
   }
 }
 
+// Attach req.user when session is valid.
+// Does NOT block when not logged in (use requireAuth/requirePerm for that).
+export function authenticate(req, _res, next) {
+  if (Number(env.AUTH_ENABLED) !== 1) return next()
+  const u = getUserFromRequest(req)
+  if (u) req.user = u
+  next()
+}
+
+export function requireAuth(req, _res, next) {
+  if (Number(env.AUTH_ENABLED) !== 1) return next()
+  if (!req.user) throw unauthorized('Nao autenticado')
+  next()
+}
+
 export function optionalAuth(req, _res, next) {
   if (Number(env.AUTH_ENABLED) !== 1) return next()
   const u = getUserFromRequest(req)
@@ -43,7 +58,8 @@ export function optionalAuth(req, _res, next) {
   next()
 }
 
-export function authGate(req, res, next) {
+// Backwards-compat: old behavior (kept for now).
+export function authGate(req, _res, next) {
   if (Number(env.AUTH_ENABLED) !== 1) return next()
 
   const p = String(req.path || '')

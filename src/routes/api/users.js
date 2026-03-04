@@ -1,12 +1,12 @@
 import { Router } from 'express'
-import { z } from 'zod'
 
-import { validateBody } from '../../middleware/validate.js'
+import { validateBody, validateParams } from '../../middleware/validate.js'
 import { usuarioRepo } from '../../repositories/usuarioRepo.js'
 import { hashPassword } from '../../auth/password.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Permissions } from '../../auth/permissions.js'
 import { notFound } from '../../errors.js'
+import { S, UsersSchemas } from '../../validation/apiSchemas.js'
 
 export const usersRouter = Router()
 
@@ -16,14 +16,7 @@ usersRouter.get('/', (_req, res) => {
   res.json(usuarioRepo.list())
 })
 
-const CreateBody = z.object({
-  username: z.string().trim().min(3),
-  nome: z.string().trim().optional().nullable(),
-  role: z.string().trim().min(1),
-  motorista_id: z.coerce.number().int().positive().optional().nullable(),
-  menus: z.array(z.string().trim().min(1)).optional().nullable(),
-  password: z.string().min(8),
-})
+const CreateBody = UsersSchemas.CreateBody
 
 usersRouter.post('/', validateBody(CreateBody), (req, res) => {
   const { salt, hash } = hashPassword(req.body.password)
@@ -49,17 +42,10 @@ usersRouter.post('/', validateBody(CreateBody), (req, res) => {
   res.status(201).json(row)
 })
 
-const UpdateBody = z.object({
-  username: z.string().trim().min(3),
-  nome: z.string().trim().optional().nullable(),
-  role: z.string().trim().min(1),
-  motorista_id: z.coerce.number().int().positive().optional().nullable(),
-  menus: z.array(z.string().trim().min(1)).optional().nullable(),
-  active: z.coerce.boolean().optional().default(true),
-})
+const UpdateBody = UsersSchemas.UpdateBody
 
-usersRouter.put('/:id', validateBody(UpdateBody), (req, res) => {
-  const id = Number(req.params.id)
+usersRouter.put('/:id', validateParams(S.IdParam), validateBody(UpdateBody), (req, res) => {
+  const id = req.params.id
   const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')
   const row = usuarioRepo.update(id, {
@@ -73,21 +59,24 @@ usersRouter.put('/:id', validateBody(UpdateBody), (req, res) => {
   res.json(row)
 })
 
-const PasswordBody = z.object({
-  password: z.string().min(8),
-})
+const PasswordBody = UsersSchemas.PasswordBody
 
-usersRouter.put('/:id/password', validateBody(PasswordBody), (req, res) => {
-  const id = Number(req.params.id)
+usersRouter.put(
+  '/:id/password',
+  validateParams(S.IdParam),
+  validateBody(PasswordBody),
+  (req, res) => {
+  const id = req.params.id
   const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')
   const { salt, hash } = hashPassword(req.body.password)
   const row = usuarioRepo.setPassword(id, { password_hash: hash, password_salt: salt })
   res.json(row)
-})
+  },
+)
 
-usersRouter.delete('/:id', (req, res) => {
-  const id = Number(req.params.id)
+usersRouter.delete('/:id', validateParams(S.IdParam), (req, res) => {
+  const id = req.params.id
   const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')
   usuarioRepo.remove(id)

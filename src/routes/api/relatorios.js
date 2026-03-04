@@ -1,20 +1,13 @@
 import { Router } from 'express'
-import { z } from 'zod'
 import { validateQuery } from '../../middleware/validate.js'
 import { relatoriosService } from '../../services/relatoriosService.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Permissions } from '../../auth/permissions.js'
+import { RelatoriosSchemas } from '../../validation/apiSchemas.js'
 
 export const relatoriosRouter = Router()
 
-const ColheitaQuery = z.object({
-  safra_id: z.coerce.number().int().positive().optional(),
-  talhao_id: z.coerce.number().int().positive().optional(),
-  destino_id: z.coerce.number().int().positive().optional(),
-  motorista_id: z.coerce.number().int().positive().optional(),
-  de: z.string().optional(),
-  ate: z.string().optional(),
-})
+const ColheitaQuery = RelatoriosSchemas.ColheitaQuery
 
 relatoriosRouter.get(
   '/colheita',
@@ -29,9 +22,7 @@ relatoriosRouter.get('/painel', requirePerm(Permissions.RELATORIOS_READ), (_req,
   res.json(relatoriosService.painel())
 })
 
-const ResumoTalhaoQuery = z.object({
-  safra_id: z.coerce.number().int().positive(),
-})
+const ResumoTalhaoQuery = RelatoriosSchemas.ResumoTalhaoQuery
 
 relatoriosRouter.get(
   '/resumo-talhao',
@@ -42,10 +33,7 @@ relatoriosRouter.get(
   },
 )
 
-const PagamentoQuery = z.object({
-  de: z.string().optional(),
-  ate: z.string().optional(),
-})
+const PagamentoQuery = RelatoriosSchemas.PagamentoQuery
 
 relatoriosRouter.get(
   '/pagamento-motoristas',
@@ -56,10 +44,7 @@ relatoriosRouter.get(
   },
 )
 
-const EntregasQuery = z.object({
-  safra_id: z.coerce.number().int().positive(),
-  tipo_plantio: z.string().trim().min(1).optional(),
-})
+const EntregasQuery = RelatoriosSchemas.EntregasQuery
 
 relatoriosRouter.get(
   '/entregas-por-destino',

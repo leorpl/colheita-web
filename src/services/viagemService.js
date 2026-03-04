@@ -1,6 +1,7 @@
 import { freteRepo } from '../repositories/freteRepo.js'
 import { destinoRepo } from '../repositories/destinoRepo.js'
 import { viagemRepo } from '../repositories/viagemRepo.js'
+import { viagemTalhaoRepo } from '../repositories/viagemTalhaoRepo.js'
 import { calcularViagem } from '../domain/calculations.js'
 import { conflict, unprocessable } from '../errors.js'
 import { normalizePercent100, round } from '../domain/normalize.js'
@@ -16,6 +17,149 @@ function toDbNumber(value, fieldName) {
 function normalizeOptionalPercent(value, fieldName) {
   if (value === null || value === undefined || value === '') return undefined
   return normalizePercent100(value, fieldName)
+}
+
+function normalizeTalhoesRateioInput(input) {
+  if (!input) return []
+  const raw = input.talhoes
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((x) => x && x.talhao_id !== null && x.talhao_id !== undefined)
+    .map((x) => ({
+      talhao_id: Number(x.talhao_id),
+      pct_rateio_raw: x.pct_rateio,
+      kg_rateio_raw: x.kg_rateio,
+    }))
+}
+
+function buildRateioItems({ input, peso_base_kg, fallback_talhao_id }) {
+  const rawItems = normalizeTalhoesRateioInput(input)
+  const items0 = rawItems.length
+    ? rawItems
+    : [{ talhao_id: Number(fallback_talhao_id), pct_rateio_raw: 100, kg_rateio_raw: null }]
+
+  const used = new Set()
+  const items = []
+
+  for (const it of items0) {
+    const talhao_id = Number(it.talhao_id)
+    if (!Number.isInteger(talhao_id) || talhao_id <= 0) {
+      throw unprocessable('Talhao invalido no rateio')
+    }
+    if (used.has(talhao_id)) {
+      throw unprocessable('Talhao repetido no rateio')
+    }
+    used.add(talhao_id)
+
+    const hasPct = !(it.pct_rateio_raw === null || it.pct_rateio_raw === undefined || it.pct_rateio_raw === '')
+    const hasKg = !(it.kg_rateio_raw === null || it.kg_rateio_raw === undefined || it.kg_rateio_raw === '')
+    if (!hasPct && !hasKg) {
+      throw unprocessable('Informe percentual ou kg no rateio do talhao')
+    }
+
+    const kg_rateio = hasKg ? toDbNumber(it.kg_rateio_raw, 'kg_rateio') : null
+    if (kg_rateio !== null && kg_rateio < 0) {
+      throw unprocessable('kg_rateio invalido')
+    }
+
+    const pct_rateio = hasPct
+      ? normalizePercent100(it.pct_rateio_raw, 'pct_rateio')
+      : null
+
+    items.push({ talhao_id, pct_rateio, kg_rateio })
+  }
+
+  const base = Number(peso_base_kg || 0)
+  const hasBase = Number.isFinite(base) && base > 0
+
+  // Sem peso base: exigir fechamento em % (estimativa) para evitar rateio inconsistente.
+  if (!hasBase) {
+    const out = items.map((it) => {
+      if (it.pct_rateio === null || it.pct_rateio === undefined) {
+        throw unprocessable('Rateio: informe percentual (%) para todos os talhoes (sem peso bruto)', {
+          missing_field: 'pct_rateio',
+        })
+      }
+      return {
+        talhao_id: it.talhao_id,
+        pct_rateio: it.pct_rateio,
+        kg_rateio: it.kg_rateio ?? null,
+      }
+    })
+
+    let sumPct = 0
+    for (const it of out) sumPct += Number(it.pct_rateio || 0)
+    const deltaPct = round(1 - sumPct, 9)
+    const tolPct = 0.0001
+    if (Math.abs(deltaPct) > tolPct) {
+      throw unprocessable('Rateio: percentual deve fechar 100%', {
+        soma_pct: sumPct,
+        delta_pct: deltaPct,
+        soma_pct_100: sumPct * 100,
+        delta_pct_100: deltaPct * 100,
+      })
+    }
+
+    // Ajuste fino no ultimo item para fechar (evita erro por arredondamento)
+    if (out.length) {
+      const last = out[out.length - 1]
+      last.pct_rateio = round(Number(last.pct_rateio || 0) + deltaPct, 9)
+    }
+
+    return out
+  }
+
+  // Se o peso base existir, materializa kg/pct faltantes e valida fechamento.
+  if (hasBase) {
+    const out = items.map((it) => {
+      let kg = it.kg_rateio
+      let pct = it.pct_rateio
+
+      if (kg !== null && kg !== undefined) {
+        pct = base > 0 ? kg / base : 0
+      } else if (pct !== null && pct !== undefined) {
+        kg = round(base * pct, 6)
+      } else {
+        throw unprocessable('Rateio do talhao incompleto')
+      }
+
+      return {
+        talhao_id: it.talhao_id,
+        kg_rateio: kg,
+        pct_rateio: pct,
+      }
+    })
+
+    let sumKg = 0
+    for (const it of out) sumKg += Number(it.kg_rateio || 0)
+
+    const delta = round(base - sumKg, 6)
+    const tolKg = 2
+    if (Math.abs(delta) > tolKg) {
+      const sumPct = base > 0 ? sumKg / base : 0
+      const deltaPct = base > 0 ? delta / base : 0
+      throw unprocessable('Rateio: nao fecha (ajuste para 100%)', {
+        peso_bruto_kg: base,
+        soma_kg_rateio: sumKg,
+        delta_kg: delta,
+        soma_pct: sumPct,
+        delta_pct: deltaPct,
+        soma_pct_100: sumPct * 100,
+        delta_pct_100: deltaPct * 100,
+        tolerancia_kg: tolKg,
+      })
+    }
+
+    // Ajuste fino no ultimo item para fechar (evita erro por arredondamento)
+    if (out.length) {
+      const last = out[out.length - 1]
+      const fixedKg = round(Number(last.kg_rateio || 0) + delta, 6)
+      last.kg_rateio = fixedKg
+      last.pct_rateio = base > 0 ? fixedKg / base : 0
+    }
+
+    return out
+  }
 }
 
 export const viagemService = {
@@ -76,7 +220,13 @@ export const viagemService = {
       ficha,
       safra_id,
       tipo_plantio,
-      talhao_id: Number(input.talhao_id),
+      talhao_id: Number(
+        Number.isFinite(Number(input.talhao_id)) && Number(input.talhao_id) > 0
+          ? input.talhao_id
+          : (Array.isArray(input.talhoes) && input.talhoes.length
+              ? input.talhoes[0]?.talhao_id
+              : input.talhao_id),
+      ),
       local: input.local ?? null,
       destino_id: Number(input.destino_id),
       motorista_id: Number(input.motorista_id),
@@ -137,7 +287,7 @@ export const viagemService = {
     }
 
     // safra_id ja validado no inicio
-    if (!Number.isInteger(payload.talhao_id))
+    if (!Number.isInteger(payload.talhao_id) || payload.talhao_id <= 0)
       throw unprocessable('talhao_id invalido')
     if (!Number.isInteger(payload.destino_id))
       throw unprocessable('destino_id invalido')
@@ -531,8 +681,10 @@ export const viagemService = {
       tipo_plantio: tp,
     })
 
-    const trava_sacas = regra?.trava_sacas ?? null
-    if (trava_sacas === null || trava_sacas === undefined) return null
+    // Regra de negocio (contrato): "trava_sacas" representa o volume contratado (sacas).
+    // Ate este volume, aplica-se o preco/condicao negociado. Acima, entra em regime "fora do contrato".
+    const contrato_sacas_raw = regra?.trava_sacas ?? null
+    if (contrato_sacas_raw === null || contrato_sacas_raw === undefined) return null
 
     const whereExtra = exclude_id ? ' AND v.id <> @exclude_id' : ''
     const row = db
@@ -548,27 +700,45 @@ export const viagemService = {
       .get({ destino_id, safra_id, exclude_id, tipo_plantio: tp })
 
     const entrega_atual = Number(row?.entrega_atual || 0)
-    const trava = Number(trava_sacas)
+    const contrato_sacas = Number(contrato_sacas_raw)
     const tentativa = Number(sacas || 0)
 
-    if (!Number.isFinite(trava) || trava <= 0) return null
+    if (!Number.isFinite(contrato_sacas) || contrato_sacas <= 0) return null
 
-    const atingida = round(entrega_atual + tentativa, 9) > trava
+    const restante_antes = Math.max(0, contrato_sacas - entrega_atual)
+    const dentro_contrato = Math.max(0, Math.min(tentativa, restante_antes))
+    const fora_contrato = Math.max(0, tentativa - dentro_contrato)
+    const entrega_depois = round(entrega_atual + tentativa, 9)
+    const excedeu = entrega_depois > contrato_sacas
 
     return {
-      atingida,
+      // compat: "atingida" era usado como alerta de trava
+      atingida: excedeu,
+      excedeu,
       destino_id,
       safra_id,
       tipo_plantio: tp,
-      trava_sacas: trava,
+      contrato_sacas,
+      // compat
+      trava_sacas: contrato_sacas,
       entrega_atual_sacas: entrega_atual,
       tentativa_sacas: tentativa,
-      restante_sacas: Math.max(0, trava - entrega_atual),
+      restante_sacas: restante_antes,
+      restante_antes_sacas: restante_antes,
+      restante_depois_sacas: Math.max(0, contrato_sacas - entrega_depois),
+      dentro_contrato_sacas: round(dentro_contrato, 9),
+      fora_contrato_sacas: round(fora_contrato, 9),
+      entrega_depois_sacas: entrega_depois,
     }
   },
 
   create(input) {
     const payload = this.buildPayload(input)
+    const rateioItems = buildRateioItems({
+      input,
+      peso_base_kg: payload.peso_bruto_kg,
+      fallback_talhao_id: payload.talhao_id,
+    })
     const trava = this.getTravaStatus({
       destino_id: payload.destino_id,
       safra_id: payload.safra_id,
@@ -576,8 +746,13 @@ export const viagemService = {
       sacas: payload.sacas,
     })
     try {
-      const row = viagemRepo.create(payload)
-      return { ...row, trava }
+      const tx = db.transaction(() => {
+        const row = viagemRepo.create(payload)
+        viagemTalhaoRepo.replaceForViagem({ viagem_id: row.id, items: rateioItems })
+        return viagemRepo.get(row.id)
+      })
+      const full = tx()
+      return { ...full, trava }
     } catch (e) {
       if (
         e?.code === 'SQLITE_CONSTRAINT_UNIQUE' &&
@@ -596,6 +771,12 @@ export const viagemService = {
   update(id, input) {
     const payload = this.buildPayload(input, { current_id: id, exclude_id: id })
 
+    const rateioItems = buildRateioItems({
+      input,
+      peso_base_kg: payload.peso_bruto_kg,
+      fallback_talhao_id: payload.talhao_id,
+    })
+
     const trava = this.getTravaStatus({
       destino_id: payload.destino_id,
       safra_id: payload.safra_id,
@@ -605,8 +786,13 @@ export const viagemService = {
     })
 
     try {
-      const row = viagemRepo.update(id, payload)
-      return { ...row, trava }
+      const tx = db.transaction(() => {
+        viagemRepo.update(id, payload)
+        viagemTalhaoRepo.replaceForViagem({ viagem_id: id, items: rateioItems })
+        return viagemRepo.get(id)
+      })
+      const full = tx()
+      return { ...full, trava }
     } catch (e) {
       if (
         e?.code === 'SQLITE_CONSTRAINT_UNIQUE' &&

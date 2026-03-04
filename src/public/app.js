@@ -498,6 +498,54 @@ function openDialog({ title, bodyHtml, onSubmit, submitLabel = 'Salvar', size } 
         return
       }
 
+      // Erros de rateio (talhoes): mostrar motivo com numeros
+      if (
+        msg.toLowerCase().includes('rateio') ||
+        details?.delta_pct !== undefined ||
+        details?.delta_pct_100 !== undefined ||
+        details?.delta_kg !== undefined
+      ) {
+        const somaPct =
+          details?.soma_pct_100 !== undefined
+            ? Number(details.soma_pct_100)
+            : details?.soma_pct !== undefined
+              ? Number(details.soma_pct) * 100
+              : null
+        const deltaPct =
+          details?.delta_pct_100 !== undefined
+            ? Number(details.delta_pct_100)
+            : details?.delta_pct !== undefined
+              ? Number(details.delta_pct) * 100
+              : null
+        const pesoBruto =
+          details?.peso_bruto_kg !== undefined ? Number(details.peso_bruto_kg) : null
+        const somaKg =
+          details?.soma_kg_rateio !== undefined ? Number(details.soma_kg_rateio) : null
+        const deltaKg = details?.delta_kg !== undefined ? Number(details.delta_kg) : null
+
+        const pctLine =
+          somaPct === null || !Number.isFinite(somaPct)
+            ? ''
+            : `<div class="hint" style="margin-top:8px">Percentual: soma <b>${escapeHtml(fmtNum(somaPct, 2))}%</b>${Number.isFinite(deltaPct) ? ` | falta/sobra <b>${escapeHtml(fmtNum(deltaPct, 2))}%</b>` : ''}</div>`
+
+        const kgLine =
+          !Number.isFinite(pesoBruto) || !Number.isFinite(somaKg) || !Number.isFinite(deltaKg)
+            ? ''
+            : `<div class="hint" style="margin-top:6px">Peso bruto: <b>${escapeHtml(fmtNum(pesoBruto, 0))} kg</b> | soma kg: <b>${escapeHtml(fmtNum(somaKg, 0))} kg</b> | falta/sobra: <b>${escapeHtml(fmtNum(deltaKg, 0))} kg</b></div>`
+
+        showDialogOverlay({
+          title: 'Nao foi possivel salvar',
+          primaryLabel: 'OK',
+          bodyHtml: `
+            <div>${escapeHtml(msg)}</div>
+            ${pctLine}
+            ${kgLine}
+            <div class="hint" style="margin-top:10px">Dica: use o botao <b>Restante</b> no rateio para fechar em 100%.</div>
+          `.trim(),
+        })
+        return
+      }
+
       // fallback
       toast('Erro', msg)
     }
@@ -1041,7 +1089,7 @@ async function renderPainel() {
           }
         })
 
-        // show all destinos; order: with trava first, then by % desc, then entrega desc
+        // show all destinos; order: with contrato first, then by % desc, then entrega desc
         all.sort((a, b) => {
           const at = a.trava > 0 ? 1 : 0
           const bt = b.trava > 0 ? 1 : 0
@@ -1057,7 +1105,7 @@ async function renderPainel() {
               d.trava > 0
                 ? `${fmtNum(d.entrega, 2)} / ${fmtNum(d.trava, 2)} sc` +
                   (d.falta > 0 ? ` | falta ${fmtNum(d.falta, 2)} sc` : ' | OK')
-                : `${fmtNum(d.entrega, 2)} sc | sem trava`
+                : `${fmtNum(d.entrega, 2)} sc | sem contrato`
             return `
               <div class="bar">
                 <div class="name">${escapeHtml(d.name)}</div>
@@ -1117,12 +1165,12 @@ async function renderCrudPage({
         .join('')
 
       return `<tr>
-        ${tds}
         <td class="actions">
           ${extraBtns}
           <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
           <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
         </td>
+        ${tds}
       </tr>`
     })
     .join('')
@@ -1140,7 +1188,7 @@ async function renderCrudPage({
         <div class="table-wrap">
           <table>
             <thead>
-              <tr>${th}<th></th></tr>
+              <tr><th class="actions"></th>${th}</tr>
             </thead>
             <tbody>
               ${rows || `<tr><td colspan="${columns.length + 1}">Nenhum registro.</td></tr>`}
@@ -1469,7 +1517,7 @@ async function renderDestinos() {
   await renderCrudPage({
     route: 'destinos',
     title: 'Destinos',
-    subtitle: 'Cadastre destino e distancia (km). A trava (sacas) fica nas Regras do destino.',
+    subtitle: 'Cadastre destino e distancia (km). O contrato (sacas) fica nas Regras do destino.',
     fetchPath: '/api/destinos',
     columns: [
       { key: 'id', label: 'ID' },
@@ -1802,15 +1850,15 @@ async function renderUsuarios() {
   const rows = (users || [])
     .map((u) => {
       return `<tr>
-        <td>${escapeHtml(u.username)}</td>
-        <td>${escapeHtml(u.nome || '')}</td>
-        <td>${escapeHtml(u.role)}</td>
-        <td>${escapeHtml(String(u.active ? 'SIM' : 'NAO'))}</td>
         <td class="actions">
           <button class="btn small ghost" data-act="uedit" data-id="${u.id}">Editar</button>
           <button class="btn small ghost" data-act="upwd" data-id="${u.id}">Senha</button>
           <button class="btn small danger" data-act="udel" data-id="${u.id}">Excluir</button>
         </td>
+        <td>${escapeHtml(u.username)}</td>
+        <td>${escapeHtml(u.nome || '')}</td>
+        <td>${escapeHtml(u.role)}</td>
+        <td>${escapeHtml(String(u.active ? 'SIM' : 'NAO'))}</td>
       </tr>`
     })
     .join('')
@@ -1827,7 +1875,7 @@ async function renderUsuarios() {
       <div class="panel-body">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Usuario</th><th>Nome</th><th>Role</th><th>Ativo</th><th></th></tr></thead>
+            <thead><tr><th class="actions"></th><th>Usuario</th><th>Nome</th><th>Role</th><th>Ativo</th></tr></thead>
             <tbody>${rows || `<tr><td colspan="5">Nenhum usuario.</td></tr>`}</tbody>
           </table>
         </div>
@@ -1975,12 +2023,12 @@ async function renderTiposPlantio() {
   const rows = items
     .map((it) => {
       return `<tr>
-        <td>${it.id}</td>
-        <td>${escapeHtml(it.nome)}</td>
         <td class="actions">
           <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
           <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
         </td>
+        <td>${it.id}</td>
+        <td>${escapeHtml(it.nome)}</td>
       </tr>`
     })
     .join('')
@@ -1997,7 +2045,7 @@ async function renderTiposPlantio() {
       <div class="panel-body">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Nome</th><th></th></tr></thead>
+            <thead><tr><th class="actions"></th><th>ID</th><th>Nome</th></tr></thead>
             <tbody>${rows || `<tr><td colspan="3">Nenhum registro.</td></tr>`}</tbody>
           </table>
         </div>
@@ -2059,15 +2107,15 @@ async function renderFretes() {
   const rows = items
     .map((it) => {
       return `<tr>
+        <td class="actions">
+          <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
+          <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
+        </td>
         <td>${it.id}</td>
         <td>${escapeHtml(it.safra_nome)}</td>
         <td data-sort="${escapeHtml(`${it.motorista_nome || ''} ${it.destino_local || ''} ${it.safra_nome || ''}`.trim())}">${escapeHtml(it.motorista_nome)}</td>
         <td data-sort="${escapeHtml(`${it.destino_local || ''} ${it.motorista_nome || ''} ${it.safra_nome || ''}`.trim())}">${escapeHtml(it.destino_local)}</td>
         <td>${fmtMoney(it.valor_por_saca)}</td>
-        <td class="actions">
-          <button class="btn small ghost" data-act="edit" data-id="${it.id}">Editar</button>
-          <button class="btn small danger" data-act="del" data-id="${it.id}">Excluir</button>
-        </td>
       </tr>`
     })
     .join('')
@@ -2088,7 +2136,7 @@ async function renderFretes() {
       <div class="panel-body">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Safra</th><th>Motorista</th><th>Destino</th><th>Valor por saca</th><th></th></tr></thead>
+            <thead><tr><th class="actions"></th><th>ID</th><th>Safra</th><th>Motorista</th><th>Destino</th><th>Valor por saca</th></tr></thead>
             <tbody>${rows || `<tr><td colspan="6">Nenhum frete cadastrado.</td></tr>`}</tbody>
           </table>
         </div>
@@ -2141,7 +2189,7 @@ async function renderFretes() {
             <div class="hint" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
               <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="only_origin_motoristas" checked /> Somente motoristas com frete na origem</label>
               <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="only_origin_destinos" checked /> Somente destinos com frete na origem</label>
-              <span style="opacity:.75">(Filtro por trava removido: trava fica nas regras do destino)</span>
+              <span style="opacity:.75">(Filtro por contrato removido: contrato fica nas regras do destino)</span>
             </div>
           </div>
           <div class="field col12">
@@ -2260,7 +2308,7 @@ async function renderFretes() {
     if (fromEl) fromEl.onchange = renderPreview
     if (ckOnlyMot) ckOnlyMot.onchange = renderPreview
     if (ckOnlyDes) ckOnlyDes.onchange = renderPreview
-    // filtro por trava foi removido (trava agora fica nas regras do destino)
+    // filtro por contrato foi removido (contrato agora fica nas regras do destino)
     renderPreview()
   }
 
@@ -2445,8 +2493,9 @@ async function renderRegrasDestino() {
   const qs = hash.includes('?') ? hash.split('?')[1] : ''
   const params = new URLSearchParams(qs)
   const editId = Number(params.get('edit_id') || '')
+  const isNew = String(params.get('new') || '') === '1'
 
-  if (!(Number.isFinite(editId) && editId > 0)) {
+  if (!isNew && !(Number.isFinite(editId) && editId > 0)) {
     const rules = await api('/api/destino-regras/plantio')
 
     setView(`
@@ -2465,13 +2514,13 @@ async function renderRegrasDestino() {
             <table>
               <thead>
                 <tr>
+                  <th class="actions"></th>
                   <th>Item</th>
                   <th>Safra</th>
                   <th>Destino</th>
                   <th>Plantio</th>
                   <th>Alteracao</th>
                   <th>Criacao</th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody id="rulesBody">
@@ -2494,16 +2543,16 @@ async function renderRegrasDestino() {
           const upd = String(r.updated_at || '')
           const crt = String(r.created_at || '')
           return `<tr>
+            <td class="actions">
+              <button class="btn small ghost" data-act="edit" data-id="${id}">Editar</button>
+              <button class="btn small danger" data-act="del" data-id="${id}">Excluir</button>
+            </td>
             <td data-sort="${id}">${escapeHtml(String(id))}</td>
             <td data-sort="${escapeHtml(safra)}">${escapeHtml(safra)}</td>
             <td data-sort="${escapeHtml(destino)}">${escapeHtml(destino)}</td>
             <td data-sort="${escapeHtml(plantio)}"><code class="mono">${escapeHtml(plantio)}</code></td>
             <td data-sort="${escapeHtml(upd)}">${escapeHtml(upd || '-')}</td>
             <td data-sort="${escapeHtml(crt)}">${escapeHtml(crt || '-')}</td>
-            <td class="actions">
-              <button class="btn small ghost" data-act="edit" data-id="${id}">Editar</button>
-              <button class="btn small danger" data-act="del" data-id="${id}">Excluir</button>
-            </td>
           </tr>`
         })
         .join('')
@@ -2514,7 +2563,7 @@ async function renderRegrasDestino() {
     const btnNova = view.querySelector('#btnNovaRegra')
     if (btnNova) {
       btnNova.onclick = () => {
-        window.location.hash = '#/regras-destino?edit_id=1'
+        window.location.hash = '#/regras-destino?new=1'
       }
     }
 
@@ -2525,9 +2574,6 @@ async function renderRegrasDestino() {
         if (!r) return
         const qp = new URLSearchParams({
           edit_id: String(id),
-          safra_id: String(r.safra_id),
-          destino_id: String(r.destino_id),
-          tipo_plantio: String(r.tipo_plantio),
         })
         window.location.hash = `#/regras-destino?${qp.toString()}`
       }
@@ -2601,16 +2647,21 @@ async function renderRegrasDestino() {
 
            ${selectField({ label: 'Tipo plantio', name: 'tipo_plantio', options: plantioOptions, value: tipoDefault || plantioOptions[0]?.value || '', span: 'col6' })}
 
-           ${formField({ label: `Trava (sacas) ${helpTip('Quando a soma de sacas da safra para o destino ultrapassa a trava, o lancamento alerta (nao bloqueia).')}`, name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '', span: 'col4' })}
+           <div class="field col6" style="align-self:end">
+             <div class="label">Status</div>
+             <div class="hint" id="ruleIdentityHint">${escapeHtml(isNew ? 'Nova regra' : `Editando regra #${editId}`)}</div>
+           </div>
+
+           ${formField({ label: `Contrato (sacas) ${helpTip('Volume negociado antes do plantio (contrato de fornecimento). Serve para acompanhar quanto falta/excedeu do combinado. Para precos por volume, use a tabela de compra (faixas).')}`, name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '', span: 'col4' })}
 
            <div class="field col12">
              <div class="label">Tabela de compra do silo (por volume de sacas)</div>
              <div class="hint">O preco pode mudar conforme o acumulado de sacas vendidas no destino (na safra e tipo de plantio). Uma colheita pode pegar 2 faixas; o sistema usa a media.</div>
              <div class="table-wrap rule-wrap" style="margin-top:8px">
                <table>
-                 <thead><tr><th>Acumulado (&gt;)</th><th>Acumulado (&lt;=)</th><th>Preco (R$/sc)</th><th></th></tr></thead>
-                 <tbody id="compraFaixas"></tbody>
-               </table>
+                  <thead><tr><th class="actions"></th><th>Acumulado (&gt;)</th><th>Acumulado (&lt;=)</th><th>Preco (R$/sc)</th></tr></thead>
+                  <tbody id="compraFaixas"></tbody>
+                </table>
              </div>
              <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end">
                <button class="btn ghost" type="button" id="btnAddCompra">Adicionar faixa</button>
@@ -2632,7 +2683,7 @@ async function renderRegrasDestino() {
             <div class="hint">Defina faixas: desconto (%) e custo de secagem (R$/sc).</div>
             <div class="table-wrap rule-wrap" style="margin-top:8px">
               <table>
-                <thead><tr><th>Umid (&gt;)</th><th>Umid (&lt;=)</th><th>Desconto (%)</th><th>Secagem (R$/sc)</th><th></th></tr></thead>
+                <thead><tr><th class="actions"></th><th>Umid (&gt;)</th><th>Umid (&lt;=)</th><th>Desconto (%)</th><th>Secagem (R$/sc)</th></tr></thead>
                 <tbody id="faixas"></tbody>
               </table>
             </div>
@@ -2655,6 +2706,10 @@ async function renderRegrasDestino() {
   const btnRecalcCompra = view.querySelector('#btnRecalcCompra')
   const btnBackRules = view.querySelector('#btnBackRules')
 
+  const identityHint = view.querySelector('#ruleIdentityHint')
+  let conflictBlock = false
+  const currentId = !isNew && Number.isFinite(editId) && editId > 0 ? editId : null
+
   if (btnBackRules) {
     btnBackRules.onclick = () => {
       window.location.hash = '#/regras-destino'
@@ -2663,11 +2718,11 @@ async function renderRegrasDestino() {
 
   function faixaRow(f = { umid_gt: '', umid_lte: '', desconto_pct: '' }) {
     return `<tr>
+      <td class="actions"><button class="btn small danger" type="button" data-act="rm">Remover</button></td>
       <td style="width:90px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_gt" value="${escapeHtml(f.umid_gt)}" /></td>
       <td style="width:90px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_lte" value="${escapeHtml(f.umid_lte)}" /></td>
       <td style="width:110px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="desconto_pct" value="${escapeHtml(f.desconto_pct)}" /></td>
       <td style="width:120px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="custo_secagem_por_saca" value="${escapeHtml(f.custo_secagem_por_saca ?? '')}" /></td>
-      <td class="actions"><button class="btn small danger" type="button" data-act="rm">Remover</button></td>
     </tr>`
   }
 
@@ -2681,10 +2736,10 @@ async function renderRegrasDestino() {
 
   function compraRow(f = { sacas_gt: '', sacas_lte: '', preco_por_saca: '' }) {
     return `<tr>
+      <td class="actions"><button class="btn small danger" type="button" data-act="rm-compra">Remover</button></td>
       <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="sacas_gt" value="${escapeHtml(f.sacas_gt)}" /></td>
       <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="sacas_lte" value="${escapeHtml(f.sacas_lte)}" placeholder="(sem limite)" /></td>
       <td style="width:140px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="preco_por_saca" value="${escapeHtml(f.preco_por_saca)}" /></td>
-      <td class="actions"><button class="btn small danger" type="button" data-act="rm-compra">Remover</button></td>
     </tr>`
   }
 
@@ -2694,17 +2749,61 @@ async function renderRegrasDestino() {
     })
   }
 
-  async function load() {
+  const checkConflict = debounce(async () => {
+    conflictBlock = false
+    if (!identityHint) return
+    if (!currentId) {
+      identityHint.textContent = 'Nova regra'
+      if (btnSalvar) btnSalvar.disabled = false
+      return
+    }
     const fd = new FormData(form)
     const safra_id = Number(fd.get('safra_id'))
     const destino_id = Number(fd.get('destino_id'))
-    const tipo_plantio = String(fd.get('tipo_plantio') || '')
+    const tipo_plantio = String(fd.get('tipo_plantio') || '').trim()
+    if (!tipo_plantio) {
+      identityHint.textContent = `Editando regra #${currentId}`
+      if (btnSalvar) btnSalvar.disabled = false
+      return
+    }
     const qp = new URLSearchParams({
       safra_id: String(safra_id),
       destino_id: String(destino_id),
+      tipo_plantio,
     })
-    qp.set('tipo_plantio', tipo_plantio)
-    const regra = await api(`/api/destino-regras/one?${qp.toString()}`)
+    const exists = await api(`/api/destino-regras/one?${qp.toString()}`)
+    if (exists && Number(exists.id) !== Number(currentId)) {
+      conflictBlock = true
+      identityHint.textContent = `Conflito: ja existe regra #${exists.id} para esta combinacao (nao pode duplicar).`
+      if (btnSalvar) btnSalvar.disabled = true
+      return
+    }
+    identityHint.textContent = `Editando regra #${currentId}`
+    if (btnSalvar) btnSalvar.disabled = false
+  }, 250)
+
+  async function load() {
+    let regra
+    if (currentId) {
+      regra = await api(`/api/destino-regras/plantio/${currentId}`)
+      // fixar a identidade ao id carregado (nao alternar registro durante edicao)
+      form.safra_id.value = String(regra.safra_id)
+      form.destino_id.value = String(regra.destino_id)
+      form.tipo_plantio.value = String(regra.tipo_plantio || '')
+      if (identityHint) identityHint.textContent = `Editando regra #${currentId}`
+    } else {
+      const fd = new FormData(form)
+      const safra_id = Number(fd.get('safra_id'))
+      const destino_id = Number(fd.get('destino_id'))
+      const tipo_plantio = String(fd.get('tipo_plantio') || '')
+      const qp = new URLSearchParams({
+        safra_id: String(safra_id),
+        destino_id: String(destino_id),
+      })
+      qp.set('tipo_plantio', tipo_plantio)
+      regra = await api(`/api/destino-regras/one?${qp.toString()}`)
+      if (identityHint) identityHint.textContent = 'Nova regra'
+    }
 
     form.trava_sacas.value =
       regra?.trava_sacas === null || regra?.trava_sacas === undefined
@@ -2774,9 +2873,15 @@ async function renderRegrasDestino() {
     }
   }
 
-  form.safra_id.onchange = load
-  form.destino_id.onchange = load
-  form.tipo_plantio.onchange = load
+  if (currentId) {
+    form.safra_id.onchange = () => checkConflict()
+    form.destino_id.onchange = () => checkConflict()
+    form.tipo_plantio.onchange = () => checkConflict()
+  } else {
+    form.safra_id.onchange = load
+    form.destino_id.onchange = load
+    form.tipo_plantio.onchange = load
+  }
 
   btnAddFaixa.onclick = () => {
     if (faixasEl.textContent.includes('Nenhuma faixa')) faixasEl.innerHTML = ''
@@ -2793,6 +2898,10 @@ async function renderRegrasDestino() {
   }
 
   btnSalvar.onclick = async () => {
+    if (conflictBlock) {
+      toast('Erro', 'Ja existe regra para esta combinacao (nao pode duplicar).')
+      return
+    }
     const fd = new FormData(form)
     const safra_id = Number(fd.get('safra_id'))
     const destino_id = Number(fd.get('destino_id'))
@@ -2844,26 +2953,38 @@ async function renderRegrasDestino() {
       compra_faixas.push({ sacas_gt: 0, sacas_lte: null, preco_por_saca: 120 })
     }
 
-    await api('/api/destino-regras', {
-      method: 'POST',
-      body: {
-        safra_id,
-        destino_id,
-        tipo_plantio,
-        trava_sacas: String(fd.get('trava_sacas') || '').trim() === '' ? null : numOr0(fd.get('trava_sacas')),
-        valor_compra_por_saca: Number(compra_faixas[0]?.preco_por_saca ?? 120),
-        compra_faixas,
-        custo_silo_por_saca: numOr0(fd.get('custo_silo_por_saca')),
-        custo_terceiros_por_saca: numOr0(fd.get('custo_terceiros_por_saca')),
-        impureza_limite_pct: numOr0(fd.get('impureza_limite_pct')),
-        ardidos_limite_pct: numOr0(fd.get('ardidos_limite_pct')),
-        queimados_limite_pct: numOr0(fd.get('queimados_limite_pct')),
-        avariados_limite_pct: numOr0(fd.get('avariados_limite_pct')),
-        esverdiados_limite_pct: numOr0(fd.get('esverdiados_limite_pct')),
-        quebrados_limite_pct: numOr0(fd.get('quebrados_limite_pct')),
-        umidade_faixas: faixas,
-      },
-    })
+    const payload = {
+      safra_id,
+      destino_id,
+      tipo_plantio,
+      trava_sacas:
+        String(fd.get('trava_sacas') || '').trim() === ''
+          ? null
+          : numOr0(fd.get('trava_sacas')),
+      valor_compra_por_saca: Number(compra_faixas[0]?.preco_por_saca ?? 120),
+      compra_faixas,
+      custo_silo_por_saca: numOr0(fd.get('custo_silo_por_saca')),
+      custo_terceiros_por_saca: numOr0(fd.get('custo_terceiros_por_saca')),
+      impureza_limite_pct: numOr0(fd.get('impureza_limite_pct')),
+      ardidos_limite_pct: numOr0(fd.get('ardidos_limite_pct')),
+      queimados_limite_pct: numOr0(fd.get('queimados_limite_pct')),
+      avariados_limite_pct: numOr0(fd.get('avariados_limite_pct')),
+      esverdiados_limite_pct: numOr0(fd.get('esverdiados_limite_pct')),
+      quebrados_limite_pct: numOr0(fd.get('quebrados_limite_pct')),
+      umidade_faixas: faixas,
+    }
+
+    if (currentId) {
+      await api(`/api/destino-regras/plantio/${currentId}`, {
+        method: 'PUT',
+        body: payload,
+      })
+    } else {
+      await api('/api/destino-regras', {
+        method: 'POST',
+        body: payload,
+      })
+    }
     toast('Salvo', 'Regras do destino atualizadas.')
     load()
   }
@@ -3096,7 +3217,7 @@ async function renderRegrasDestino() {
 
         prevEl.innerHTML = `
           <div class="form-grid" style="margin:0">
-            ${formField({ label: 'Trava (sacas)', name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: regra.trava_sacas === null || regra.trava_sacas === undefined ? '' : fmtNum(regra.trava_sacas, 2), span: 'col4' })}
+            ${formField({ label: 'Contrato (sacas)', name: 'trava_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: regra.trava_sacas === null || regra.trava_sacas === undefined ? '' : fmtNum(regra.trava_sacas, 2), span: 'col4' })}
             ${formField({ label: 'Custo Silo (R$/sc)', name: 'custo_silo_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: fmtNum(regra.custo_silo_por_saca || 0, 2), span: 'col4' })}
             ${formField({ label: 'Custo Terceiros (R$/sc)', name: 'custo_terceiros_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: fmtNum(regra.custo_terceiros_por_saca || 0, 2), span: 'col4' })}
             ${formField({ label: 'Impureza limite %', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: fmtNum((regra.impureza_limite_pct || 0) * 100, 2), span: 'col4' })}
@@ -3221,6 +3342,7 @@ async function renderColheitaBase(variant) {
           <table>
             <thead>
               <tr>
+                <th class="actions"></th>
                 <th>Ficha</th>
                 <th>Safra</th>
                 <th>Talhão</th>
@@ -3237,7 +3359,6 @@ async function renderColheitaBase(variant) {
                 <th>Compra (Silo)</th>
                 <th>Silo (líquida)</th>
                 <th>Terceiros (ideal)</th>
-                <th></th>
               </tr>
             </thead>
                 <tbody id="tbody"><tr><td colspan="17">Carregando...</td></tr></tbody>
@@ -3335,6 +3456,10 @@ async function renderColheitaBase(variant) {
           compraSilo === null ? null : compraSilo + custoTercPorSaca
 
         return `<tr class="${humClass}">
+          <td class="actions">
+            <button class="btn small ghost" data-act="edit" data-id="${v.id}">Editar</button>
+            <button class="btn small danger" data-act="del" data-id="${v.id}">Excluir</button>
+          </td>
           <td><code class="mono">${escapeHtml(v.ficha)}</code></td>
           <td>${escapeHtml(v.safra_nome)}</td>
           <td data-sort="${escapeHtml(`${v.talhao_nome || ''} ${v.talhao_local || ''} ${v.ficha || ''}`.trim())}">${escapeHtml(v.talhao_nome || '')}</td>
@@ -3351,10 +3476,6 @@ async function renderColheitaBase(variant) {
           <td>${compraSilo === null ? '-' : fmtMoney(compraSilo)}</td>
           <td>${siloLiquida === null ? '-' : fmtMoney(siloLiquida)}</td>
           <td>${terceirosIdeal === null ? '-' : fmtMoney(terceirosIdeal)}</td>
-          <td class="actions">
-            <button class="btn small ghost" data-act="edit" data-id="${v.id}">Editar</button>
-            <button class="btn small danger" data-act="del" data-id="${v.id}">Excluir</button>
-          </td>
         </tr>`
       })
       .join('')
@@ -3405,7 +3526,6 @@ async function renderColheitaBase(variant) {
       }))
     }
 
-    const talhaoOpts = buildTalhaoOpts('nome')
     const destinoOpts = cache.destinos.map((d) => ({ value: d.id, label: `${d.local}` }))
     const motoristaOpts = cache.motoristas.map((m) => ({ value: m.id, label: `${m.nome} (${m.placa || '-'})` }))
 
@@ -3495,6 +3615,7 @@ async function renderColheitaBase(variant) {
     openDialog({
       title: isEdit ? `Editar colheita #${viagem.id}` : 'Nova colheita',
       submitLabel: isEdit ? 'Salvar' : 'Cadastrar',
+      size: 'wide',
       bodyHtml: `
         ${
           variant === 'rev01'
@@ -3509,18 +3630,42 @@ async function renderColheitaBase(variant) {
           ${formField({ label: 'Local', name: 'local', value: base.local ?? '', placeholder: '', span: 'col3' })}
 
            ${selectField({ label: 'Ordenar talhões', name: 'talhao_sort', options: [{ value: 'nome', label: 'Por nome' }, { value: 'local', label: 'Por local' }], value: 'nome', span: 'col3' })}
-           ${selectField({ label: 'Talhão', name: 'talhao_id', options: talhaoOpts, value: base.talhao_id, span: 'col9' })}
+           <div class="field col9">
+             <div class="rateio-card">
+               <div class="rateio-head">
+                 <div>
+                   <div class="rateio-title">Talhões (rateio)</div>
+                   <div class="rateio-sub">Use % (estimativa) antes do peso bruto; quando houver peso bruto, o sistema calcula/ajusta kg e valida o fechamento.</div>
+                 </div>
+                 <div class="rateio-actions">
+                   <button class="btn ghost small" type="button" id="btnAddTalhao">Adicionar</button>
+                   <button class="btn ghost small" type="button" id="btnFillRest">Restante</button>
+                 </div>
+               </div>
+               <div class="rateio-grid rateio-header">
+                 <div>Talhão</div>
+                 <div>%</div>
+                 <div>kg</div>
+                 <div></div>
+               </div>
+               <div id="rateioTalhoes" class="rateio-body"></div>
+               <div class="rateio-foot">
+                 <div id="rateioInfo"></div>
+               </div>
+             </div>
+           </div>
           ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOpts, value: base.destino_id, span: 'col6' })}
           ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOpts, value: base.motorista_id, span: 'col6' })}
 
           ${sectionTitle('Regras e limites do destino')}
           <div class="field col12">
-            <div class="label">Trava do destino</div>
+            <div class="label">Contrato do destino</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
               <span class="pill"><span class="dot" id="travaDot"></span><span id="travaStatus">Carregando...</span></span>
               <span class="pill"><span class="dot"></span><span>Entregue: <b id="travaEntregue">-</b> sc</span></span>
-              <span class="pill"><span class="dot"></span><span>Limite: <b id="travaLimite">-</b> sc</span></span>
+              <span class="pill"><span class="dot"></span><span>Contrato: <b id="travaLimite">-</b> sc</span></span>
               <span class="pill"><span class="dot"></span><span>Restante: <b id="travaRestante">-</b> sc</span></span>
+              <span class="pill"><span class="dot"></span><span>Na carga: <b id="travaDentro">-</b> sc dentro | <b id="travaFora">-</b> sc fora</span></span>
               <span class="pill"><span class="dot" id="regraDot"></span><span id="regraInfo">Carregando regras...</span></span>
             </div>
             <div class="hint">Regras e limites sao carregados por destino + safra. Se voce alterar algum limite, o campo fica amarelo.</div>
@@ -3567,6 +3712,12 @@ async function renderColheitaBase(variant) {
         }
       `,
       onSubmit: async (obj) => {
+        const talhoesRateio = collectRateioTalhoes()
+        const primaryTalhaoId = Number(talhoesRateio?.[0]?.talhao_id)
+        if (!Number.isInteger(primaryTalhaoId) || primaryTalhaoId <= 0) {
+          throw new Error('Informe ao menos um talhão no rateio.')
+        }
+
         const umidEl = dlgForm.querySelector('input[name="umidade_desc_pct_manual"]')
         const umidUserEdited = umidEl && umidEl.dataset.userEdited === '1'
         const umidSuggestedHundredths = Number(
@@ -3589,7 +3740,8 @@ async function renderColheitaBase(variant) {
           ficha: obj.ficha,
           safra_id: Number(obj.safra_id),
           tipo_plantio: obj.tipo_plantio || null,
-          talhao_id: Number(obj.talhao_id),
+          talhao_id: primaryTalhaoId,
+          talhoes: talhoesRateio,
           local: obj.local || null,
           destino_id: Number(obj.destino_id),
           motorista_id: Number(obj.motorista_id),
@@ -3598,8 +3750,8 @@ async function renderColheitaBase(variant) {
           hora_saida: obj.hora_saida || null,
           data_entrega: obj.data_entrega || null,
           hora_entrega: obj.hora_entrega || null,
-          carga_total_kg: parseNumberPt(obj.carga_total_kg),
-          tara_kg: parseNumberPt(obj.tara_kg),
+          carga_total_kg: asNumberOrNull(obj.carga_total_kg) ?? 0,
+          tara_kg: asNumberOrNull(obj.tara_kg) ?? 0,
           umidade_pct: parsePercent100OrZero(obj.umidade_pct, 'umidade_pct'),
           // Campo unico: se igual ao sugerido, manda null (usa tabela); se diferente, manda valor.
           umidade_desc_pct_manual: umidManualValue,
@@ -3620,14 +3772,14 @@ async function renderColheitaBase(variant) {
         if (isEdit) {
           const r = await api(`/api/viagens/${viagem.id}`, { method: 'PUT', body })
           toast('Atualizado', 'Colheita atualizada.')
-          if (r?.trava?.atingida) {
-            toast('Atencao', 'Trava do destino estourada (salvo mesmo assim).')
+          if (r?.trava?.excedeu || r?.trava?.atingida) {
+            toast('Atencao', 'Contrato do destino excedido (salvo mesmo assim).')
           }
         } else {
           const r = await api('/api/viagens', { method: 'POST', body })
           toast('Cadastrada', 'Colheita registrada.')
-          if (r?.trava?.atingida) {
-            toast('Atencao', 'Trava do destino estourada (salvo mesmo assim).')
+          if (r?.trava?.excedeu || r?.trava?.atingida) {
+            toast('Atencao', 'Contrato do destino excedido (salvo mesmo assim).')
           }
         }
         refreshList()
@@ -3639,13 +3791,100 @@ async function renderColheitaBase(variant) {
     const inputPlaca = dlgForm.querySelector('input[name="placa"]')
     const inputLocal = dlgForm.querySelector('input[name="local"]')
     const selMotorista = dlgForm.querySelector('select[name="motorista_id"]')
-    const selTalhao = dlgForm.querySelector('select[name="talhao_id"]')
+    const rateioWrap = dlgForm.querySelector('#rateioTalhoes')
+    const rateioInfo = dlgForm.querySelector('#rateioInfo')
+    const btnAddTalhao = dlgForm.querySelector('#btnAddTalhao')
+    const btnFillRest = dlgForm.querySelector('#btnFillRest')
     const selTalhaoSort = dlgForm.querySelector('select[name="talhao_sort"]')
     const selDestino = dlgForm.querySelector('select[name="destino_id"]')
     const selSafra = dlgForm.querySelector('select[name="safra_id"]')
     const inputUmidDesc = dlgForm.querySelector(
       'input[name="umidade_desc_pct_manual"]',
     )
+
+    function getPesoBaseKg() {
+      const carga = asNumberOrNull(dlgForm.querySelector('input[name="carga_total_kg"]')?.value)
+      const tara = asNumberOrNull(dlgForm.querySelector('input[name="tara_kg"]')?.value)
+      if (!Number.isFinite(carga) || !Number.isFinite(tara)) return null
+      const bruto = carga - tara
+      if (!Number.isFinite(bruto) || bruto <= 0) return null
+      return bruto
+    }
+
+    function collectRateioTalhoes() {
+      const rows = rateioWrap
+        ? Array.from(rateioWrap.querySelectorAll('[data-role="rateio-row"]'))
+        : []
+
+      return rows
+        .map((row) => {
+          const sel = row.querySelector('select[data-role="talhao"]')
+          const inPct = row.querySelector('input[data-role="pct"]')
+          const inKg = row.querySelector('input[data-role="kg"]')
+          const talhao_id = Number(sel?.value)
+          const pct = asNumberOrNull(inPct?.value)
+          const kg = asNumberOrNull(inKg?.value)
+          return {
+            talhao_id,
+            pct_rateio: pct === null ? null : pct,
+            kg_rateio: kg === null ? null : kg,
+          }
+        })
+        .filter((it) => Number.isInteger(it.talhao_id) && it.talhao_id > 0)
+    }
+
+    function updateRateioInfo() {
+      if (!rateioInfo) return
+      const items = collectRateioTalhoes()
+      const sumPct = items.reduce((a, it) => a + Number(it.pct_rateio || 0), 0)
+      const sumKg = items.reduce((a, it) => a + Number(it.kg_rateio || 0), 0)
+      const baseKg = getPesoBaseKg()
+
+      const okPct = Math.abs(sumPct - 100) <= 0.01
+      const okKg = baseKg ? Math.abs(sumKg - baseKg) <= 2 : true
+      const ok = okPct && okKg
+
+      const dotClass = ok ? '' : 'warn'
+      const baseTxt = baseKg ? `${fmtNum(baseKg, 0)} kg` : '-'
+      const kgTxt = sumKg > 0 ? `${fmtNum(sumKg, 0)} kg` : '-'
+      const note = baseKg
+        ? ok
+          ? ''
+          : ' Ajuste para fechar com o peso bruto.'
+        : ' Sem peso bruto: use % como estimativa.'
+
+      rateioInfo.innerHTML = `
+        <span class="pill">
+          <span class="dot ${dotClass}"></span>
+          <span>
+            Soma: <b>${fmtNum(sumPct, 2)}%</b>
+            <span class="hint" style="margin:0">|</span>
+            kg: <b>${kgTxt}</b>
+            <span class="hint" style="margin:0">|</span>
+            peso bruto: <b>${baseTxt}</b>
+            <span style="color:var(--muted)">${escapeHtml(note)}</span>
+          </span>
+        </span>
+      `.trim()
+    }
+
+    function buildTalhaoOptionsHtml(by) {
+      const opts = buildTalhaoOpts(by)
+      return opts
+        .map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`)
+        .join('')
+    }
+
+    function applyTalhaoSort() {
+      if (!selTalhaoSort || !rateioWrap) return
+      const html = buildTalhaoOptionsHtml(selTalhaoSort.value)
+      const sels = Array.from(rateioWrap.querySelectorAll('select[data-role="talhao"]'))
+      for (const sel of sels) {
+        const current = sel.value
+        sel.innerHTML = html
+        if (current) sel.value = current
+      }
+    }
 
     async function suggestNextFicha() {
       if (isEdit) return
@@ -3722,19 +3961,6 @@ async function renderColheitaBase(variant) {
       inputFicha.addEventListener('input', () => {
         inputFicha.dataset.userEdited = '1'
       })
-    }
-
-    function applyTalhaoSort() {
-      if (!selTalhaoSort || !selTalhao) return
-      const current = selTalhao.value
-      const opts = buildTalhaoOpts(selTalhaoSort.value)
-      selTalhao.innerHTML = opts
-        .map(
-          (o) =>
-            `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`,
-        )
-        .join('')
-      if (current) selTalhao.value = current
     }
 
     if (selTalhaoSort) {
@@ -3819,7 +4045,7 @@ async function renderColheitaBase(variant) {
     }
 
     function setLocalFromTalhao() {
-      const tid = Number(selTalhao.value)
+      const tid = Number(collectRateioTalhoes()?.[0]?.talhao_id)
       const t = cache.talhoes.find((x) => x.id === tid)
       if (!t) return
       inputLocal.value = t.local || ''
@@ -3838,6 +4064,8 @@ async function renderColheitaBase(variant) {
       const travaEntregue = dlgForm.querySelector('#travaEntregue')
       const travaLimite = dlgForm.querySelector('#travaLimite')
       const travaRestante = dlgForm.querySelector('#travaRestante')
+      const travaDentro = dlgForm.querySelector('#travaDentro')
+      const travaFora = dlgForm.querySelector('#travaFora')
       const regraDot = dlgForm.querySelector('#regraDot')
       const regraInfo = dlgForm.querySelector('#regraInfo')
 
@@ -3872,20 +4100,20 @@ async function renderColheitaBase(variant) {
           ? entregue / limite
           : null
 
-      let statusText = 'Sem trava'
+      let statusText = 'Sem contrato'
       let dotClass = ''
       if (Number.isFinite(limite) && limite > 0) {
         if (!Number.isFinite(entregue)) {
-          statusText = 'Trava definida'
+          statusText = 'Contrato definido'
           dotClass = 'warn'
         } else if (ratio >= 1) {
-          statusText = 'Trava atingida'
+          statusText = 'Contrato excedido'
           dotClass = 'bad'
         } else if (ratio >= 0.85) {
-          statusText = 'Perto da trava'
+          statusText = 'Perto de completar contrato'
           dotClass = 'warn'
         } else {
-          statusText = 'OK'
+          statusText = 'Dentro do contrato'
           dotClass = ''
         }
       }
@@ -3897,6 +4125,11 @@ async function renderColheitaBase(variant) {
         travaEntregue.textContent = Number.isFinite(entregue) ? fmtSacas(entregue) : '-'
       if (travaRestante)
         travaRestante.textContent = Number.isFinite(restante) ? fmtSacas(restante) : '-'
+
+      const dentro = Number(trava?.dentro_contrato_sacas)
+      const fora = Number(trava?.fora_contrato_sacas)
+      if (travaDentro) travaDentro.textContent = Number.isFinite(dentro) ? fmtSacas(dentro) : '-'
+      if (travaFora) travaFora.textContent = Number.isFinite(fora) ? fmtSacas(fora) : '-'
 
       const regraExiste =
         typeof preview?.destino_regra_existe === 'boolean'
@@ -3973,12 +4206,16 @@ async function renderColheitaBase(variant) {
           toast('Erro', 'Preencha carga total e tara antes de comparar.')
           return
         }
+
+        const talhoesRateio = collectRateioTalhoes()
+        const primaryTalhaoId = Number(talhoesRateio?.[0]?.talhao_id)
         const body = {
           ...(isEdit && viagem?.id ? { id: Number(viagem.id) } : {}),
           ficha: obj.ficha || '1',
           safra_id: Number(obj.safra_id),
           tipo_plantio: obj.tipo_plantio || null,
-          talhao_id: Number(obj.talhao_id),
+          talhao_id: primaryTalhaoId,
+          talhoes: talhoesRateio,
           local: obj.local || null,
           destino_id: Number(obj.destino_id),
           motorista_id: Number(obj.motorista_id),
@@ -4020,11 +4257,6 @@ async function renderColheitaBase(variant) {
                 ? '-'
                 : `${delta >= 0 ? '+' : ''}${fmtMoney(delta)}`
             const badge = it.is_atual ? ' <span class="hint">(atual)</span>' : ''
-
-            const freteTotal =
-              it.sub_total_frete === null || it.sub_total_frete === undefined
-                ? null
-                : Number(it.sub_total_frete)
 
             const finalSemFrete = Number(it.valor_final_total_sem_frete)
             const finalComFrete =
@@ -4079,42 +4311,40 @@ async function renderColheitaBase(variant) {
       }
     }
     const runPreview = debounce(async () => {
+      const renderPreviewShell = (innerHtml) => {
+        if (!previewEl) return
+        if (variant !== 'rev01') {
+          previewEl.innerHTML = innerHtml
+          return
+        }
+
+        if (!('previewCollapsed' in dlg.dataset)) dlg.dataset.previewCollapsed = '0'
+        const collapsed = dlg.dataset.previewCollapsed === '1'
+        const btnLabel = collapsed ? 'Exibir cálculos' : 'Recolher cálculos'
+
+        previewEl.innerHTML = `
+          <div class="prev-head">
+            <div class="prev-title">Cálculos</div>
+            <button class="btn ghost small" type="button" id="btnPrevToggle">${escapeHtml(btnLabel)}</button>
+          </div>
+          <div class="prev-body" style="${collapsed ? 'display:none' : ''}">${innerHtml}</div>
+        `.trim()
+
+        const btn = previewEl.querySelector('#btnPrevToggle')
+        if (btn) {
+          btn.onclick = () => {
+            dlg.dataset.previewCollapsed = dlg.dataset.previewCollapsed === '1' ? '0' : '1'
+            // re-render to apply collapsed state
+            renderPreviewShell(innerHtml)
+          }
+        }
+      }
+
       try {
         const fd = new FormData(dlgForm)
         const obj = Object.fromEntries(fd.entries())
 
-        const renderPreviewShell = (innerHtml) => {
-          if (!previewEl) return
-          if (variant !== 'rev01') {
-            previewEl.innerHTML = innerHtml
-            return
-          }
-
-          if (!('previewCollapsed' in dlg.dataset)) dlg.dataset.previewCollapsed = '0'
-          const collapsed = dlg.dataset.previewCollapsed === '1'
-          const btnLabel = collapsed ? 'Exibir cálculos' : 'Recolher cálculos'
-
-          previewEl.innerHTML = `
-            <div class="prev-head">
-              <div class="prev-title">Cálculos</div>
-              <button class="btn ghost small" type="button" id="btnTogglePreview">${escapeHtml(btnLabel)}</button>
-            </div>
-            <div class="prev-body">${innerHtml}</div>
-          `.trim()
-        }
-
-        if (previewEl && variant === 'rev01' && previewEl.dataset.togglerBound !== '1') {
-          previewEl.dataset.togglerBound = '1'
-          previewEl.addEventListener('click', (e) => {
-            const btn = e.target?.closest?.('#btnTogglePreview')
-            if (!btn) return
-            e.preventDefault()
-            const collapsed = dlg.dataset.previewCollapsed === '1'
-            dlg.dataset.previewCollapsed = collapsed ? '0' : '1'
-            // Apenas alterna a visibilidade via CSS; o conteudo segue sendo atualizado pelo preview
-            btn.textContent = collapsed ? 'Recolher cálculos' : 'Exibir cálculos'
-          })
-        }
+        // (renderPreviewShell definido acima para ser usado também no catch)
 
         if (!obj.carga_total_kg || !obj.tara_kg) {
           renderPreviewShell(
@@ -4127,7 +4357,8 @@ async function renderColheitaBase(variant) {
           ficha: obj.ficha || '1',
           safra_id: Number(obj.safra_id),
           tipo_plantio: obj.tipo_plantio || null,
-          talhao_id: Number(obj.talhao_id),
+          talhao_id: Number(collectRateioTalhoes()?.[0]?.talhao_id),
+          talhoes: collectRateioTalhoes(),
           local: obj.local || null,
           destino_id: Number(obj.destino_id),
           motorista_id: Number(obj.motorista_id),
@@ -4158,9 +4389,9 @@ async function renderColheitaBase(variant) {
         }
         const p = await api('/api/viagens/preview', { method: 'POST', body })
 
-        // trava: manter calculos, apenas sinalizar
+        // contrato (antiga "trava"): manter calculos, apenas sinalizar
         const trava = p.trava
-        if (trava?.atingida) {
+        if (trava?.excedeu || trava?.atingida) {
           dlg.dataset.trava = '1'
         } else {
           dlg.dataset.trava = ''
@@ -4253,6 +4484,162 @@ async function renderColheitaBase(variant) {
       }
     }, 250)
 
+    function syncRowFromPct(row) {
+      const baseKg = getPesoBaseKg()
+      if (!baseKg) return
+      const inPct = row.querySelector('input[data-role="pct"]')
+      const inKg = row.querySelector('input[data-role="kg"]')
+      const pct = asNumberOrNull(inPct?.value)
+      if (pct === null) return
+      const kg = (baseKg * pct) / 100
+      if (inKg) inKg.value = String(Math.round(kg))
+    }
+
+    function syncRowFromKg(row) {
+      const baseKg = getPesoBaseKg()
+      if (!baseKg) return
+      const inPct = row.querySelector('input[data-role="pct"]')
+      const inKg = row.querySelector('input[data-role="kg"]')
+      const kg = asNumberOrNull(inKg?.value)
+      if (kg === null) return
+      const pct = (kg / baseKg) * 100
+      if (inPct) inPct.value = pct.toFixed(2)
+    }
+
+    function addRateioRow({ talhao_id, pct_rateio, kg_rateio } = {}) {
+      if (!rateioWrap) return
+
+      const row = document.createElement('div')
+      row.dataset.role = 'rateio-row'
+      row.className = 'rateio-grid rateio-item'
+
+      row.innerHTML = `
+        <div class="rateio-cell" data-cell="talhao">
+          <select data-role="talhao" aria-label="Talhão"></select>
+        </div>
+        <div class="rateio-cell" data-cell="pct">
+          <input data-role="pct" aria-label="Percentual" type="text" inputmode="decimal" pattern="[0-9.,]*" placeholder="100,00" />
+        </div>
+        <div class="rateio-cell" data-cell="kg">
+          <input data-role="kg" aria-label="Quilos" type="text" inputmode="numeric" pattern="[0-9.,]*" placeholder="0" />
+        </div>
+        <div class="rateio-cell" data-cell="rm">
+          <button class="btn ghost small" type="button" data-role="rm" aria-label="Remover talhão">Remover</button>
+        </div>
+      `.trim()
+
+      const sel = row.querySelector('select[data-role="talhao"]')
+      if (sel) {
+        sel.innerHTML = buildTalhaoOptionsHtml(selTalhaoSort?.value || 'nome')
+        if (talhao_id) sel.value = String(talhao_id)
+      }
+
+      const inPct = row.querySelector('input[data-role="pct"]')
+      const inKg = row.querySelector('input[data-role="kg"]')
+
+      if (inPct && pct_rateio !== null && pct_rateio !== undefined) {
+        const n = Number(pct_rateio)
+        if (Number.isFinite(n)) inPct.value = n.toFixed(2)
+      }
+      if (inKg && kg_rateio !== null && kg_rateio !== undefined) {
+        const n = Number(kg_rateio)
+        if (Number.isFinite(n)) inKg.value = String(Math.round(n))
+      }
+
+      if (inPct) {
+        inPct.addEventListener('input', () => {
+          syncRowFromPct(row)
+          updateRateioInfo()
+        })
+      }
+      if (inKg) {
+        inKg.addEventListener('input', () => {
+          syncRowFromKg(row)
+          updateRateioInfo()
+        })
+      }
+
+      const btnRm = row.querySelector('button[data-role="rm"]')
+      if (btnRm) {
+        btnRm.onclick = () => {
+          row.remove()
+          // manter ao menos 1 linha
+          if (rateioWrap.querySelectorAll('[data-role="rateio-row"]').length === 0) {
+            addRateioRow({ talhao_id: base.talhao_id, pct_rateio: 100 })
+          }
+          updateRateioInfo()
+          setLocalFromTalhao()
+          runPreview()
+        }
+      }
+
+      rateioWrap.appendChild(row)
+      updateRateioInfo()
+    }
+
+    function fillRestRateio() {
+      if (!rateioWrap) return
+      const rows = Array.from(rateioWrap.querySelectorAll('[data-role="rateio-row"]'))
+      if (!rows.length) return
+      const last = rows[rows.length - 1]
+      const baseKg = getPesoBaseKg()
+
+      if (baseKg) {
+        let usedKg = 0
+        for (let i = 0; i < rows.length - 1; i++) {
+          const inKg = rows[i].querySelector('input[data-role="kg"]')
+          usedKg += Number(asNumberOrNull(inKg?.value) || 0)
+        }
+        const restKg = Math.max(0, baseKg - usedKg)
+        const inKgLast = last.querySelector('input[data-role="kg"]')
+        if (inKgLast) inKgLast.value = String(Math.round(restKg))
+        syncRowFromKg(last)
+      } else {
+        let usedPct = 0
+        for (let i = 0; i < rows.length - 1; i++) {
+          const inPct = rows[i].querySelector('input[data-role="pct"]')
+          usedPct += Number(asNumberOrNull(inPct?.value) || 0)
+        }
+        const restPct = Math.max(0, 100 - usedPct)
+        const inPctLast = last.querySelector('input[data-role="pct"]')
+        if (inPctLast) inPctLast.value = restPct.toFixed(2)
+      }
+      updateRateioInfo()
+      setLocalFromTalhao()
+      runPreview()
+    }
+
+    // inicializar rateio (edit: usa itens do backend; create: 100% no talhao selecionado)
+    if (rateioWrap) {
+      rateioWrap.innerHTML = ''
+      const initial = Array.isArray(viagem?.talhoes) && viagem.talhoes.length
+        ? viagem.talhoes.map((it) => ({
+            talhao_id: it.talhao_id,
+            pct_rateio:
+              it.pct_rateio === null || it.pct_rateio === undefined
+                ? null
+                : Number(it.pct_rateio) * 100,
+            kg_rateio: it.kg_rateio,
+          }))
+        : [{ talhao_id: base.talhao_id, pct_rateio: 100, kg_rateio: null }]
+
+      for (const it of initial) addRateioRow(it)
+      applyTalhaoSort()
+      updateRateioInfo()
+
+      if (btnAddTalhao) {
+        btnAddTalhao.onclick = () => {
+          const used = new Set(collectRateioTalhoes().map((x) => x.talhao_id))
+          const next = cache.talhoes.find((t) => !used.has(t.id))?.id || base.talhao_id
+          addRateioRow({ talhao_id: next, pct_rateio: 0, kg_rateio: null })
+          runPreview()
+        }
+      }
+      if (btnFillRest) {
+        btnFillRest.onclick = fillRestRateio
+      }
+    }
+
     // comportamento amigavel: preencher local/placa e puxar limites do destino
     inputLocal.readOnly = true
     setLocalFromTalhao()
@@ -4280,9 +4667,20 @@ async function renderColheitaBase(variant) {
       })
     }
 
-    selTalhao.onchange = () => {
-      setLocalFromTalhao()
-      runPreview()
+    if (rateioWrap) {
+      rateioWrap.addEventListener('change', (e) => {
+        const target = e.target
+        if (!(target instanceof HTMLElement)) return
+        if (target.matches('select[data-role="talhao"]')) {
+          // apenas o primeiro talhao define o local automaticamente
+          const firstSel = rateioWrap.querySelector('select[data-role="talhao"]')
+          if (firstSel && target === firstSel) {
+            setLocalFromTalhao()
+          }
+          updateRateioInfo()
+          runPreview()
+        }
+      })
     }
     selMotorista.onchange = () => {
       setPlacaFromMotorista()
@@ -4366,7 +4764,7 @@ async function renderRelatorios() {
             <div class="table-wrap">
               <table>
                 <thead><tr><th colspan="5">Entregas por destino</th></tr>
-                  <tr><th>Destino</th><th>Trava (sacas)</th><th>Entrega (sacas)</th><th>Peso limpo/seco</th><th>Status</th></tr></thead>
+                   <tr><th>Destino</th><th>Contrato (sacas)</th><th>Entrega (sacas)</th><th>Peso limpo/seco</th><th>Status</th></tr></thead>
                 <tbody id="rdest"><tr><td colspan="5">Carregando...</td></tr></tbody>
               </table>
             </div>
@@ -4434,8 +4832,8 @@ async function renderRelatorios() {
         let status = `<span class="pill"><span class="dot"></span><span>OK</span></span>`
         if (trava && trava > 0) {
           const ratio = entrega / trava
-          if (ratio >= 1) status = `<span class="pill"><span class="dot bad"></span><span>Trava atingida</span></span>`
-          else if (ratio >= 0.85) status = `<span class="pill"><span class="dot warn"></span><span>Perto da trava</span></span>`
+          if (ratio >= 1) status = `<span class="pill"><span class="dot bad"></span><span>Contrato excedido</span></span>`
+          else if (ratio >= 0.85) status = `<span class="pill"><span class="dot warn"></span><span>Perto de completar contrato</span></span>`
         }
         return `<tr>
           <td>${escapeHtml(d.destino_local)}</td>
@@ -4503,15 +4901,15 @@ async function renderRelatorios() {
     const des = await api(`/api/relatorios/entregas-por-destino?safra_id=${safra_id}`)
     downloadCsv(
       `entregas-por-destino-safra-${safra_id}.csv`,
-      ['Destino', 'Trava (sacas)', 'Entrega (sacas)', 'Peso limpo/seco (kg)', 'Status'],
+      ['Destino', 'Contrato (sacas)', 'Entrega (sacas)', 'Peso limpo/seco (kg)', 'Status'],
       (des || []).map((d) => {
         const trava = d.trava_sacas
         const entrega = Number(d.entrega_sacas || 0)
         let status = 'OK'
         if (trava && trava > 0) {
           const ratio = entrega / trava
-          if (ratio >= 1) status = 'Trava atingida'
-          else if (ratio >= 0.85) status = 'Perto da trava'
+          if (ratio >= 1) status = 'Contrato excedido'
+          else if (ratio >= 0.85) status = 'Perto de completar contrato'
         }
         return [
           d.destino_local,
@@ -5054,7 +5452,7 @@ async function renderQuitacaoMotoristas() {
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Motorista</th><th>Qtd</th><th>Frete</th><th>Quitado</th><th>Falta</th><th></th></tr>
+                  <tr><th class="actions"></th><th>Motorista</th><th>Qtd</th><th>Frete</th><th>Quitado</th><th>Falta</th></tr>
                 </thead>
                 <tbody id="qBody"><tr><td colspan="6">Carregando...</td></tr></tbody>
               </table>
@@ -5065,8 +5463,8 @@ async function renderQuitacaoMotoristas() {
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th colspan="6">Lancamentos de quitacao no periodo</th></tr>
-                  <tr><th>Data</th><th>Motorista</th><th>Periodo</th><th>Valor</th><th>Forma</th><th>Obs</th><th></th></tr>
+                  <tr><th colspan="7">Lancamentos de quitacao no periodo</th></tr>
+                  <tr><th class="actions"></th><th>Data</th><th>Motorista</th><th>Periodo</th><th>Valor</th><th>Forma</th><th>Obs</th></tr>
                 </thead>
                 <tbody id="qLanc"><tr><td colspan="7">Carregando...</td></tr></tbody>
               </table>
@@ -5107,12 +5505,12 @@ async function renderQuitacaoMotoristas() {
             : `<span class="pill"><span class="dot warn"></span><span>${escapeHtml(fmtMoney(falta))}</span></span>`
 
         return `<tr>
+          <td><button class="btn small" data-act="pay" data-id="${it.motorista_id}" data-nome="${escapeHtml(it.motorista_nome)}" data-falta="${escapeHtml(String(falta))}">Registrar</button></td>
           <td data-sort="${escapeHtml(String(it.motorista_nome || '').trim())}">${escapeHtml(it.motorista_nome)}${it.motorista_placa ? ` <span class="hint">(${escapeHtml(it.motorista_placa)})</span>` : ''}</td>
           <td>${escapeHtml(String(it.quantidade || 0))}</td>
           <td>${escapeHtml(fmtMoney(it.valor_frete))}</td>
           <td>${escapeHtml(fmtMoney(it.valor_pago))}</td>
           <td>${faltaBadge}</td>
-          <td><button class="btn small" data-act="pay" data-id="${it.motorista_id}" data-nome="${escapeHtml(it.motorista_nome)}" data-falta="${escapeHtml(String(falta))}">Registrar</button></td>
         </tr>`
       })
       .join('')
@@ -5120,16 +5518,16 @@ async function renderQuitacaoMotoristas() {
     qLanc.innerHTML = (r.quitacoes || [])
       .map((q) => {
         return `<tr>
+          <td class="actions">
+            <button class="btn small ghost" data-act="qedit" data-id="${q.id}">Editar</button>
+            <button class="btn small danger" data-act="qdel" data-id="${q.id}">Excluir</button>
+          </td>
           <td>${escapeHtml(q.data_pagamento)}</td>
           <td data-sort="${escapeHtml(String(q.motorista_nome || '').trim())}">${escapeHtml(q.motorista_nome)}${q.motorista_placa ? ` <span class="hint">(${escapeHtml(q.motorista_placa)})</span>` : ''}</td>
           <td>${escapeHtml(q.de)} a ${escapeHtml(q.ate)}</td>
           <td>${escapeHtml(fmtMoney(q.valor))}</td>
           <td>${escapeHtml(q.forma_pagamento || '')}</td>
           <td>${escapeHtml(q.observacoes || '')}</td>
-          <td class="actions">
-            <button class="btn small ghost" data-act="qedit" data-id="${q.id}">Editar</button>
-            <button class="btn small danger" data-act="qdel" data-id="${q.id}">Excluir</button>
-          </td>
         </tr>`
       })
       .join('')
@@ -5376,7 +5774,7 @@ async function renderFazenda() {
           <div class="span12" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
             <img src="/logo.png" alt="${escapeHtml(f.nome)}" style="width:140px;height:140px;object-fit:contain;background:rgba(255,255,255,.75);border:1px solid rgba(15,26,22,.14);border-radius:18px;padding:14px" />
             <div>
-              <div style="font-family:var(--serif);font-size:22px">NazcaTrack</div>
+              <div style="font-family:var(--serif);font-size:22px">NazcaTraker</div>
               <div style="margin-top:6px;color:var(--muted)">Base interna: colheita (safras, talhões, destinos, viagens, descontos e fretes).</div>
               <div style="margin-top:10px" class="pill"><span class="dot warn"></span><span>Fontes publicas: Google Maps / Instagram / Facebook.</span></div>
             </div>
@@ -5552,7 +5950,7 @@ if (btnToggleNav) {
   try {
     initial = localStorage.getItem('nav_collapsed') === '1'
   } catch {
-    initial = false
+    // ignore
   }
   setNavCollapsed(initial)
 }

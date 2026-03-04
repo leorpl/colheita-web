@@ -16,18 +16,28 @@ export const relatoriosService = {
       )
       .get().umidade_media
 
-    const orderSafra = `
-      ORDER BY
-        CASE WHEN data_referencia IS NULL OR data_referencia='' THEN 1 ELSE 0 END,
-        data_referencia DESC,
-        id DESC
-    `
-
     const safraPainel = db
-      .prepare(`SELECT * FROM safra WHERE painel=1 ${orderSafra} LIMIT 1`)
+      .prepare(
+        `SELECT * FROM safra
+         WHERE painel=1
+         ORDER BY
+           CASE WHEN data_referencia IS NULL OR data_referencia='' THEN 1 ELSE 0 END,
+           data_referencia DESC,
+           id DESC
+         LIMIT 1`,
+      )
       .get()
 
-    const ultimaSafra = db.prepare(`SELECT * FROM safra ${orderSafra} LIMIT 1`).get()
+    const ultimaSafra = db
+      .prepare(
+        `SELECT * FROM safra
+         ORDER BY
+           CASE WHEN data_referencia IS NULL OR data_referencia='' THEN 1 ELSE 0 END,
+           data_referencia DESC,
+           id DESC
+         LIMIT 1`,
+      )
+      .get()
 
     const safraAtual = safraPainel || ultimaSafra
 
@@ -141,19 +151,61 @@ export const relatoriosService = {
            t.situacao as talhao_situacao,
            t.hectares as hectares,
            COALESCE(ts.pct_area_colhida, 0) as pct_area_colhida,
-           COALESCE(SUM(v.peso_bruto_kg), 0) as peso_liquido_kg,
-           COALESCE(SUM(v.umidade_kg), 0) as umidade_kg,
-           COALESCE(SUM(v.impureza_kg), 0) as impureza_kg,
-           COALESCE(SUM(v.peso_limpo_seco_kg), 0) as peso_limpo_seco_kg,
-           COALESCE(SUM(v.sacas), 0) as sacas,
-           CASE WHEN t.hectares > 0 THEN (COALESCE(SUM(v.sacas), 0) / t.hectares) ELSE 0 END as produtividade_sacas_ha,
-           CASE WHEN t.hectares > 0 AND COALESCE(ts.pct_area_colhida, 0) > 0 THEN (COALESCE(SUM(v.sacas), 0) / (t.hectares * COALESCE(ts.pct_area_colhida, 0))) ELSE 0 END as produtividade_ajustada_sacas_ha,
-           COALESCE(SUM(v.sub_total_frete), 0) as sub_total_frete
-         FROM talhao t
-         LEFT JOIN viagem v ON v.talhao_id = t.id AND v.safra_id = @safra_id
-         LEFT JOIN talhao_safra ts ON ts.talhao_id = t.id AND ts.safra_id = @safra_id
-         GROUP BY t.id
-         ORDER BY t.local, t.codigo`,
+           COALESCE(SUM(
+             CASE WHEN v.id IS NULL THEN 0 ELSE COALESCE(
+               vt.kg_rateio,
+               v.peso_bruto_kg * vt.pct_rateio,
+               0
+             ) END
+           ), 0) as peso_liquido_kg,
+           COALESCE(SUM(v.umidade_kg * (
+             CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+               THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+               ELSE 0
+             END
+           )), 0) as umidade_kg,
+           COALESCE(SUM(v.impureza_kg * (
+             CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+               THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+               ELSE 0
+             END
+           )), 0) as impureza_kg,
+           COALESCE(SUM(v.peso_limpo_seco_kg * (
+             CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+               THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+               ELSE 0
+             END
+           )), 0) as peso_limpo_seco_kg,
+           COALESCE(SUM(v.sacas * (
+             CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+               THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+               ELSE 0
+             END
+           )), 0) as sacas,
+           CASE WHEN t.hectares > 0 THEN (COALESCE(SUM(v.sacas * (
+             CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+               THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+               ELSE 0
+             END
+           )), 0) / t.hectares) ELSE 0 END as produtividade_sacas_ha,
+           CASE WHEN t.hectares > 0 AND COALESCE(ts.pct_area_colhida, 0) > 0 THEN (COALESCE(SUM(v.sacas * (
+             CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+               THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+               ELSE 0
+             END
+           )), 0) / (t.hectares * COALESCE(ts.pct_area_colhida, 0))) ELSE 0 END as produtividade_ajustada_sacas_ha,
+           COALESCE(SUM(v.sub_total_frete * (
+             CASE WHEN COALESCE(v.peso_bruto_kg, 0) > 0
+               THEN COALESCE(vt.kg_rateio, v.peso_bruto_kg * vt.pct_rateio, 0) / v.peso_bruto_kg
+               ELSE 0
+             END
+           )), 0) as sub_total_frete
+          FROM talhao t
+          LEFT JOIN viagem_talhao vt ON vt.talhao_id = t.id
+          LEFT JOIN viagem v ON v.id = vt.viagem_id AND v.safra_id = @safra_id
+          LEFT JOIN talhao_safra ts ON ts.talhao_id = t.id AND ts.safra_id = @safra_id
+          GROUP BY t.id
+          ORDER BY t.local, t.codigo`,
       )
       .all({ safra_id })
   },

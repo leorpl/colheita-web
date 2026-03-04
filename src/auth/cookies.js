@@ -11,7 +11,11 @@ export function parseCookies(header) {
     const k = p.slice(0, idx).trim()
     const v = p.slice(idx + 1).trim()
     if (!k) continue
-    out[k] = decodeURIComponent(v)
+    try {
+      out[k] = decodeURIComponent(v)
+    } catch {
+      // cookie malformado: ignore
+    }
   }
   return out
 }
@@ -24,9 +28,11 @@ export function newToken() {
   return crypto.randomBytes(32).toString('hex')
 }
 
-export function buildCookie({ name, value, maxAgeSeconds }) {
+export function buildCookie({ name, value, maxAgeSeconds, secure, sameSite }) {
   const v = encodeURIComponent(String(value || ''))
-  const parts = [`${name}=${v}`, 'Path=/', 'HttpOnly', 'SameSite=Lax']
+  const ss = sameSite ? String(sameSite) : 'Lax'
+  const parts = [`${name}=${v}`, 'Path=/', 'HttpOnly', `SameSite=${ss}`]
+  if (secure) parts.push('Secure')
   if (maxAgeSeconds !== undefined) parts.push(`Max-Age=${Math.floor(maxAgeSeconds)}`)
   return parts.join('; ')
 }
