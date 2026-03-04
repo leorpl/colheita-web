@@ -3493,6 +3493,14 @@ async function renderColheitaBase(variant) {
               <div class="label">Até</div>
               <input name="ate" type="date" />
             </div>
+
+            <div class="field">
+              <div class="label">Visualização</div>
+              <select name="view">
+                <option value="grouped">Agrupada</option>
+                <option value="flat">Separada</option>
+              </select>
+            </div>
           </form>
           <div>
             <button class="btn ghost" id="btnApply" type="button">Aplicar</button>
@@ -3510,6 +3518,7 @@ async function renderColheitaBase(variant) {
                 <th>Safra</th>
                 <th>Talhão</th>
                 <th>Local</th>
+                <th>%</th>
                 <th>Destino</th>
                 <th>Saída</th>
                 <th>Motorista</th>
@@ -3524,7 +3533,7 @@ async function renderColheitaBase(variant) {
                 <th>Terceiros (ideal)</th>
               </tr>
             </thead>
-                <tbody id="tbody"><tr><td colspan="17">Carregando...</td></tr></tbody>
+                <tbody id="tbody"><tr><td colspan="18">Carregando...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -3534,6 +3543,17 @@ async function renderColheitaBase(variant) {
   const tbody = view.querySelector('#tbody')
   const totalsEl = view.querySelector('#totals')
   const filtersEl = view.querySelector('#filtersForm')
+
+  // Persistir visualizacao (rateio)
+  const selView = filtersEl?.querySelector('select[name="view"]')
+  if (selView) {
+    const saved = localStorage.getItem('colheita_view')
+    if (saved === 'flat' || saved === 'grouped') selView.value = saved
+    selView.onchange = () => {
+      localStorage.setItem('colheita_view', selView.value)
+      refreshList()
+    }
+  }
 
   const selTalhaoFilter = filtersEl.querySelector('select[name="talhao_id"]')
   const selTalhaoSortFilter = filtersEl.querySelector('select[name="talhao_sort"]')
@@ -3563,92 +3583,182 @@ async function renderColheitaBase(variant) {
       if (v !== '') q.set(k, v)
     }
     const data = await api(`/api/viagens?${q.toString()}`)
+    const viewMode = String(data?.view || q.get('view') || 'legacy')
 
     const t = data.totals
+
+    const rowsCount = Array.isArray(data.items) ? data.items.length : 0
+    const uniqueCount = new Set((data.items || []).map((it) => Number(it.id))).size
+    const countHint = uniqueCount !== rowsCount ? `Linhas (rateio): ${rowsCount}` : `Linhas: ${rowsCount}`
     totalsEl.innerHTML = `
-      <div class="stat span4"><div class="stat-k">Sacas (filtrado)</div><div class="stat-v">${fmtNum(t.sacas, 2)}</div><div class="stat-h">Peso limpo e seco / 60</div></div>
+      <div class="stat span4"><div class="stat-k">Peso bruto</div><div class="stat-v">${fmtKg(t.peso_bruto_kg)}</div><div class="stat-h">Base da pesagem</div></div>
       <div class="stat span4"><div class="stat-k">Peso limpo e seco</div><div class="stat-v">${fmtKg(t.peso_limpo_seco_kg)}</div><div class="stat-h">Liquido apos descontos</div></div>
+      <div class="stat span4"><div class="stat-k">Sacas (filtrado)</div><div class="stat-v">${fmtNum(t.sacas, 2)}</div><div class="stat-h">Peso limpo e seco / 60</div></div>
       <div class="stat span4"><div class="stat-k">Frete (filtrado)</div><div class="stat-v">${fmtMoney(t.sub_total_frete)}</div><div class="stat-h">Peso bruto (sacas) x tabela</div></div>
+      <div class="stat span4"><div class="stat-k">Registros</div><div class="stat-v">${uniqueCount}</div><div class="stat-h">${escapeHtml(countHint)}</div></div>
     `
 
-    tbody.innerHTML = data.items
-      .map((v) => {
-        const umidRaw = Number(v.umidade_pct)
-        const umid =
-          Number.isFinite(umidRaw) && umidRaw > 1 ? umidRaw / 100 : umidRaw
-        const humClass =
-          Number.isFinite(umid) && umid < 0.13
-            ? 'hum-low'
-            : Number.isFinite(umid) && umid > 0.18
-              ? 'hum-high'
-              : ''
+    const expanded = new Set()
 
-        const pb = Number(v.peso_bruto_kg)
-        const pls = Number(v.peso_limpo_seco_kg)
-        const descPct =
-          Number.isFinite(pb) && pb > 0 && Number.isFinite(pls)
-            ? clamp01(1 - pls / pb) * 100
-            : 0
-        const saida = String(v.data_saida || '').trim()
+    const rowHtml = (v, opts = {}) => {
+      const isChild = Boolean(opts.isChild)
+      const showToggle = Boolean(opts.showToggle)
+      const toggled = Boolean(opts.toggled)
 
-        const valorCompraApplied = Number(v.valor_compra_por_saca_aplicado)
-        const valorCompraRule =
-          v.regra_valor_compra_por_saca === null ||
-          v.regra_valor_compra_por_saca === undefined
-            ? null
-            : Number(v.regra_valor_compra_por_saca)
+      const umidRaw = Number(v.umidade_pct)
+      const umid = Number.isFinite(umidRaw) && umidRaw > 1 ? umidRaw / 100 : umidRaw
+      const humClass =
+        Number.isFinite(umid) && umid < 0.13
+          ? 'hum-low'
+          : Number.isFinite(umid) && umid > 0.18
+            ? 'hum-high'
+            : ''
 
-        const valorCompra = Number.isFinite(valorCompraApplied)
-          ? valorCompraApplied
-          : Number.isFinite(valorCompraRule)
-            ? valorCompraRule
-            : null
-        const sacas = Number(v.sacas || 0)
-        const fretePorSaca = sacas > 0 ? Number(v.sub_total_frete || 0) / sacas : 0
-        const secagemPorSaca = Number(v.secagem_custo_por_saca || 0)
-        const custoSiloPorSaca = Number(v.custo_silo_por_saca || 0)
-        const custoTercPorSaca = Number(v.custo_terceiros_por_saca || 0)
+      const pb = Number(v.peso_bruto_kg)
+      const pls = Number(v.peso_limpo_seco_kg)
+      const descPct =
+        Number.isFinite(pb) && pb > 0 && Number.isFinite(pls)
+          ? clamp01(1 - pls / pb) * 100
+          : 0
 
-        const compraSilo =
-          valorCompra !== null && Number.isFinite(valorCompra) ? valorCompra : null
-        const siloLiquida =
-          compraSilo === null
-            ? null
-            : compraSilo - (fretePorSaca + secagemPorSaca + custoSiloPorSaca)
-        const terceirosIdeal =
-          compraSilo === null ? null : compraSilo + custoTercPorSaca
+      const saida = String(v.data_saida || '').trim()
 
-        return `<tr class="${humClass}">
-          <td class="actions">
-            <button class="btn small ghost" data-act="edit" data-id="${v.id}">Editar</button>
+      const valorCompraApplied = Number(v.valor_compra_por_saca_aplicado)
+      const valorCompraRule =
+        v.regra_valor_compra_por_saca === null || v.regra_valor_compra_por_saca === undefined
+          ? null
+          : Number(v.regra_valor_compra_por_saca)
+
+      const valorCompra = Number.isFinite(valorCompraApplied)
+        ? valorCompraApplied
+        : Number.isFinite(valorCompraRule)
+          ? valorCompraRule
+          : null
+
+      const sacas = Number(v.sacas || 0)
+      const fretePorSaca = sacas > 0 ? Number(v.sub_total_frete || 0) / sacas : 0
+      const secagemPorSaca = Number(v.secagem_custo_por_saca || 0)
+      const custoSiloPorSaca = Number(v.custo_silo_por_saca || 0)
+      const custoTercPorSaca = Number(v.custo_terceiros_por_saca || 0)
+
+      const compraSilo = valorCompra !== null && Number.isFinite(valorCompra) ? valorCompra : null
+      const siloLiquida =
+        compraSilo === null
+          ? null
+          : compraSilo - (fretePorSaca + secagemPorSaca + custoSiloPorSaca)
+      const terceirosIdeal = compraSilo === null ? null : compraSilo + custoTercPorSaca
+
+      const fichaDisp = v.display_ficha ? String(v.display_ficha) : String(v.ficha || '')
+      const isRateado = Boolean(v.is_rateado)
+      const badge = isRateado
+        ? `<span class="pill" style="margin-left:8px"><span class="dot warn"></span><span>Rateado</span></span>`
+        : ''
+
+      const pct =
+        v.pct_rateio_100 === null || v.pct_rateio_100 === undefined
+          ? null
+          : Number(v.pct_rateio_100)
+
+      const toggleBtn = showToggle
+        ? `<button class="btn small ghost" data-act="toggle" data-id="${v.id}">${toggled ? '▼' : '▶'}</button>`
+        : ''
+
+      const actionCell = isChild
+        ? `<td class="actions">${toggleBtn}<button class="btn small ghost" data-act="edit" data-id="${v.id}" data-rateio-index="${v.rateio_index}">Editar</button></td>`
+        : `<td class="actions">${toggleBtn}<button class="btn small ghost" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''}>Editar</button>
             <button class="btn small danger" data-act="del" data-id="${v.id}">Excluir</button>
-          </td>
-          <td><code class="mono">${escapeHtml(v.ficha)}</code></td>
-          <td>${escapeHtml(v.safra_nome)}</td>
-          <td data-sort="${escapeHtml(`${v.talhao_nome || ''} ${v.talhao_local || ''} ${v.ficha || ''}`.trim())}">${escapeHtml(v.talhao_nome || '')}</td>
-          <td data-sort="${escapeHtml(`${v.talhao_local || ''} ${v.talhao_nome || ''} ${v.ficha || ''}`.trim())}">${escapeHtml(v.talhao_local || '')}</td>
-          <td data-sort="${escapeHtml(`${v.destino_local || ''} ${v.talhao_nome || ''} ${v.motorista_nome || ''}`.trim())}">${escapeHtml(v.destino_local)}</td>
-          <td data-sort="${escapeHtml(saida)}">${escapeHtml(saida || '-')}</td>
-          <td data-sort="${escapeHtml(`${v.motorista_nome || ''} ${v.destino_local || ''} ${v.talhao_nome || ''}`.trim())}">${escapeHtml(v.motorista_nome)}</td>
-          <td>${Number.isFinite(umid) ? `${fmtNum(umid * 100, 2)}%` : '-'}</td>
-          <td>${fmtKg(v.peso_bruto_kg)}</td>
-          <td>${fmtKg(v.peso_limpo_seco_kg)}</td>
-          <td>${fmtNum(descPct, 2)}%</td>
-          <td>${fmtNum(v.sacas, 2)}</td>
-          <td>${fmtMoney(v.sub_total_frete)}</td>
-          <td>${compraSilo === null ? '-' : fmtMoney(compraSilo)}</td>
-          <td>${siloLiquida === null ? '-' : fmtMoney(siloLiquida)}</td>
-          <td>${terceirosIdeal === null ? '-' : fmtMoney(terceirosIdeal)}</td>
-        </tr>`
-      })
-      .join('')
+          </td>`
 
-    if (!data.items.length) tbody.innerHTML = `<tr><td colspan="17">Nenhuma viagem.</td></tr>`
+      const childAttrs = isChild ? ` data-parent="${v.id}" style="${expanded.has(v.id) ? '' : 'display:none'}"` : ''
+
+      return `<tr class="${humClass}${isChild ? ' rateio-child' : ''}"${childAttrs}>
+        ${actionCell}
+        <td data-sort="${escapeHtml(String(v.ficha_original || v.ficha || ''))}"><code class="mono">${escapeHtml(fichaDisp)}</code>${badge}</td>
+        <td>${escapeHtml(v.safra_nome || '')}</td>
+        <td>${escapeHtml(v.talhao_nome || '')}</td>
+        <td>${escapeHtml(v.talhao_local || '')}</td>
+        <td>${pct === null || !Number.isFinite(pct) ? '-' : `${fmtNum(pct, 2)}%`}</td>
+        <td>${escapeHtml(v.destino_local || '')}</td>
+        <td data-sort="${escapeHtml(saida)}">${escapeHtml(saida || '-')}</td>
+        <td>${escapeHtml(v.motorista_nome || '')}</td>
+        <td>${Number.isFinite(umid) ? `${fmtNum(umid * 100, 2)}%` : '-'}</td>
+        <td>${fmtKg(v.peso_bruto_kg)}</td>
+        <td>${fmtKg(v.peso_limpo_seco_kg)}</td>
+        <td>${fmtNum(descPct, 2)}%</td>
+        <td>${fmtNum(v.sacas, 2)}</td>
+        <td>${fmtMoney(v.sub_total_frete)}</td>
+        <td>${compraSilo === null ? '-' : fmtMoney(compraSilo)}</td>
+        <td>${siloLiquida === null ? '-' : fmtMoney(siloLiquida)}</td>
+        <td>${terceirosIdeal === null ? '-' : fmtMoney(terceirosIdeal)}</td>
+      </tr>`
+    }
+
+    if (viewMode === 'grouped') {
+      const parts = []
+      for (const g of data.items || []) {
+        const isRateado = Boolean(g.is_rateado)
+        if (isRateado) expanded.add(g.id)
+        const kids = Array.isArray(g.children) ? g.children : []
+        const shortTal = kids
+          .slice(0, 3)
+          .map((x) => x.talhao_nome)
+          .filter(Boolean)
+          .join(', ')
+        const more = kids.length > 3 ? ` +${kids.length - 3}` : ''
+        const parent = {
+          ...g,
+          talhao_nome: isRateado ? `Rateado (${g.rateio_count || kids.length})` : (kids[0]?.talhao_nome || ''),
+          talhao_local: isRateado ? `${shortTal}${more}` : (kids[0]?.talhao_local || ''),
+          pct_rateio_100: null,
+        }
+        parts.push(rowHtml(parent, { showToggle: isRateado, toggled: isRateado }))
+        if (isRateado) {
+          for (const c of kids) {
+            parts.push(rowHtml({
+              ...c,
+              safra_nome: g.safra_nome,
+              destino_local: g.destino_local,
+              motorista_nome: g.motorista_nome,
+            }, { isChild: true }))
+          }
+        }
+      }
+      tbody.innerHTML = parts.join('')
+    } else if (viewMode === 'flat') {
+      tbody.innerHTML = (data.items || []).map((v) => rowHtml(v)).join('')
+    } else {
+      // legacy
+      tbody.innerHTML = (data.items || []).map((v) => rowHtml({
+        ...v,
+        display_ficha: v.ficha,
+        ficha_original: v.ficha,
+        pct_rateio_100: null,
+        is_rateado: false,
+      })).join('')
+    }
+
+    if (!data.items.length) tbody.innerHTML = `<tr><td colspan="18">Nenhuma viagem.</td></tr>`
 
     tbody.querySelectorAll('[data-act]').forEach((btn) => {
       btn.onclick = async () => {
         const id = Number(btn.dataset.id)
         const act = btn.dataset.act
+        if (act === 'toggle') {
+          if (expanded.has(id)) {
+            expanded.delete(id)
+            btn.textContent = '▶'
+            tbody.querySelectorAll(`tr[data-parent="${id}"]`).forEach((tr) => {
+              tr.style.display = 'none'
+            })
+          } else {
+            expanded.add(id)
+            btn.textContent = '▼'
+            tbody.querySelectorAll(`tr[data-parent="${id}"]`).forEach((tr) => {
+              tr.style.display = ''
+            })
+          }
+          return
+        }
         if (act === 'del') {
           if (!(await confirmDanger(`Excluir a viagem #${id}?`))) return
           await api(`/api/viagens/${id}`, { method: 'DELETE' })
@@ -3658,7 +3768,9 @@ async function renderColheitaBase(variant) {
         }
         if (act === 'edit') {
           const full = await api(`/api/viagens/${id}`)
-          openViagemDialog({ mode: 'edit', viagem: full })
+          const rix = btn.dataset.rateioIndex
+          const focusRateioIndex = rix === undefined ? null : Number(rix)
+          openViagemDialog({ mode: 'edit', viagem: full, focusRateioIndex })
         }
       }
     })
@@ -3668,7 +3780,7 @@ async function renderColheitaBase(variant) {
   view.querySelector('#btnAdd').onclick = () => openViagemDialog({ mode: 'create' })
   await refreshList()
 
-  function openViagemDialog({ mode, viagem }) {
+  function openViagemDialog({ mode, viagem, focusRateioIndex = null }) {
     dlg.dataset.variant = variant || ''
     if (variant === 'rev01') {
       // evitar "sumir" os calculos entre aberturas do dialog
@@ -4826,12 +4938,13 @@ async function renderColheitaBase(variant) {
       if (inPct) inPct.value = pct.toFixed(2)
     }
 
-    function addRateioRow({ talhao_id, pct_rateio, kg_rateio } = {}) {
+    function addRateioRow({ talhao_id, pct_rateio, kg_rateio, index } = {}) {
       if (!rateioWrap) return
 
       const row = document.createElement('div')
       row.dataset.role = 'rateio-row'
       row.className = 'rateio-grid rateio-item'
+      if (index !== null && index !== undefined) row.dataset.index = String(index)
 
       row.innerHTML = `
         <div class="rateio-cell" data-cell="talhao">
@@ -4885,7 +4998,7 @@ async function renderColheitaBase(variant) {
           row.remove()
           // manter ao menos 1 linha
           if (rateioWrap.querySelectorAll('[data-role="rateio-row"]').length === 0) {
-            addRateioRow({ talhao_id: base.talhao_id, pct_rateio: 100 })
+            addRateioRow({ talhao_id: base.talhao_id, pct_rateio: 100, index: 0 })
           }
           updateRateioInfo()
           setLocalFromTalhao()
@@ -4943,7 +5056,7 @@ async function renderColheitaBase(variant) {
           }))
         : [{ talhao_id: base.talhao_id, pct_rateio: 100, kg_rateio: null }]
 
-      for (const it of initial) addRateioRow(it)
+      for (let i = 0; i < initial.length; i++) addRateioRow({ ...initial[i], index: i })
       applyTalhaoSort()
       updateRateioInfo()
 
@@ -4951,7 +5064,8 @@ async function renderColheitaBase(variant) {
         btnAddTalhao.onclick = () => {
           const used = new Set(collectRateioTalhoes().map((x) => x.talhao_id))
           const next = cache.talhoes.find((t) => !used.has(t.id))?.id || base.talhao_id
-          addRateioRow({ talhao_id: next, pct_rateio: 0, kg_rateio: null })
+          const idx = rateioWrap.querySelectorAll('[data-role="rateio-row"]').length
+          addRateioRow({ talhao_id: next, pct_rateio: 0, kg_rateio: null, index: idx })
           runPreview()
         }
       }
@@ -4966,7 +5080,25 @@ async function renderColheitaBase(variant) {
     setPlacaFromMotorista()
     suggestPlantioFromSafra()
     suggestNextFicha().finally(() => {
-      applyDestinoDefaults().finally(runPreview)
+      applyDestinoDefaults().finally(() => {
+        runPreview()
+        if (
+          rateioWrap &&
+          focusRateioIndex !== null &&
+          focusRateioIndex !== undefined &&
+          Number.isFinite(Number(focusRateioIndex))
+        ) {
+          const idx = String(Number(focusRateioIndex))
+          const target = rateioWrap.querySelector(
+            `[data-role="rateio-row"][data-index="${idx}"]`,
+          )
+          if (target) {
+            target.classList.add('rateio-focus')
+            target.scrollIntoView({ block: 'center' })
+            window.setTimeout(() => target.classList.remove('rateio-focus'), 1400)
+          }
+        }
+      })
     })
 
     // Campo unico de desconto de umidade: ao editar, marca como alterado

@@ -53,9 +53,13 @@ viagensRouter.get(
   requirePerm(Permissions.COLHEITA_READ),
   validateQuery(ListQuery),
   (req, res) => {
-  const items = viagemRepo.list(req.query)
+  const view = String(req.query.view || 'legacy')
+  const items =
+    view === 'flat' || view === 'grouped'
+      ? viagemService.listView({ ...req.query, view })
+      : viagemRepo.list(req.query)
   const totals = viagemRepo.totals(req.query)
-  res.json({ items, totals })
+  res.json({ items, totals, view })
   },
 )
 

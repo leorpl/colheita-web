@@ -304,6 +304,7 @@ export const ViagemSchemas = {
     talhao_id: z.coerce.number().int().positive().optional(),
     destino_id: z.coerce.number().int().positive().optional(),
     motorista_id: z.coerce.number().int().positive().optional(),
+    view: z.enum(['legacy', 'flat', 'grouped']).optional(),
     de: z
       .preprocess((v) => {
         const raw = emptyToUndefined(firstOfArray(v))

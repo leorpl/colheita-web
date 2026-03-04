@@ -109,7 +109,20 @@ export function createApp() {
     )
   }
 
-  app.use(express.static(publicDir))
+  app.use(
+    express.static(publicDir, {
+      etag: true,
+      lastModified: true,
+      maxAge: 0,
+      setHeaders: (res, filePath) => {
+        // Evita cache agressivo no browser para assets do app.
+        // (mudancas frequentes de regra/negocio precisam refletir imediatamente)
+        if (String(filePath).endsWith('.js') || String(filePath).endsWith('.css')) {
+          res.setHeader('Cache-Control', 'no-cache')
+        }
+      },
+    }),
+  )
 
   app.use('/', pagesRouter)
   // Always try to attach req.user (session cookie); authorization happens inside /api router.

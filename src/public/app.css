@@ -437,6 +437,7 @@ code.mono{font-family:var(--mono);font-size:12px}
 .rateio-header{margin-top:10px;padding:0 6px 8px;border-bottom:1px solid rgba(15,26,22,.10);color:var(--muted);font-size:12px}
 .rateio-item{padding:10px;border-radius:14px;border:1px solid rgba(15,26,22,.10);background:rgba(255,255,255,.72)}
 .rateio-item:hover{background:rgba(255,255,255,.78)}
+.rateio-item.rateio-focus{border-color:rgba(209,154,43,.65);box-shadow:0 0 0 3px rgba(209,154,43,.18)}
 .rateio-cell{min-width:0}
 .rateio-cell select,.rateio-cell input{width:100%}
 .rateio-cell[data-cell="rm"]{display:flex;justify-content:flex-end}
