@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: colheita-web
+    runtime: node
+    buildCommand: npm ci
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: DB_PATH
+        value: /var/data/app.db
+    disk:
+      name: colheita-data
+      mountPath: /var/data
+      sizeGB: 1

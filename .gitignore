@@ -1,5 +1,20 @@
 node_modules/
-data/
 .env
 npm-debug.log*
 *.log
+
+# tmp/logs locais
+_tmp_*.log
+
+# SQLite: commitar somente o snapshot principal
+data/*
+!data/app.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# arquivo local acidental
+Novo(a) Documento de Texto.txt
+
+# arquivo local (nao e repositorio git)
+git
