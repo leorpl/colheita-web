@@ -36,6 +36,7 @@ function isValidDateYMD(s) {
 
 // Aceita YYYY-MM-DD ou DD/MM/YYYY e normaliza para YYYY-MM-DD.
 function normalizeDateToYMD(v) {
+  if (v === null || v === undefined) return v
   const s = String(v ?? '').trim()
   if (!s) return s
   const m = s.match(/^([0-9]{2})\/([0-9]{2})\/([0-9]{4})$/)
@@ -286,6 +287,15 @@ export const ViagemSchemas = {
             path: ['tara_kg'],
           })
         }
+      }
+
+      // Entrega: se informar hora, precisa informar a data.
+      if (v.hora_entrega && !v.data_entrega) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Informe a data de entrega quando houver hora de entrega.',
+          path: ['data_entrega'],
+        })
       }
     }),
 

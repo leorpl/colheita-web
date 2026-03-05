@@ -616,6 +616,9 @@ code.mono{font-family:var(--mono);font-size:12px}
 @media (max-width: 560px){
   .dlg .col3{grid-column:span 12}
   .dlg .col4{grid-column:span 12}
+
+  /* Colheita: keep Placa + Destino side-by-side */
+  .dlg .transport-destino{grid-column:span 6}
 }
 
 @media (max-width: 920px){

@@ -3936,16 +3936,15 @@ async function renderColheitaBase(variant) {
             : ''
         }
         <div id="vForm" class="colheita-form">
-          <div class="form-card">
-            <div class="card-head"><div class="card-title">Identificacao da carga</div></div>
-            <div class="form-grid">
+           <div class="form-card">
+             <div class="card-head"><div class="card-title">Identificacao da carga</div></div>
+             <div class="form-grid">
               ${formField({ label: 'Ficha', name: 'ficha', value: base.ficha, placeholder: '001', span: 'col2' })}
-              ${selectField({ label: 'Safra', name: 'safra_id', options: safraOpts, value: base.safra_id, span: 'col3' })}
-              ${selectField({ label: 'Plantio', name: 'tipo_plantio', options: plantioOpts, value: plantioValue, span: 'col2' })}
-              ${formField({ label: 'Local', name: 'local', value: base.local ?? '', placeholder: '', span: 'col2' })}
-              ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOpts, value: base.destino_id, span: 'col3' })}
-            </div>
-          </div>
+              ${selectField({ label: 'Safra', name: 'safra_id', options: safraOpts, value: base.safra_id, span: 'col6' })}
+              ${selectField({ label: 'Plantio', name: 'tipo_plantio', options: plantioOpts, value: plantioValue, span: 'col4' })}
+              <input type="hidden" name="local" value="${escapeHtml(base.local ?? '')}" />
+             </div>
+           </div>
 
           <div class="form-card rateio-cardx">
             <div class="card-head">
@@ -3975,12 +3974,12 @@ async function renderColheitaBase(variant) {
             <div class="rateio-foot"><div id="rateioInfo"></div></div>
           </div>
 
-          <div class="form-card">
+          <div class="form-card transport-card">
             <div class="card-head"><div class="card-title">Transporte</div></div>
             <div class="form-grid">
-              ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOpts, value: base.motorista_id, span: 'col6' })}
-              ${formField({ label: 'Placa', name: 'placa', value: base.placa ?? '', placeholder: 'AAA0A00', span: 'col2' })}
-              <div class="field col4"></div>
+              ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOpts, value: base.motorista_id, span: 'col6 transport-motorista' })}
+              ${formField({ label: 'Placa', name: 'placa', value: base.placa ?? '', placeholder: 'AAA0A00', span: 'col2 transport-placa' })}
+              ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOpts, value: base.destino_id, span: 'col4 transport-destino' })}
 
               ${formField({ label: 'Data saida', name: 'data_saida', type: 'date', value: base.data_saida ?? '', span: 'col3' })}
               ${formField({ label: 'Hora saida', name: 'hora_saida', type: 'time', value: base.hora_saida ?? '', span: 'col3' })}
@@ -4062,6 +4061,10 @@ async function renderColheitaBase(variant) {
       onSubmit: async (obj) => {
         if (!obj.data_saida || !obj.hora_saida) {
           throw new Error('Informe data e hora de saída.')
+        }
+
+        if (obj.hora_entrega && !obj.data_entrega) {
+          throw new Error('Informe a data de entrega quando houver hora de entrega.')
         }
 
         const talhoesRateio = collectRateioTalhoes()
