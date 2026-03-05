@@ -24,9 +24,8 @@ O banco SQLite e criado em `./data/app.db`.
 ## Login (local)
 
 - O login aceita `username` (pode ser email).
-- Em `NODE_ENV=development`, se o banco estiver vazio, o sistema cria automaticamente um admin local (configuravel via `.env`):
-  - `DEV_ADMIN_USERNAME` (default `admin@local`)
-  - `DEV_ADMIN_PASSWORD` (default `admin123`)
+- Em `NODE_ENV=development`, se o banco estiver vazio, o sistema cria usuarios `*_test` automaticamente.
+  - padrao: `admin_test` / `Nazca@2026`
 - Em `NODE_ENV=production`, nao existe seed automatico de usuarios.
 
 Comandos uteis:
@@ -34,6 +33,7 @@ Comandos uteis:
 ```bash
 npm run db:inspect
 npm run db:reset:dev
+npm run migrate
 ```
 
 Se o login falhar com 401, o mais comum e `DB_PATH` apontando para um banco novo/vazio (ou para um caminho diferente do esperado). O start do servidor loga o `DB_PATH` configurado e o caminho resolvido.

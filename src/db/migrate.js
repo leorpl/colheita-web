@@ -354,7 +354,7 @@ export function migrate() {
     stmt.run('MILHO')
   }
 
-  // Seed de usuarios: SOMENTE em development/test.
+  // Seed de usuarios: SOMENTE em development.
   // Em production, nunca criar contas automaticamente.
   try {
     const existing = Number(db.prepare('SELECT COUNT(*) as c FROM usuario').get()?.c || 0)
@@ -366,35 +366,16 @@ export function migrate() {
           'Banco sem usuarios: crie um admin manualmente (nao ha seed automatico em production)',
         )
       }
-    } else {
+    } else if (env.NODE_ENV === 'development') {
       const sel = db.prepare('SELECT id FROM usuario WHERE username=? LIMIT 1')
       const ins = db.prepare(
         `INSERT INTO usuario (username, nome, role, motorista_id, menus_json, password_hash, password_salt, active, updated_at)
          VALUES (@username, @nome, @role, NULL, NULL, @password_hash, @password_salt, 1, datetime('now'))`,
       )
 
-      // Admin DEV: cria apenas quando o banco esta vazio.
-      if (Number(env.SEED_DEV_ADMIN) === 1 && existing === 0) {
-        const username = String(env.DEV_ADMIN_USERNAME || '').trim()
-        const password = String(env.DEV_ADMIN_PASSWORD || '')
-        if (username && password) {
-          const exists = sel.get(username)
-          if (!exists) {
-            const { salt, hash } = hashPassword(password)
-            ins.run({
-              username,
-              nome: 'Admin Local',
-              role: 'admin',
-              password_hash: hash,
-              password_salt: salt,
-            })
-            logger.warn({ username }, 'Seed: admin DEV criado (apenas ambiente local)')
-          }
-        }
-      }
-
-      // Usuarios de teste (opcional).
-      if (Number(env.SEED_TEST_USERS) === 1) {
+      // Dev seed: cria apenas quando o banco esta vazio.
+      // Mantem contas *_test apenas no ambiente local.
+      if (existing === 0) {
         const seeds = [
           { username: 'admin_test', nome: 'Admin Teste', role: 'admin', password: 'Nazca@2026' },
           { username: 'gestor_test', nome: 'Gestor Teste', role: 'gestor', password: 'Nazca@2026' },
@@ -414,6 +395,11 @@ export function migrate() {
             password_salt: salt,
           })
         }
+
+        logger.warn(
+          { usernames: seeds.map((x) => x.username) },
+          'Seed: usuarios *_test criados (DB vazio, NODE_ENV=development)',
+        )
       }
     }
   } catch {

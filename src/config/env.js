@@ -27,12 +27,6 @@ const EnvSchema = z.object({
   RATE_LIMIT_API_MAX: z.coerce.number().int().min(50).max(100_000).default(2400),
   RATE_LIMIT_LOGIN_WINDOW_MS: z.coerce.number().int().min(1000).max(3600_000).default(900_000),
   RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().min(3).max(1000).default(25),
-
-  // Dev-only: seed inicial quando DB esta vazio (nunca em production)
-  SEED_DEV_ADMIN: z.coerce.number().int().min(0).max(1).default(1),
-  DEV_ADMIN_USERNAME: z.string().default('admin@local'),
-  DEV_ADMIN_PASSWORD: z.string().default('admin123'),
-  SEED_TEST_USERS: z.coerce.number().int().min(0).max(1).default(0),
 })
 
 export const env = EnvSchema.parse(process.env)
