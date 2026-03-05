@@ -8,8 +8,9 @@ function ensureDirForFile(filePath) {
   fs.mkdirSync(dir, { recursive: true })
 }
 
-ensureDirForFile(env.DB_PATH)
+export const dbPathAbs = path.resolve(env.DB_PATH)
+ensureDirForFile(dbPathAbs)
 
-export const db = new Database(env.DB_PATH)
+export const db = new Database(dbPathAbs)
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')

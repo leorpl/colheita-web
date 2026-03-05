@@ -1,5 +1,7 @@
 import { db } from './db.js'
 import { hashPassword } from '../auth/password.js'
+import { env } from '../config/env.js'
+import { logger } from '../logger.js'
 
 function hasColumn(table, column) {
   // Defesa: evita identifiers inesperados (nao pode ser parametrizado).
@@ -352,37 +354,66 @@ export function migrate() {
     stmt.run('MILHO')
   }
 
-  // Seed de usuarios para testes (nao altera usuarios existentes)
-  // Obs: as senhas sao informadas no terminal/assistente para uso local.
+  // Seed de usuarios: SOMENTE em development/test.
+  // Em production, nunca criar contas automaticamente.
   try {
-    const existing = db.prepare('SELECT COUNT(*) as c FROM usuario').get()?.c
-    // Mesmo se ja houver usuario, garantir alguns perfis para testar permissoes.
-    if (Number(existing) >= 0) {
-      const seeds = [
-        { username: 'admin_test', nome: 'Admin Teste', role: 'admin', password: 'Nazca@2026' },
-        { username: 'gestor_test', nome: 'Gestor Teste', role: 'gestor', password: 'Nazca@2026' },
-        { username: 'operador_test', nome: 'Operador Teste', role: 'operador', password: 'Nazca@2026' },
-        { username: 'leitura_test', nome: 'Leitura Teste', role: 'leitura', password: 'Nazca@2026' },
-        { username: 'motorista_test', nome: 'Motorista Teste', role: 'motorista', password: 'Nazca@2026' },
-      ]
+    const existing = Number(db.prepare('SELECT COUNT(*) as c FROM usuario').get()?.c || 0)
 
+    if (env.NODE_ENV === 'production') {
+      if (existing === 0) {
+        logger.error(
+          { db: env.DB_PATH },
+          'Banco sem usuarios: crie um admin manualmente (nao ha seed automatico em production)',
+        )
+      }
+    } else {
       const sel = db.prepare('SELECT id FROM usuario WHERE username=? LIMIT 1')
       const ins = db.prepare(
         `INSERT INTO usuario (username, nome, role, motorista_id, menus_json, password_hash, password_salt, active, updated_at)
          VALUES (@username, @nome, @role, NULL, NULL, @password_hash, @password_salt, 1, datetime('now'))`,
       )
 
-      for (const u of seeds) {
-        const exists = sel.get(u.username)
-        if (exists) continue
-        const { salt, hash } = hashPassword(u.password)
-        ins.run({
-          username: u.username,
-          nome: u.nome,
-          role: u.role,
-          password_hash: hash,
-          password_salt: salt,
-        })
+      // Admin DEV: cria apenas quando o banco esta vazio.
+      if (Number(env.SEED_DEV_ADMIN) === 1 && existing === 0) {
+        const username = String(env.DEV_ADMIN_USERNAME || '').trim()
+        const password = String(env.DEV_ADMIN_PASSWORD || '')
+        if (username && password) {
+          const exists = sel.get(username)
+          if (!exists) {
+            const { salt, hash } = hashPassword(password)
+            ins.run({
+              username,
+              nome: 'Admin Local',
+              role: 'admin',
+              password_hash: hash,
+              password_salt: salt,
+            })
+            logger.warn({ username }, 'Seed: admin DEV criado (apenas ambiente local)')
+          }
+        }
+      }
+
+      // Usuarios de teste (opcional).
+      if (Number(env.SEED_TEST_USERS) === 1) {
+        const seeds = [
+          { username: 'admin_test', nome: 'Admin Teste', role: 'admin', password: 'Nazca@2026' },
+          { username: 'gestor_test', nome: 'Gestor Teste', role: 'gestor', password: 'Nazca@2026' },
+          { username: 'operador_test', nome: 'Operador Teste', role: 'operador', password: 'Nazca@2026' },
+          { username: 'leitura_test', nome: 'Leitura Teste', role: 'leitura', password: 'Nazca@2026' },
+          { username: 'motorista_test', nome: 'Motorista Teste', role: 'motorista', password: 'Nazca@2026' },
+        ]
+        for (const u of seeds) {
+          const exists = sel.get(u.username)
+          if (exists) continue
+          const { salt, hash } = hashPassword(u.password)
+          ins.run({
+            username: u.username,
+            nome: u.nome,
+            role: u.role,
+            password_hash: hash,
+            password_salt: salt,
+          })
+        }
       }
     }
   } catch {
