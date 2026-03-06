@@ -5,14 +5,19 @@ import { validateBody } from '../../middleware/validate.js'
 import { usuarioRepo } from '../../repositories/usuarioRepo.js'
 import { usuarioSessaoRepo } from '../../repositories/usuarioSessaoRepo.js'
 import { buildCookie, newToken, sha256Hex } from '../../auth/cookies.js'
-import { verifyPassword } from '../../auth/password.js'
+import { verifyPassword, hashPassword } from '../../auth/password.js'
 import { unauthorized } from '../../errors.js'
 import { permsForRole } from '../../auth/permissions.js'
 import { AuthSchemas } from '../../validation/apiSchemas.js'
+import crypto from 'node:crypto'
+import { passwordResetRepo } from '../../repositories/passwordResetRepo.js'
+import { sendPasswordResetEmail } from '../../services/mailer.js'
 
 export const authRouter = Router()
 
 const LoginBody = AuthSchemas.LoginBody
+const ForgotBody = AuthSchemas.ForgotBody
+const ResetBody = AuthSchemas.ResetBody
 
 authRouter.post('/login', validateBody(LoginBody), (req, res) => {
   if (Number(env.AUTH_ENABLED) !== 1) {
@@ -56,6 +61,56 @@ authRouter.post('/login', validateBody(LoginBody), (req, res) => {
       perms: permsForRole(u.role),
     },
   })
+})
+
+authRouter.post('/forgot', validateBody(ForgotBody), async (req, res) => {
+  // Always return ok to avoid leaking whether the email exists.
+  const email = String(req.body.email || '').trim()
+
+  try {
+    passwordResetRepo.purgeExpired()
+    const u = usuarioRepo.getAuthByUsername(email)
+    if (u && Number(u.active) === 1) {
+      const token = crypto.randomBytes(32).toString('hex')
+      const token_hash = sha256Hex(token)
+      const ttlMin = 45
+      const expires = new Date(Date.now() + ttlMin * 60 * 1000)
+      const expires_at = expires.toISOString().slice(0, 19).replace('T', ' ')
+      passwordResetRepo.create({ user_id: u.id, token_hash, expires_at })
+
+      const base = String(env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '') || `${req.protocol}://${req.get('host')}`
+      const resetUrl = `${base}/reset?token=${encodeURIComponent(token)}`
+      await sendPasswordResetEmail({ to: email, resetUrl })
+    }
+  } catch {
+    // Swallow errors; keep generic response.
+  }
+
+  res.json({ ok: true })
+})
+
+authRouter.post('/reset', validateBody(ResetBody), (req, res) => {
+  const token = String(req.body.token || '').trim()
+  const password = String(req.body.password || '')
+
+  const token_hash = sha256Hex(token)
+  const row = passwordResetRepo.getValidByHash(token_hash)
+  if (!row) {
+    // Generic message
+    throw unauthorized('Token invalido ou expirado')
+  }
+
+  const u = usuarioRepo.get(row.user_id)
+  if (!u || Number(u.active) !== 1) {
+    throw unauthorized('Token invalido ou expirado')
+  }
+
+  const { salt, hash } = hashPassword(password)
+  usuarioRepo.setPassword(row.user_id, { password_hash: hash, password_salt: salt })
+  passwordResetRepo.markUsed(row.id)
+  usuarioSessaoRepo.deleteByUserId(row.user_id)
+
+  res.json({ ok: true })
 })
 
 authRouter.post('/logout', (req, res) => {

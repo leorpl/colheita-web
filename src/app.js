@@ -91,6 +91,26 @@ export function createApp() {
     )
 
     app.use(
+      '/api/auth/forgot',
+      rateLimit({
+        id: 'forgot',
+        windowMs: Number(env.RATE_LIMIT_LOGIN_WINDOW_MS),
+        max: Number(env.RATE_LIMIT_LOGIN_MAX),
+        message: 'Muitas tentativas, tente novamente mais tarde.',
+      }),
+    )
+
+    app.use(
+      '/api/auth/reset',
+      rateLimit({
+        id: 'reset',
+        windowMs: Number(env.RATE_LIMIT_LOGIN_WINDOW_MS),
+        max: Number(env.RATE_LIMIT_LOGIN_MAX),
+        message: 'Muitas tentativas, tente novamente mais tarde.',
+      }),
+    )
+
+    app.use(
       '/api',
       rateLimit({
         id: 'api',

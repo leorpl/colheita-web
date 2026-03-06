@@ -11,7 +11,7 @@ export const usuarioSessaoRepo = {
   getByTokenHash(token_hash) {
     return db
       .prepare(
-        `SELECT s.*, u.username, u.nome, u.role, u.motorista_id, u.active
+        `SELECT s.*, u.username, u.nome, u.role, u.motorista_id, u.active, u.menus_json
          FROM usuario_sessao s
          JOIN usuario u ON u.id = s.usuario_id
          WHERE s.token_hash=? LIMIT 1`,
@@ -23,6 +23,12 @@ export const usuarioSessaoRepo = {
     return db
       .prepare('DELETE FROM usuario_sessao WHERE token_hash=?')
       .run(token_hash)
+  },
+
+  deleteByUserId(usuario_id) {
+    return db
+      .prepare('DELETE FROM usuario_sessao WHERE usuario_id=?')
+      .run(usuario_id)
   },
 
   purgeExpired() {

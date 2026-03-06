@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>NazcaTraker - Login</title>
+    <title>NazcaTraker - Recuperar senha</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
@@ -17,7 +17,7 @@
         <img class="brand-logo" src="/logo.png" alt="Fazenda Nazca" />
         <div>
           <div class="brand-title">NazcaTraker</div>
-          <div class="brand-sub">Acesso</div>
+          <div class="brand-sub">Recuperar senha</div>
         </div>
       </div>
     </header>
@@ -26,29 +26,19 @@
       <section class="panel" style="max-width:520px;margin:0 auto">
         <div class="panel-head">
           <div>
-            <div class="panel-title">Login</div>
-            <div class="panel-sub">Entre para acessar o sistema.</div>
+            <div class="panel-title">Esqueci minha senha</div>
+            <div class="panel-sub">Informe seu e-mail (login). Se existir, enviaremos um link de redefinição.</div>
           </div>
         </div>
         <div class="panel-body">
-          <form class="form-grid" id="loginForm">
+          <form class="form-grid" id="forgotForm">
             <div class="field col12">
-              <div class="label">Usuario</div>
-              <input name="username" autocomplete="username" />
-            </div>
-            <div class="field col12">
-              <div class="label">Senha</div>
-              <div class="pwd-wrap">
-                <input name="password" type="password" autocomplete="current-password" />
-                <button class="pwd-toggle" type="button" data-act="toggle" aria-label="Mostrar senha" title="Mostrar senha">Ver</button>
-              </div>
-            </div>
-            <div class="field col12" style="display:flex;justify-content:flex-end">
-              <button class="btn" type="submit">Entrar</button>
+              <div class="label">E-mail</div>
+              <input name="email" autocomplete="username" />
             </div>
             <div class="field col12" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
-              <a class="btn ghost" href="/forgot">Esqueci minha senha</a>
-              <span></span>
+              <a class="btn ghost" href="/login">Voltar</a>
+              <button class="btn" type="submit">Enviar link</button>
             </div>
             <div class="hint" id="msg"></div>
           </form>
@@ -56,6 +46,6 @@
       </section>
     </main>
 
-    <script type="module" src="/login.js"></script>
+    <script type="module" src="/forgot.js"></script>
   </body>
 </html>

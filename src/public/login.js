@@ -13,6 +13,19 @@ async function api(path, body) {
 const form = document.querySelector('#loginForm')
 const msg = document.querySelector('#msg')
 
+const pwd = form.querySelector('input[name="password"]')
+const btn = form.querySelector('button[data-act="toggle"]')
+if (btn && pwd) {
+  btn.onclick = () => {
+    const isPwd = pwd.type === 'password'
+    pwd.type = isPwd ? 'text' : 'password'
+    btn.textContent = isPwd ? 'Ocultar' : 'Ver'
+    btn.setAttribute('aria-label', isPwd ? 'Ocultar senha' : 'Mostrar senha')
+    btn.title = isPwd ? 'Ocultar senha' : 'Mostrar senha'
+    pwd.focus()
+  }
+}
+
 form.onsubmit = async (e) => {
   e.preventDefault()
   msg.textContent = ''

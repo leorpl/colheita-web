@@ -27,6 +27,16 @@ const EnvSchema = z.object({
   RATE_LIMIT_API_MAX: z.coerce.number().int().min(50).max(100_000).default(2400),
   RATE_LIMIT_LOGIN_WINDOW_MS: z.coerce.number().int().min(1000).max(3600_000).default(900_000),
   RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().min(3).max(1000).default(25),
+
+  // Password reset
+  PUBLIC_BASE_URL: z.string().default(''),
+
+  // SMTP (optional). If unset, reset links are logged in development.
+  SMTP_HOST: z.string().default(''),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
+  SMTP_FROM: z.string().default(''),
 })
 
 export const env = EnvSchema.parse(process.env)

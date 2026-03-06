@@ -3,8 +3,8 @@ import { viagemRepo } from '../../repositories/viagemRepo.js'
 import { notFound } from '../../errors.js'
 import { validateBody, validateQuery, validateParams } from '../../middleware/validate.js'
 import { viagemService } from '../../services/viagemService.js'
-import { requirePerm } from '../../middleware/auth.js'
-import { Permissions } from '../../auth/permissions.js'
+import { requireCan } from '../../middleware/auth.js'
+import { Actions, Modules } from '../../auth/acl.js'
 import { S, ViagemSchemas } from '../../validation/apiSchemas.js'
 
 export const viagensRouter = Router()
@@ -15,7 +15,7 @@ const RecalcAllBody = ViagemSchemas.RecalcAllBody
 
 viagensRouter.post(
   '/preview',
-  requirePerm(Permissions.COLHEITA_READ),
+  requireCan(Modules.COLHEITA, Actions.VIEW),
   validateBody(PreviewBody),
   (req, res) => {
   const id = req.body.id ? Number(req.body.id) : null
@@ -38,7 +38,7 @@ const CompareBody = ViagemSchemas.CompareBody
 
 viagensRouter.post(
   '/comparar-destinos',
-  requirePerm(Permissions.COLHEITA_READ),
+  requireCan(Modules.COLHEITA, Actions.VIEW),
   validateBody(CompareBody),
   (req, res) => {
     const id = req.body.id ? Number(req.body.id) : null
@@ -50,7 +50,7 @@ const ListQuery = ViagemSchemas.ListQuery
 
 viagensRouter.get(
   '/',
-  requirePerm(Permissions.COLHEITA_READ),
+  requireCan(Modules.COLHEITA, Actions.VIEW),
   validateQuery(ListQuery),
   (req, res) => {
   const view = String(req.query.view || 'legacy')
@@ -67,7 +67,7 @@ const NextFichaQuery = ViagemSchemas.NextFichaQuery
 
 viagensRouter.get(
   '/next-ficha',
-  requirePerm(Permissions.COLHEITA_READ),
+  requireCan(Modules.COLHEITA, Actions.VIEW),
   validateQuery(NextFichaQuery),
   (req, res) => {
   res.json(viagemService.nextFicha(Number(req.query.safra_id)))
@@ -76,7 +76,7 @@ viagensRouter.get(
 
 viagensRouter.post(
   '/',
-  requirePerm(Permissions.COLHEITA_WRITE),
+  requireCan(Modules.COLHEITA, Actions.CREATE),
   validateBody(ViagemBody),
   (req, res) => {
   const row = viagemService.create(req.body)
@@ -88,7 +88,7 @@ viagensRouter.post(
 // Usado quando houve ajustes de regras/regras de negocio e precisa re-materializar campos calculados.
 viagensRouter.post(
   '/recalcular-todas',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requireCan(Modules.REGRAS_DESTINO, Actions.UPDATE),
   validateBody(RecalcAllBody),
   (req, res) => {
     const r = viagemService.recalcularTodas(req.body)
@@ -98,7 +98,7 @@ viagensRouter.post(
 
 viagensRouter.get(
   '/:id',
-  requirePerm(Permissions.COLHEITA_READ),
+  requireCan(Modules.COLHEITA, Actions.VIEW),
   validateParams(S.IdParam),
   (req, res) => {
   const row = viagemRepo.get(req.params.id)
@@ -109,7 +109,7 @@ viagensRouter.get(
 
 viagensRouter.put(
   '/:id',
-  requirePerm(Permissions.COLHEITA_WRITE),
+  requireCan(Modules.COLHEITA, Actions.UPDATE),
   validateParams(S.IdParam),
   validateBody(ViagemBody),
   (req, res) => {
@@ -122,7 +122,7 @@ viagensRouter.put(
 
 viagensRouter.delete(
   '/:id',
-  requirePerm(Permissions.COLHEITA_WRITE),
+  requireCan(Modules.COLHEITA, Actions.DELETE),
   validateParams(S.IdParam),
   (req, res) => {
   const id = req.params.id

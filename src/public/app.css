@@ -175,6 +175,27 @@ input,select,textarea{
   outline:none;
 }
 
+.pwd-wrap{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+.pwd-wrap input{flex:1;min-width:0}
+.pwd-toggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(15,26,22,.16);
+  background:rgba(255,255,255,.66);
+  color:rgba(15,26,22,.84);
+  cursor:pointer;
+  font-size:12px;
+  line-height:1;
+}
+.pwd-toggle:hover{background:rgba(255,255,255,.78)}
+
 input[type="range"].pct-range{padding:0;height:30px;background:transparent;border:none;accent-color:rgba(30,106,77,.95)}
 .pct-row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:nowrap}
 .pct-range{flex:1;min-width:140px}

@@ -1,5 +1,8 @@
 import { db } from './db.js'
 import { hashPassword } from '../auth/password.js'
+import { env } from '../config/env.js'
+import { logger } from '../logger.js'
+import { permsForRole, Roles, Permissions } from '../auth/permissions.js'
 
 function hasColumn(table, column) {
   // Defesa: evita identifiers inesperados (nao pode ser parametrizado).
@@ -318,8 +321,54 @@ export function migrate() {
       FOREIGN KEY (usuario_id) REFERENCES usuario(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS role (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS role_permission (
+      role_id INTEGER NOT NULL,
+      module TEXT NOT NULL,
+      can_view INTEGER NOT NULL DEFAULT 0,
+      can_create INTEGER NOT NULL DEFAULT 0,
+      can_update INTEGER NOT NULL DEFAULT 0,
+      can_delete INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      PRIMARY KEY (role_id, module),
+      FOREIGN KEY (role_id) REFERENCES role(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_permission (
+      user_id INTEGER NOT NULL,
+      module TEXT NOT NULL,
+      can_view INTEGER,
+      can_create INTEGER,
+      can_update INTEGER,
+      can_delete INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      PRIMARY KEY (user_id, module),
+      FOREIGN KEY (user_id) REFERENCES usuario(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS password_reset_token (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES usuario(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_usuario_sessao_user ON usuario_sessao(usuario_id);
     CREATE INDEX IF NOT EXISTS idx_usuario_sessao_exp ON usuario_sessao(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_role_permission_module ON role_permission(module);
+    CREATE INDEX IF NOT EXISTS idx_user_permission_module ON user_permission(module);
+    CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_token(user_id);
+    CREATE INDEX IF NOT EXISTS idx_password_reset_exp ON password_reset_token(expires_at);
   `)
 
   // backfill de rateio: viagens antigas (1 talhao -> 100%)
@@ -340,6 +389,99 @@ export function migrate() {
     db.exec('ALTER TABLE usuario ADD COLUMN menus_json TEXT')
   }
 
+  // Seed de roles e permissões (nao afeta usuarios existentes).
+  // Mantem compatibilidade com o modelo antigo (Permissions.*).
+  try {
+    const roleCount = Number(db.prepare('SELECT COUNT(*) as c FROM role').get()?.c || 0)
+    if (roleCount === 0) {
+      const insRole = db.prepare('INSERT INTO role (name) VALUES (?)')
+      for (const r of Object.values(Roles)) insRole.run(String(r))
+    }
+
+    const permCount = Number(db.prepare('SELECT COUNT(*) as c FROM role_permission').get()?.c || 0)
+    if (permCount === 0) {
+      const roleIdByName = Object.fromEntries(
+        db.prepare('SELECT id, name FROM role').all().map((r) => [String(r.name), Number(r.id)]),
+      )
+
+      const modules = [
+        'painel',
+        'colheita',
+        'relatorios',
+        'quitacao-motoristas',
+        'safras',
+        'talhoes',
+        'destinos',
+        'motoristas',
+        'fretes',
+        'regras-destino',
+        'tipos-plantio',
+        'area-colhida',
+        'fazenda',
+        'usuarios',
+      ]
+
+      function roleAllows(roleName, moduleKey, action) {
+        const role = String(roleName || '').toLowerCase()
+        if (role === Roles.ADMIN) return true
+
+        // base: permitir view de painel/fazenda para quem consegue logar.
+        if ((moduleKey === 'painel' || moduleKey === 'fazenda') && action === 'view') return true
+
+        const legacy = permsForRole(role)
+        const has = (p) => legacy.includes(p)
+
+        const isCad = ['safras', 'talhoes', 'destinos', 'motoristas', 'fretes', 'tipos-plantio'].includes(moduleKey)
+        const isConfig = ['regras-destino'].includes(moduleKey)
+
+        if (moduleKey === 'colheita') {
+          if (action === 'view') return has(Permissions.COLHEITA_READ)
+          return has(Permissions.COLHEITA_WRITE)
+        }
+        if (moduleKey === 'relatorios' || moduleKey === 'area-colhida') {
+          return action === 'view' && has(Permissions.RELATORIOS_READ)
+        }
+        if (moduleKey === 'quitacao-motoristas') {
+          if (action === 'view') return has(Permissions.RELATORIOS_READ) || has(Permissions.QUITACOES_WRITE)
+          return has(Permissions.QUITACOES_WRITE)
+        }
+        if (moduleKey === 'usuarios') {
+          return has(Permissions.USERS_MANAGE)
+        }
+        if (isCad) {
+          if (action === 'view') return has(Permissions.CADASTROS_READ)
+          return has(Permissions.CADASTROS_WRITE)
+        }
+        if (isConfig) {
+          if (action === 'view') return has(Permissions.CONFIG_READ)
+          return has(Permissions.CONFIG_WRITE)
+        }
+
+        // default deny
+        return false
+      }
+
+      const ins = db.prepare(
+        `INSERT INTO role_permission (role_id, module, can_view, can_create, can_update, can_delete, updated_at)
+         VALUES (@role_id, @module, @can_view, @can_create, @can_update, @can_delete, datetime('now'))`,
+      )
+
+      for (const roleName of Object.values(Roles)) {
+        const role_id = roleIdByName[String(roleName)]
+        if (!role_id) continue
+        for (const moduleKey of modules) {
+          const can_view = roleAllows(roleName, moduleKey, 'view') ? 1 : 0
+          const can_create = roleAllows(roleName, moduleKey, 'create') ? 1 : 0
+          const can_update = roleAllows(roleName, moduleKey, 'update') ? 1 : 0
+          const can_delete = roleAllows(roleName, moduleKey, 'delete') ? 1 : 0
+          ins.run({ role_id, module: moduleKey, can_view, can_create, can_update, can_delete })
+        }
+      }
+    }
+  } catch (e) {
+    logger.warn({ err: String(e?.message || e) }, 'Seed: role/permissions skipped')
+  }
+
   // seed de tipos de plantio
   const countPlantio = db
     .prepare('SELECT COUNT(*) as c FROM plantio_tipo')
@@ -352,12 +494,11 @@ export function migrate() {
     stmt.run('MILHO')
   }
 
-  // Seed de usuarios para testes (nao altera usuarios existentes)
-  // Obs: as senhas sao informadas no terminal/assistente para uso local.
+  // Seed de usuarios *_test: SOMENTE em development e somente quando o DB esta vazio.
+  // Em production, nunca criar contas automaticamente.
   try {
-    const existing = db.prepare('SELECT COUNT(*) as c FROM usuario').get()?.c
-    // Mesmo se ja houver usuario, garantir alguns perfis para testar permissoes.
-    if (Number(existing) >= 0) {
+    const existing = Number(db.prepare('SELECT COUNT(*) as c FROM usuario').get()?.c || 0)
+    if (env.NODE_ENV === 'development' && existing === 0) {
       const seeds = [
         { username: 'admin_test', nome: 'Admin Teste', role: 'admin', password: 'Nazca@2026' },
         { username: 'gestor_test', nome: 'Gestor Teste', role: 'gestor', password: 'Nazca@2026' },
@@ -365,16 +506,11 @@ export function migrate() {
         { username: 'leitura_test', nome: 'Leitura Teste', role: 'leitura', password: 'Nazca@2026' },
         { username: 'motorista_test', nome: 'Motorista Teste', role: 'motorista', password: 'Nazca@2026' },
       ]
-
-      const sel = db.prepare('SELECT id FROM usuario WHERE username=? LIMIT 1')
       const ins = db.prepare(
         `INSERT INTO usuario (username, nome, role, motorista_id, menus_json, password_hash, password_salt, active, updated_at)
          VALUES (@username, @nome, @role, NULL, NULL, @password_hash, @password_salt, 1, datetime('now'))`,
       )
-
       for (const u of seeds) {
-        const exists = sel.get(u.username)
-        if (exists) continue
         const { salt, hash } = hashPassword(u.password)
         ins.run({
           username: u.username,
@@ -384,9 +520,10 @@ export function migrate() {
           password_salt: salt,
         })
       }
+      logger.warn({ usernames: seeds.map((x) => x.username) }, 'Seed: usuarios *_test criados (DB vazio, development)')
     }
-  } catch {
-    // seed e opcional
+  } catch (e) {
+    logger.warn({ err: String(e?.message || e) }, 'Seed: usuarios *_test skipped')
   }
 
   // incremental columns for talhao

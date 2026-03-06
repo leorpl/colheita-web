@@ -3,22 +3,23 @@ import { Router } from 'express'
 import { validateBody, validateParams } from '../../middleware/validate.js'
 import { usuarioRepo } from '../../repositories/usuarioRepo.js'
 import { hashPassword } from '../../auth/password.js'
-import { requirePerm } from '../../middleware/auth.js'
-import { Permissions } from '../../auth/permissions.js'
+import { requireCan } from '../../middleware/auth.js'
+import { Actions, Modules } from '../../auth/acl.js'
 import { notFound } from '../../errors.js'
 import { S, UsersSchemas } from '../../validation/apiSchemas.js'
 
 export const usersRouter = Router()
 
-usersRouter.use(requirePerm(Permissions.USERS_MANAGE))
+usersRouter.use(requireCan(Modules.USUARIOS, Actions.VIEW))
 
-usersRouter.get('/', (_req, res) => {
+usersRouter.get('/', requireCan(Modules.USUARIOS, Actions.VIEW), (_req, res) => {
   res.json(usuarioRepo.list())
 })
 
 const CreateBody = UsersSchemas.CreateBody
 
-usersRouter.post('/', validateBody(CreateBody), (req, res) => {
+usersRouter.post('/', requireCan(Modules.USUARIOS, Actions.CREATE), validateBody(CreateBody), (req, res) => {
+  // create
   const { salt, hash } = hashPassword(req.body.password)
   const row = usuarioRepo.create({
     username: req.body.username,
@@ -44,7 +45,8 @@ usersRouter.post('/', validateBody(CreateBody), (req, res) => {
 
 const UpdateBody = UsersSchemas.UpdateBody
 
-usersRouter.put('/:id', validateParams(S.IdParam), validateBody(UpdateBody), (req, res) => {
+usersRouter.put('/:id', requireCan(Modules.USUARIOS, Actions.UPDATE), validateParams(S.IdParam), validateBody(UpdateBody), (req, res) => {
+  // update
   const id = req.params.id
   const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')
@@ -63,9 +65,11 @@ const PasswordBody = UsersSchemas.PasswordBody
 
 usersRouter.put(
   '/:id/password',
+  requireCan(Modules.USUARIOS, Actions.UPDATE),
   validateParams(S.IdParam),
   validateBody(PasswordBody),
   (req, res) => {
+  // update password
   const id = req.params.id
   const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')
@@ -75,7 +79,8 @@ usersRouter.put(
   },
 )
 
-usersRouter.delete('/:id', validateParams(S.IdParam), (req, res) => {
+usersRouter.delete('/:id', requireCan(Modules.USUARIOS, Actions.DELETE), validateParams(S.IdParam), (req, res) => {
+  // delete
   const id = req.params.id
   const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')

@@ -467,6 +467,25 @@ function helpTip(text) {
   return `<button class="help" type="button" aria-label="Ajuda" data-help="${t}" title="${t}">?</button>`
 }
 
+function setupPwdToggles(rootEl) {
+  if (!rootEl) return
+  rootEl.querySelectorAll('button.pwd-toggle').forEach((btn) => {
+    if (btn.dataset.bound === '1') return
+    btn.dataset.bound = '1'
+    btn.onclick = () => {
+      const wrap = btn.closest('.pwd-wrap')
+      const input = wrap?.querySelector('input')
+      if (!input) return
+      const isPwd = input.type === 'password'
+      input.type = isPwd ? 'text' : 'password'
+      btn.textContent = isPwd ? 'Ocultar' : 'Ver'
+      btn.setAttribute('aria-label', isPwd ? 'Ocultar senha' : 'Mostrar senha')
+      btn.title = isPwd ? 'Ocultar senha' : 'Mostrar senha'
+      input.focus()
+    }
+  })
+}
+
 function openDialog({ title, bodyHtml, onSubmit, submitLabel = 'Salvar', size } = {}) {
   dlg.dataset.size = size ? String(size) : ''
   dlgTitle.textContent = title
@@ -2002,7 +2021,13 @@ async function renderUsuarios() {
           ${formField({ label: 'Nome', name: 'nome', placeholder: 'Joao', span: 'col6' })}
           ${selectField({ label: 'Role', name: 'role', options: roleOptions, value: 'operador', span: 'col6' })}
           ${selectField({ label: 'Motorista (se role=motorista)', name: 'motorista_id', options: motOpts, value: '', span: 'col6' })}
-          ${formField({ label: 'Senha', name: 'password', type: 'password', value: '', span: 'col6' })}
+          <div class="field col6">
+            <div class="label">Senha</div>
+            <div class="pwd-wrap">
+              <input name="password" type="password" autocomplete="new-password" />
+              <button class="pwd-toggle" type="button" aria-label="Mostrar senha" title="Mostrar senha">Ver</button>
+            </div>
+          </div>
           <div class="field col12"><div class="label">Menus</div><div class="hint">Marque as telas que este usuário pode acessar (menu lateral).</div>
             <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">
               ${allMenus
@@ -2038,6 +2063,8 @@ async function renderUsuarios() {
         renderUsuarios()
       },
     })
+
+    setupPwdToggles(dlgBody)
   }
 
   view.querySelectorAll('[data-act]').forEach((btn) => {
@@ -2101,7 +2128,13 @@ async function renderUsuarios() {
           submitLabel: 'Salvar senha',
           bodyHtml: `
             <div class="form-grid">
-              ${formField({ label: 'Nova senha', name: 'password', type: 'password', value: '', span: 'col6' })}
+              <div class="field col6">
+                <div class="label">Nova senha</div>
+                <div class="pwd-wrap">
+                  <input name="password" type="password" autocomplete="new-password" />
+                  <button class="pwd-toggle" type="button" aria-label="Mostrar senha" title="Mostrar senha">Ver</button>
+                </div>
+              </div>
             </div>
           `,
           onSubmit: async (obj) => {
@@ -2112,6 +2145,8 @@ async function renderUsuarios() {
             toast('OK', 'Senha atualizada.')
           },
         })
+
+        setupPwdToggles(dlgBody)
       }
 
       if (act === 'udel') {

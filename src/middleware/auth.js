@@ -3,6 +3,7 @@ import { unauthorized, forbidden } from '../errors.js'
 import { parseCookies, sha256Hex } from '../auth/cookies.js'
 import { usuarioSessaoRepo } from '../repositories/usuarioSessaoRepo.js'
 import { hasPerm, permsForRole, menusForRole } from '../auth/permissions.js'
+import { can } from '../auth/acl.js'
 
 function getUserFromRequest(req) {
   const cookies = parseCookies(req.headers.cookie)
@@ -85,6 +86,15 @@ export function requirePerm(perm) {
     if (Number(env.AUTH_ENABLED) !== 1) return next()
     if (!req.user) throw unauthorized('Nao autenticado')
     if (!hasPerm(req.user.role, perm)) throw forbidden('Sem permissao')
+    next()
+  }
+}
+
+export function requireCan(moduleKey, action) {
+  return (req, _res, next) => {
+    if (Number(env.AUTH_ENABLED) !== 1) return next()
+    if (!req.user) throw unauthorized('Nao autenticado')
+    if (!can(req.user, moduleKey, action)) throw forbidden('Sem permissao')
     next()
   }
 }
