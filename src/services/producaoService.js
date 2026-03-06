@@ -207,9 +207,10 @@ export const producaoService = {
     // Fetch viagens + rateio lines
     const vtRows = db
       .prepare(
-        `SELECT v.id as viagem_id, v.safra_id, v.tipo_plantio, v.data_saida, v.data_entrega, v.created_at,
+        `SELECT v.id as viagem_id, v.safra_id, v.destino_id, v.tipo_plantio, v.data_saida, v.data_entrega, v.created_at,
                 v.sacas,
                 v.sub_total_frete, v.sub_total_secagem, v.sub_total_custo_silo, v.sub_total_custo_terceiros,
+                v.custo_frete_sacas, v.custo_secagem_sacas, v.custo_silo_sacas, v.custo_terceiros_sacas, v.custo_outros_sacas,
                 vt.talhao_id, vt.pct_rateio, vt.kg_rateio
          FROM viagem v
          JOIN viagem_talhao vt ON vt.viagem_id = v.id
@@ -225,14 +226,23 @@ export const producaoService = {
       const cur = byViagem.get(id) || {
         viagem_id: id,
         safra_id: Number(r.safra_id),
+        destino_id: r.destino_id ? Number(r.destino_id) : null,
         tipo_plantio: normTp(r.tipo_plantio || ''),
         data_ref: pickTripDate(r),
         sacas: Number(r.sacas || 0),
-        custos: {
+        custos_rs: {
           frete: Number(r.sub_total_frete || 0),
           secagem: Number(r.sub_total_secagem || 0),
           silo: Number(r.sub_total_custo_silo || 0),
           terceiros: Number(r.sub_total_custo_terceiros || 0),
+          outros: 0,
+        },
+        custos_sacas: {
+          frete: Number(r.custo_frete_sacas || 0),
+          secagem: Number(r.custo_secagem_sacas || 0),
+          silo: Number(r.custo_silo_sacas || 0),
+          terceiros: Number(r.custo_terceiros_sacas || 0),
+          outros: Number(r.custo_outros_sacas || 0),
         },
         talhoes: [],
       }
@@ -323,6 +333,7 @@ export const producaoService = {
             safra_id: sid,
             participante_id: a.participante_id,
             talhao_id,
+            destino_id: v.destino_id,
             data_ref: v.data_ref,
             mov_tipo: 'producao_credito',
             origem_tipo: 'viagem',
@@ -338,21 +349,48 @@ export const producaoService = {
         }
 
         // allocate costs by type
-        const costTypes = Object.keys(v.custos)
+        const costTypes = ['frete', 'secagem', 'silo', 'terceiros', 'outros']
         for (const ct of costTypes) {
-          const valor_rs_total = Number(v.custos[ct] || 0)
-          if (!(valor_rs_total > 0)) continue
-          const valor_rs_talhao = valor_rs_total * frac
-
-          const pr = this.priceFor({ pricesByMonth, tipo_plantio: v.tipo_plantio, date_ymd: v.data_ref })
           const rule = policyRule({ politica_custos_id: acordo.politica_custos_id, custo_tipo: ct })
           const moment = String(rule.momento || 'depois_divisao')
           const mode = String(rule.modo_rateio || 'proporcional_participacao')
 
           const debParts = mode === 'proporcional_participacao' ? parts : findPayers(parts, mode)
-          // se modo nao-proporcional, ratear apenas entre os pagantes (normalizado para somar 1)
           const denom = sumPct(debParts)
 
+          // Prefer sacas-based costs when present (no money in this phase).
+          const sacas_total = Number(v.custos_sacas?.[ct] || 0)
+          if (sacas_total > 0) {
+            const sacas_talhao = sacas_total * frac
+            for (const p of debParts) {
+              const w = denom > 0 ? (Number(p.percentual_producao) || 0) / denom : 0
+              pushMov({
+                safra_id: sid,
+                participante_id: Number(p.participante_id),
+                talhao_id,
+                destino_id: v.destino_id,
+                data_ref: v.data_ref,
+                mov_tipo: 'custo_debito',
+                origem_tipo: 'viagem',
+                origem_id: v.viagem_id,
+                custo_tipo: ct,
+                sacas_credito: 0,
+                sacas_debito: sacas_talhao * w,
+                valor_rs: null,
+                preco_ref_rs_sc: null,
+                pendente_preco: 0,
+                notes: `${ct} (sacas) (${moment}) viagem #${v.viagem_id}`,
+              })
+            }
+            continue
+          }
+
+          // Fallback: legacy monetary costs -> sacas equivalentes via preco de venda.
+          const valor_rs_total = Number(v.custos_rs?.[ct] || 0)
+          if (!(valor_rs_total > 0)) continue
+          const valor_rs_talhao = valor_rs_total * frac
+
+          const pr = this.priceFor({ pricesByMonth, tipo_plantio: v.tipo_plantio, date_ymd: v.data_ref })
           const price = Number.isFinite(pr) && pr > 0 ? pr : null
           const sacasEquiv = price ? valor_rs_talhao / price : null
 
@@ -363,6 +401,7 @@ export const producaoService = {
               safra_id: sid,
               participante_id: Number(p.participante_id),
               talhao_id,
+              destino_id: v.destino_id,
               data_ref: v.data_ref,
               mov_tipo: 'custo_debito',
               origem_tipo: 'viagem',
@@ -373,7 +412,7 @@ export const producaoService = {
               valor_rs: valor_rs_talhao * w,
               preco_ref_rs_sc: price,
               pendente_preco: price ? 0 : 1,
-              notes: `${ct} (${moment}) viagem #${v.viagem_id}`,
+              notes: `${ct} (equiv) (${moment}) viagem #${v.viagem_id}`,
             })
           }
         }
@@ -388,6 +427,7 @@ export const producaoService = {
         safra_id: sid,
         participante_id: Number(vd.participante_id),
         talhao_id: vd.talhao_id ? Number(vd.talhao_id) : null,
+        destino_id: vd.destino_id ? Number(vd.destino_id) : null,
         data_ref: vd.data_venda,
         mov_tipo: 'venda_debito',
         origem_tipo: 'venda_saca',

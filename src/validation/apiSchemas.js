@@ -247,6 +247,13 @@ export const ViagemSchemas = {
       carga_total_kg: z.coerce.number().min(0).max(500_000),
       tara_kg: z.coerce.number().min(0).max(500_000),
 
+      // Custos em sacas (controle fisico; opcional)
+      custo_frete_sacas: z.preprocess(emptyToNull, z.union([z.coerce.number().min(0).max(1_000_000), z.null()])).optional(),
+      custo_secagem_sacas: z.preprocess(emptyToNull, z.union([z.coerce.number().min(0).max(1_000_000), z.null()])).optional(),
+      custo_silo_sacas: z.preprocess(emptyToNull, z.union([z.coerce.number().min(0).max(1_000_000), z.null()])).optional(),
+      custo_terceiros_sacas: z.preprocess(emptyToNull, z.union([z.coerce.number().min(0).max(1_000_000), z.null()])).optional(),
+      custo_outros_sacas: z.preprocess(emptyToNull, z.union([z.coerce.number().min(0).max(1_000_000), z.null()])).optional(),
+
       umidade_pct: S.Percent100.optional().nullable(),
       umidade_desc_pct_manual: S.Percent100.optional().nullable(),
       impureza_pct: S.Percent100.optional().nullable(),

@@ -5016,6 +5016,13 @@ async function renderColheitaBase(variant) {
           carga_total_kg: fmtNumInput(viagem.carga_total_kg, 0),
           tara_kg: fmtNumInput(viagem.tara_kg, 0),
 
+          // Custos em sacas (opcional)
+          custo_frete_sacas: viagem.custo_frete_sacas != null ? fmtNumInput(viagem.custo_frete_sacas, 2) : '',
+          custo_secagem_sacas: viagem.custo_secagem_sacas != null ? fmtNumInput(viagem.custo_secagem_sacas, 2) : '',
+          custo_silo_sacas: viagem.custo_silo_sacas != null ? fmtNumInput(viagem.custo_silo_sacas, 2) : '',
+          custo_terceiros_sacas: viagem.custo_terceiros_sacas != null ? fmtNumInput(viagem.custo_terceiros_sacas, 2) : '',
+          custo_outros_sacas: viagem.custo_outros_sacas != null ? fmtNumInput(viagem.custo_outros_sacas, 2) : '',
+
           // Campos calculados (somente visual - nao editar)
           calc_peso_bruto_kg: Number.isFinite(Number(viagem.peso_bruto_kg))
             ? fmtNum(Number(viagem.peso_bruto_kg), 0)
@@ -5063,8 +5070,13 @@ async function renderColheitaBase(variant) {
       data_entrega: '',
       hora_entrega: '',
       carga_total_kg: '',
-      tara_kg: '',
-      umidade_pct: '',
+       tara_kg: '',
+       custo_frete_sacas: '',
+       custo_secagem_sacas: '',
+       custo_silo_sacas: '',
+       custo_terceiros_sacas: '',
+       custo_outros_sacas: '',
+       umidade_pct: '',
       impureza_pct: '',
       ardidos_pct: '',
       queimados_pct: '',
@@ -5193,14 +5205,28 @@ async function renderColheitaBase(variant) {
             </div>
           </div>
 
-          <div class="form-card">
-            <div class="card-head"><div class="card-title">Pesagem</div></div>
-            <div class="form-grid">
-              ${formField({ label: 'Carga total (kg)', name: 'carga_total_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.carga_total_kg, span: 'col4' })}
-              ${formField({ label: 'Tara (kg)', name: 'tara_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.tara_kg, span: 'col4' })}
-              ${formField({ label: `Peso bruto (kg) ${helpTip('Calculado: carga total - tara.')}`, name: 'calc_peso_bruto_kg', type: 'text', value: base.calc_peso_bruto_kg ?? '-', span: 'col4', readonly: true })}
-            </div>
-          </div>
+           <div class="form-card">
+             <div class="card-head"><div class="card-title">Pesagem</div></div>
+             <div class="form-grid">
+               ${formField({ label: 'Carga total (kg)', name: 'carga_total_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.carga_total_kg, span: 'col4' })}
+               ${formField({ label: 'Tara (kg)', name: 'tara_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: base.tara_kg, span: 'col4' })}
+               ${formField({ label: `Peso bruto (kg) ${helpTip('Calculado: carga total - tara.')}`, name: 'calc_peso_bruto_kg', type: 'text', value: base.calc_peso_bruto_kg ?? '-', span: 'col4', readonly: true })}
+             </div>
+           </div>
+
+           <div class="form-card">
+             <div class="card-head"><div class="card-title">Custos (sacas)</div></div>
+             <div class="form-grid">
+               ${formField({ label: 'Frete (sc)', name: 'custo_frete_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_frete_sacas ?? '', span: 'col3' })}
+               ${formField({ label: 'Secagem (sc)', name: 'custo_secagem_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_secagem_sacas ?? '', span: 'col3' })}
+               ${formField({ label: 'Silo (sc)', name: 'custo_silo_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_silo_sacas ?? '', span: 'col2' })}
+               ${formField({ label: 'Terceiros (sc)', name: 'custo_terceiros_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_terceiros_sacas ?? '', span: 'col2' })}
+               ${formField({ label: 'Outros (sc)', name: 'custo_outros_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_outros_sacas ?? '', span: 'col2' })}
+             </div>
+             <div class="card-body" style="padding-top:0">
+               <div class="hint">Opcional: informe custos cobrados em sacas para alimentar o saldo por participante (Producao). Se vazio, o sistema pode usar custos em R$ como equivalentes (quando configurado).</div>
+             </div>
+           </div>
 
           <div class="form-card">
             <div class="card-head">
@@ -5313,6 +5339,14 @@ async function renderColheitaBase(variant) {
           hora_entrega: obj.hora_entrega || null,
           carga_total_kg: asNumberOrNull(obj.carga_total_kg) ?? 0,
           tara_kg: asNumberOrNull(obj.tara_kg) ?? 0,
+
+          // Custos em sacas (opcional)
+          custo_frete_sacas: obj.custo_frete_sacas ? parseNumberPt(String(obj.custo_frete_sacas)) : null,
+          custo_secagem_sacas: obj.custo_secagem_sacas ? parseNumberPt(String(obj.custo_secagem_sacas)) : null,
+          custo_silo_sacas: obj.custo_silo_sacas ? parseNumberPt(String(obj.custo_silo_sacas)) : null,
+          custo_terceiros_sacas: obj.custo_terceiros_sacas ? parseNumberPt(String(obj.custo_terceiros_sacas)) : null,
+          custo_outros_sacas: obj.custo_outros_sacas ? parseNumberPt(String(obj.custo_outros_sacas)) : null,
+
           umidade_pct: parsePercent100OrZero(obj.umidade_pct, 'umidade_pct'),
           // Campo unico: se igual ao sugerido, manda null (usa tabela); se diferente, manda valor.
           umidade_desc_pct_manual: umidManualValue,
@@ -5415,6 +5449,11 @@ async function renderColheitaBase(variant) {
     // Padronizar visualizacao (pt-BR): '.' milhar, ',' decimal
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="carga_total_kg"]'), 0, { after: () => runPreview() })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="tara_kg"]'), 0, { after: () => runPreview() })
+    bindNumberFormatOnBlur(dlgForm.querySelector('input[name="custo_frete_sacas"]'), 2)
+    bindNumberFormatOnBlur(dlgForm.querySelector('input[name="custo_secagem_sacas"]'), 2)
+    bindNumberFormatOnBlur(dlgForm.querySelector('input[name="custo_silo_sacas"]'), 2)
+    bindNumberFormatOnBlur(dlgForm.querySelector('input[name="custo_terceiros_sacas"]'), 2)
+    bindNumberFormatOnBlur(dlgForm.querySelector('input[name="custo_outros_sacas"]'), 2)
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="umidade_pct"]'), 2, { after: () => runPreview() })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="umidade_desc_pct_manual"]'), 2, { after: () => runPreview() })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="impureza_pct"]'), 2, { after: () => runPreview() })
@@ -7738,7 +7777,7 @@ async function renderProducao() {
         <div class="panel-head">
           <div>
             <div class="panel-title">Controle de producao e divisao de sacas</div>
-            <div class="panel-sub">Por talhao e por participante (dono/meeiro/parceiro). Custos em sacas equivalentes via vendas registradas.</div>
+            <div class="panel-sub">Por talhao e por participante (dono/meeiro/parceiro). Custos preferencialmente em sacas (sem dinheiro); opcionalmente em R$ (vira sacas equivalentes).</div>
           </div>
           <div class="panel-actions">
             ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safra_id, span: 'col6' })}
@@ -8471,15 +8510,15 @@ async function renderProducao() {
             ${selectField({ label: 'Talhao', name: 'talhao_id', options: talhaoOptions, value: full?.talhao_id || talhaoOptions[0]?.value, span: 'col8' })}
             ${formField({ label: 'Data', name: 'data_ref', type: 'date', value: full?.data_ref || today, span: 'col4' })}
             ${formField({ label: 'Tipo', name: 'custo_tipo', value: full?.custo_tipo || 'outros', span: 'col4' })}
-            ${formField({ label: 'Valor (R$)', name: 'valor_rs', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full?.valor_rs != null ? fmtNumInput(full.valor_rs, 2) : '', span: 'col4' })}
             ${formField({ label: 'Valor (sacas)', name: 'valor_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full?.valor_sacas != null ? fmtNumInput(full.valor_sacas, 2) : '', span: 'col4' })}
-            <div class="field col8"><div class="label">Obs</div><div class="hint">Informe R$ (vai virar sacas equiv via vendas) ou sacas direto.</div></div>
+            ${formField({ label: 'Valor (R$ opcional)', name: 'valor_rs', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full?.valor_rs != null ? fmtNumInput(full.valor_rs, 2) : '', span: 'col4' })}
+            <div class="field col8"><div class="label">Obs</div><div class="hint">Preferencia: informe em sacas. Se informar R$, o sistema converte para sacas equivalentes via vendas registradas.</div></div>
           </div>
         `,
         onReady: () => {
           const f = document.querySelector('#dlgForm')
-          numInputBlur(f.querySelector('input[name="valor_rs"]'), 2)
           numInputBlur(f.querySelector('input[name="valor_sacas"]'), 2)
+          numInputBlur(f.querySelector('input[name="valor_rs"]'), 2)
         },
         onSubmit: async (obj) => {
           const body = {
@@ -8503,14 +8542,18 @@ async function renderProducao() {
   async function tabApuracao() {
     const rowsP = await api(`/api/apuracao/saldo/participantes?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
     const rowsT = await api(`/api/apuracao/saldo/talhoes?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
+    const rowsD = await api(`/api/apuracao/saldo/destinos?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
     const pend = await api(`/api/apuracao/pendencias?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
 
     setView(
       headerHtml(
         `
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
-          <div class="hint">Saldos em sacas. Custos convertidos via vendas (preco medio por mes). Custos pendentes nao foram abatidos.</div>
-          <button class="btn" type="button" id="btnReap">Reapurar safra</button>
+          <div class="hint">Saldos em sacas. Custos podem ser lançados direto em sacas (recomendado). Se houver custos em R$, o sistema converte para sacas equivalentes via vendas (preco medio por mes). Pendencias nao foram abatidas.</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn ghost" type="button" id="btnCustViag">Custos por viagem</button>
+            <button class="btn" type="button" id="btnReap">Reapurar safra</button>
+          </div>
         </div>
 
         ${pend && pend.length ? `
@@ -8567,6 +8610,31 @@ async function renderProducao() {
               </div>
             </div>
           </div>
+
+          <div class="span12">
+            <div class="stat">
+              <div class="stat-k">Saldo por destino (armazem)</div>
+              <div class="table-wrap" style="margin-top:10px">
+                <table>
+                  <thead><tr><th>Destino</th><th class="t-right">Credito</th><th class="t-right">Debito</th><th class="t-right">Saldo</th></tr></thead>
+                  <tbody>
+                    ${(rowsD || [])
+                      .map(
+                        (r) => `
+                        <tr>
+                          <td>${escapeHtml(r.destino_local || '')}</td>
+                          <td class="t-right">${fmtNum(r.sacas_credito, 2)}</td>
+                          <td class="t-right">${fmtNum(r.sacas_debito, 2)}</td>
+                          <td class="t-right"><b>${fmtNum(r.saldo_sacas, 2)}</b></td>
+                        </tr>`,
+                      )
+                      .join('')}
+                  </tbody>
+                </table>
+              </div>
+              <div class="hint" style="margin-top:10px">Obs: hoje o destino vem das colheitas/vendas. Custos manuais por talhao ficam sem destino.</div>
+            </div>
+          </div>
         </div>
       `,
       ),
@@ -8579,29 +8647,34 @@ async function renderProducao() {
       renderProducao()
     }
 
-    view.querySelectorAll('button[data-act="extr"]').forEach((b) => {
-      b.onclick = async () => {
-        const pid = Number(b.dataset.part)
-        const extr = await api(`/api/apuracao/extrato?safra_id=${encodeURIComponent(String(safra_id))}&participante_id=${encodeURIComponent(String(pid))}`)
+    const btnCustViag = view.querySelector('#btnCustViag')
+    if (btnCustViag) {
+      btnCustViag.onclick = async () => {
+        const rows = await api(`/api/apuracao/custos-por-viagem?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
         openDialog({
-          title: 'Extrato (participante)',
-          bodyHtml: `
-            <div class="table-wrap">
+          title: 'Custos por viagem (sacas)'
+          , bodyHtml: `
+            <div class="hint">Soma dos custos debitados (movimentos do tipo custo_debito) por viagem e talhao. Usa custos em sacas quando informados; senao usa equivalentes via R$.</div>
+            <div class="table-wrap" style="margin-top:10px">
               <table>
-                <thead><tr><th>Data</th><th>Talhao</th><th>Tipo</th><th>Custo</th><th class="t-right">Credito</th><th class="t-right">Debito</th><th class="t-right">R$</th></tr></thead>
+                <thead>
+                  <tr><th>Viagem</th><th>Talhao</th><th>Destino</th><th class="t-right">Total</th><th class="t-right">Frete</th><th class="t-right">Secagem</th><th class="t-right">Silo</th><th class="t-right">Terceiros</th><th class="t-right">Outros</th></tr>
+                </thead>
                 <tbody>
-                  ${extr
+                  ${(rows || [])
                     .map(
-                      (m) => `
+                      (r) => `
                       <tr>
-                        <td>${escapeHtml(String(m.data_ref || '').slice(0, 10))}</td>
-                        <td>${escapeHtml(`${m.talhao_local || ''} ${m.talhao_nome || ''}`.trim())}</td>
-                        <td>${escapeHtml(m.mov_tipo || '')}</td>
-                        <td>${escapeHtml(m.custo_tipo || '')}${Number(m.pendente_preco) === 1 ? ' (pendente)' : ''}</td>
-                        <td class="t-right">${fmtNum(m.sacas_credito, 2)}</td>
-                        <td class="t-right">${fmtNum(m.sacas_debito, 2)}</td>
-                        <td class="t-right">${m.valor_rs == null ? '' : fmtNum(m.valor_rs, 2)}</td>
-                      </tr>`
+                        <td><code class="mono">#${escapeHtml(String(r.viagem_id || ''))}</code></td>
+                        <td>${escapeHtml(`${r.talhao_local || ''} ${r.talhao_nome || ''}`.trim())}</td>
+                        <td>${escapeHtml(r.destino_local || '')}</td>
+                        <td class="t-right"><b>${fmtNum(r.sacas_custo_total, 2)}</b></td>
+                        <td class="t-right">${fmtNum(r.sacas_frete, 2)}</td>
+                        <td class="t-right">${fmtNum(r.sacas_secagem, 2)}</td>
+                        <td class="t-right">${fmtNum(r.sacas_silo, 2)}</td>
+                        <td class="t-right">${fmtNum(r.sacas_terceiros, 2)}</td>
+                        <td class="t-right">${fmtNum(r.sacas_outros, 2)}</td>
+                      </tr>`,
                     )
                     .join('')}
                 </tbody>
@@ -8611,38 +8684,72 @@ async function renderProducao() {
           onSubmit: null,
         })
       }
+    }
+
+    view.querySelectorAll('button[data-act="extr"]').forEach((b) => {
+      b.onclick = async () => {
+        const pid = Number(b.dataset.part)
+        const extr = await api(`/api/apuracao/extrato?safra_id=${encodeURIComponent(String(safra_id))}&participante_id=${encodeURIComponent(String(pid))}`)
+          openDialog({
+            title: 'Extrato (participante)',
+            bodyHtml: `
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Data</th><th>Talhao</th><th>Destino</th><th>Tipo</th><th>Custo</th><th class="t-right">Credito</th><th class="t-right">Debito</th></tr></thead>
+                  <tbody>
+                    ${extr
+                      .map(
+                        (m) => `
+                        <tr>
+                          <td>${escapeHtml(String(m.data_ref || '').slice(0, 10))}</td>
+                          <td>${escapeHtml(`${m.talhao_local || ''} ${m.talhao_nome || ''}`.trim())}</td>
+                          <td>${escapeHtml(String(m.destino_local || ''))}</td>
+                          <td>${escapeHtml(m.mov_tipo || '')}</td>
+                          <td>${escapeHtml(m.custo_tipo || '')}${Number(m.pendente_preco) === 1 ? ' (pendente)' : ''}</td>
+                          <td class="t-right">${fmtNum(m.sacas_credito, 2)}</td>
+                          <td class="t-right">${fmtNum(m.sacas_debito, 2)}</td>
+                        </tr>`
+                      )
+                      .join('')}
+                  </tbody>
+                </table>
+              </div>
+            `,
+            onSubmit: null,
+          })
+      }
     })
     view.querySelectorAll('button[data-act="extr-t"]').forEach((b) => {
       b.onclick = async () => {
         const tid = Number(b.dataset.talhao)
         const extr = await api(`/api/apuracao/extrato?safra_id=${encodeURIComponent(String(safra_id))}&talhao_id=${encodeURIComponent(String(tid))}`)
-        openDialog({
-          title: 'Detalhe (talhao)',
-          bodyHtml: `
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>Data</th><th>Participante</th><th>Tipo</th><th>Custo</th><th class="t-right">Credito</th><th class="t-right">Debito</th><th class="t-right">R$</th></tr></thead>
-                <tbody>
-                  ${extr
-                    .map(
-                      (m) => `
-                      <tr>
-                        <td>${escapeHtml(String(m.data_ref || '').slice(0, 10))}</td>
-                        <td>${escapeHtml(m.participante_nome || '')}</td>
-                        <td>${escapeHtml(m.mov_tipo || '')}</td>
-                        <td>${escapeHtml(m.custo_tipo || '')}${Number(m.pendente_preco) === 1 ? ' (pendente)' : ''}</td>
-                        <td class="t-right">${fmtNum(m.sacas_credito, 2)}</td>
-                        <td class="t-right">${fmtNum(m.sacas_debito, 2)}</td>
-                        <td class="t-right">${m.valor_rs == null ? '' : fmtNum(m.valor_rs, 2)}</td>
-                      </tr>`
-                    )
-                    .join('')}
-                </tbody>
-              </table>
-            </div>
-          `,
-          onSubmit: null,
-        })
+          openDialog({
+            title: 'Detalhe (talhao)',
+            bodyHtml: `
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Data</th><th>Participante</th><th>Destino</th><th>Tipo</th><th>Custo</th><th class="t-right">Credito</th><th class="t-right">Debito</th></tr></thead>
+                  <tbody>
+                    ${extr
+                      .map(
+                        (m) => `
+                        <tr>
+                          <td>${escapeHtml(String(m.data_ref || '').slice(0, 10))}</td>
+                          <td>${escapeHtml(m.participante_nome || '')}</td>
+                          <td>${escapeHtml(String(m.destino_local || ''))}</td>
+                          <td>${escapeHtml(m.mov_tipo || '')}</td>
+                          <td>${escapeHtml(m.custo_tipo || '')}${Number(m.pendente_preco) === 1 ? ' (pendente)' : ''}</td>
+                          <td class="t-right">${fmtNum(m.sacas_credito, 2)}</td>
+                          <td class="t-right">${fmtNum(m.sacas_debito, 2)}</td>
+                        </tr>`
+                      )
+                      .join('')}
+                  </tbody>
+                </table>
+              </div>
+            `,
+            onSubmit: null,
+          })
       }
     })
   }

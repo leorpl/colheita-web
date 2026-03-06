@@ -451,6 +451,13 @@ export const viagemService = {
       throw unprocessable('Pesos invalidos (tara deve ser <= carga_total)')
     }
 
+    function normalizeCustoSacas(v, fieldName) {
+      if (v === null || v === undefined || v === '') return 0
+      const n = toDbNumber(v, fieldName)
+      if (n < 0) throw unprocessable(`Campo invalido: ${fieldName}`)
+      return round(n, 6)
+    }
+
     const safra_id = Number(input.safra_id)
     if (!Number.isInteger(safra_id) || safra_id <= 0) {
       throw unprocessable('safra_id invalido')
@@ -502,6 +509,13 @@ export const viagemService = {
       hora_entrega: input.hora_entrega ?? null,
       carga_total_kg,
       tara_kg,
+
+      // Custos em sacas (controle fisico; opcional)
+      custo_frete_sacas: normalizeCustoSacas(input.custo_frete_sacas, 'custo_frete_sacas'),
+      custo_secagem_sacas: normalizeCustoSacas(input.custo_secagem_sacas, 'custo_secagem_sacas'),
+      custo_silo_sacas: normalizeCustoSacas(input.custo_silo_sacas, 'custo_silo_sacas'),
+      custo_terceiros_sacas: normalizeCustoSacas(input.custo_terceiros_sacas, 'custo_terceiros_sacas'),
+      custo_outros_sacas: normalizeCustoSacas(input.custo_outros_sacas, 'custo_outros_sacas'),
 
       umidade_pct: normalizePercent100(input.umidade_pct, 'umidade_pct'),
 

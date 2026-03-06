@@ -30,6 +30,35 @@ apuracaoRouter.get(
 )
 
 apuracaoRouter.get(
+  '/saldo/destinos',
+  requirePerm(Modules.PRODUCAO, Actions.VIEW),
+  validateQuery(ProducaoSchemas.ApuracaoQuery),
+  (req, res) => {
+    res.json(participanteSacasMovRepo.saldoPorDestino({ safra_id: req.query.safra_id }))
+  },
+)
+
+apuracaoRouter.get(
+  '/custos-por-viagem',
+  requirePerm(Modules.PRODUCAO, Actions.VIEW),
+  validateQuery(
+    ProducaoSchemas.ApuracaoQuery.extend({
+      talhao_id: z.coerce.number().int().positive().optional(),
+      destino_id: z.coerce.number().int().positive().optional(),
+    }),
+  ),
+  (req, res) => {
+    res.json(
+      participanteSacasMovRepo.custosPorViagem({
+        safra_id: req.query.safra_id,
+        talhao_id: req.query.talhao_id,
+        destino_id: req.query.destino_id,
+      }),
+    )
+  },
+)
+
+apuracaoRouter.get(
   '/extrato',
   requirePerm(Modules.PRODUCAO, Actions.VIEW),
   validateQuery(

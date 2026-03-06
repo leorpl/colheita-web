@@ -225,6 +225,13 @@ export function migrate() {
       frete_tabela REAL NOT NULL,
       sub_total_frete REAL NOT NULL,
 
+      -- Custos em sacas (controle fisico; opcional)
+      custo_frete_sacas REAL NOT NULL DEFAULT 0,
+      custo_secagem_sacas REAL NOT NULL DEFAULT 0,
+      custo_silo_sacas REAL NOT NULL DEFAULT 0,
+      custo_terceiros_sacas REAL NOT NULL DEFAULT 0,
+      custo_outros_sacas REAL NOT NULL DEFAULT 0,
+
       secagem_custo_por_saca REAL NOT NULL DEFAULT 0,
       sub_total_secagem REAL NOT NULL DEFAULT 0,
 
@@ -515,6 +522,7 @@ export function migrate() {
       safra_id INTEGER NOT NULL,
       participante_id INTEGER NOT NULL,
       talhao_id INTEGER,
+      destino_id INTEGER,
       data_ref TEXT,
       mov_tipo TEXT NOT NULL,
       origem_tipo TEXT,
@@ -532,7 +540,8 @@ export function migrate() {
       updated_by_user_id INTEGER,
       FOREIGN KEY (safra_id) REFERENCES safra(id) ON DELETE RESTRICT,
       FOREIGN KEY (participante_id) REFERENCES participante(id) ON DELETE RESTRICT,
-      FOREIGN KEY (talhao_id) REFERENCES talhao(id) ON DELETE SET NULL
+      FOREIGN KEY (talhao_id) REFERENCES talhao(id) ON DELETE SET NULL,
+      FOREIGN KEY (destino_id) REFERENCES destino(id) ON DELETE SET NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_usuario_sessao_user ON usuario_sessao(usuario_id);
@@ -561,8 +570,19 @@ export function migrate() {
     CREATE INDEX IF NOT EXISTS idx_custo_safra_talhao ON custo_lancamento(safra_id, talhao_id);
     CREATE INDEX IF NOT EXISTS idx_mov_safra_part ON participante_sacas_mov(safra_id, participante_id);
     CREATE INDEX IF NOT EXISTS idx_mov_safra_talhao ON participante_sacas_mov(safra_id, talhao_id);
+    CREATE INDEX IF NOT EXISTS idx_mov_safra_destino ON participante_sacas_mov(safra_id, destino_id);
     CREATE INDEX IF NOT EXISTS idx_mov_origem ON participante_sacas_mov(origem_tipo, origem_id);
   `)
+
+  // Evolucao: controle por destino/armazem no extrato de sacas
+  try {
+    if (!hasColumn('participante_sacas_mov', 'destino_id')) {
+      db.exec(`ALTER TABLE participante_sacas_mov ADD COLUMN destino_id INTEGER;`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mov_safra_destino ON participante_sacas_mov(safra_id, destino_id);`)
+    }
+  } catch {
+    // ignore
+  }
 
   // backfill de rateio: viagens antigas (1 talhao -> 100%)
   try {
@@ -576,6 +596,24 @@ export function migrate() {
     `)
   } catch {
     // backfill e opcional (ex: tabela ainda nao existe em DB antigo)
+  }
+
+  // Evolucao: custos em sacas por viagem (sem dinheiro)
+  try {
+    const cols = [
+      'custo_frete_sacas',
+      'custo_secagem_sacas',
+      'custo_silo_sacas',
+      'custo_terceiros_sacas',
+      'custo_outros_sacas',
+    ]
+    for (const c of cols) {
+      if (!hasColumn('viagem', c)) {
+        db.exec(`ALTER TABLE viagem ADD COLUMN ${c} REAL DEFAULT 0;`)
+      }
+    }
+  } catch {
+    // ignore
   }
 
   if (!hasColumn('usuario', 'menus_json')) {
