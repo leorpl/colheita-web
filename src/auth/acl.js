@@ -25,6 +25,7 @@ export const Modules = {
   FAZENDA: 'fazenda',
   USUARIOS: 'usuarios',
   AUDITORIA: 'auditoria',
+  COMUNICACAO: 'comunicacao',
 }
 
 function normKey(x) {
@@ -63,6 +64,11 @@ function legacyRoleAllow(roleName, moduleKey, action) {
   if (moduleKey === Modules.AUDITORIA) {
     // Inicialmente: somente admin (via fallback admin acima).
     return false
+  }
+
+  if (moduleKey === Modules.COMUNICACAO) {
+    // Preferencias de notificacao e atalhos webmail: qualquer usuario logado pode ver.
+    return action === Actions.VIEW || action === Actions.UPDATE
   }
   if (isCad) {
     if (action === Actions.VIEW) return has(Permissions.CADASTROS_READ)

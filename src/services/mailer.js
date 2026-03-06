@@ -27,6 +27,39 @@ function getTransporter() {
   return cached
 }
 
+export async function sendSystemEmail({ to, subject, text, html }) {
+  const email = String(to || '').trim()
+  const subj = String(subject || '').trim()
+  if (!email || !subj) return { ok: false, skipped: true, reason: 'missing_to_or_subject' }
+
+  if (!hasSmtp()) {
+    if (env.NODE_ENV === 'development') {
+      logger.warn({ to: email, subject: subj, text }, 'DEV email (SMTP not configured)')
+      return { ok: true, dev: true }
+    }
+    logger.warn({ to: email, subject: subj }, 'SMTP not configured; email not sent')
+    return { ok: false, skipped: true, reason: 'smtp_not_configured' }
+  }
+
+  const transporter = getTransporter()
+  if (!transporter) return { ok: false, skipped: true, reason: 'no_transporter' }
+
+  const from = String(env.SMTP_FROM || '').trim() || String(env.SMTP_USER || '').trim() || 'no-reply@localhost'
+  try {
+    await transporter.sendMail({
+      from,
+      to: email,
+      subject: subj.slice(0, 200),
+      text: String(text || '').slice(0, 150_000),
+      html: html ? String(html).slice(0, 350_000) : undefined,
+    })
+    return { ok: true }
+  } catch (e) {
+    logger.warn({ to: email, err: String(e?.message || e) }, 'SMTP failed; email not sent')
+    return { ok: false, error: String(e?.message || e) }
+  }
+}
+
 export async function sendPasswordResetEmail({ to, resetUrl }) {
   const email = String(to || '').trim()
   const url = String(resetUrl || '').trim()

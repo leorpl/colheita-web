@@ -7,6 +7,7 @@ import { Actions, Modules } from '../../auth/acl.js'
 import { notFound } from '../../errors.js'
 import { aclRepo } from '../../repositories/aclRepo.js'
 import { auditService } from '../../services/auditService.js'
+import { roleSyncService } from '../../services/roleSyncService.js'
 
 export const aclRouter = Router()
 
@@ -73,6 +74,13 @@ aclRouter.put(
       notes: `role_permission ${req.params.role} ${req.params.module}`,
     })
 
+    // Sync menu list for users bound to this role.
+    try {
+      roleSyncService.syncUsersMenusForRole(req.params.role, { user_id: req.user?.id })
+    } catch {
+      // ignore
+    }
+
     res.json(after)
   },
 )
@@ -97,6 +105,12 @@ aclRouter.post(
       new_values: { role: req.body.to_name, permissions: after },
       notes: `role_clone ${req.params.role} -> ${req.body.to_name}`,
     })
+
+    try {
+      roleSyncService.syncUsersMenusForRole(req.body.to_name, { user_id: req.user?.id })
+    } catch {
+      // ignore
+    }
 
     res.status(201).json(after)
   },

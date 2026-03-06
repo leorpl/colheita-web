@@ -135,7 +135,7 @@ export const producaoService = {
     let bestAny = null
     let bestAnyYm = null
     for (const [k, v] of pricesByMonth.entries()) {
-      const [_ktp, kym] = k.split('|')
+      const kym = String(k).split('|')[1] || ''
       if (kym <= ym && (!bestAnyYm || kym > bestAnyYm)) {
         bestAnyYm = kym
         bestAny = v

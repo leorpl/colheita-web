@@ -1,5 +1,6 @@
 import { auditLogRepo } from '../repositories/auditLogRepo.js'
 import { diffShallow, summarizeChange } from '../audit/diff.js'
+import { emailNotificationService } from './emailNotificationService.js'
 
 function pickActor(req) {
   const u = req?.user || null
@@ -80,19 +81,25 @@ export const auditService = {
       changed_fields,
     })
 
-    return auditLogRepo.create({
-      module_name: mod,
-      record_id: record_id === null ? null : Number(record_id),
-      action_type: action,
-      changed_by_user_id: actor.user_id,
-      changed_by_name_snapshot: actor.name_snapshot,
-      ip_address,
-      user_agent,
-      old_values_json: jsonOrNull(oldSan),
-      new_values_json: jsonOrNull(newSan),
-      changed_fields_json: jsonOrNull(changed_fields),
-      summary,
-      notes: notes ? String(notes).slice(0, 2000) : null,
-    })
+    try {
+      const row = auditLogRepo.create({
+        module_name: mod,
+        record_id: record_id === null ? null : Number(record_id),
+        action_type: action,
+        changed_by_user_id: actor.user_id,
+        changed_by_name_snapshot: actor.name_snapshot,
+        ip_address,
+        user_agent,
+        old_values_json: jsonOrNull(oldSan),
+        new_values_json: jsonOrNull(newSan),
+        changed_fields_json: jsonOrNull(changed_fields),
+        summary,
+        notes: notes ? String(notes).slice(0, 2000) : null,
+      })
+      Promise.resolve(emailNotificationService.notifyAudit(req, row)).catch(() => {})
+      return row
+    } catch {
+      return null
+    }
   },
 }

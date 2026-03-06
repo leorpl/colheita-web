@@ -23,6 +23,8 @@ import { talhaoAcordosRouter } from './talhaoAcordos.js'
 import { vendasSacasRouter } from './vendasSacas.js'
 import { custosLancamentosRouter } from './custosLancamentos.js'
 import { apuracaoRouter } from './apuracao.js'
+import { notificationsRouter } from './notifications.js'
+import { comunicacaoRouter } from './comunicacao.js'
 import { requireAuth } from '../../middleware/auth.js'
 
 export const apiRouter = Router()
@@ -50,6 +52,10 @@ apiRouter.use('/acl', aclRouter)
   apiRouter.use('/vendas-sacas', vendasSacasRouter)
   apiRouter.use('/custos-lancamentos', custosLancamentosRouter)
   apiRouter.use('/apuracao', apuracaoRouter)
+
+  // Notificacoes e comunicacao
+  apiRouter.use('/notifications', notificationsRouter)
+  apiRouter.use('/comunicacao', comunicacaoRouter)
 
 apiRouter.use('/safras', safrasRouter)
 apiRouter.use('/talhoes', talhoesRouter)

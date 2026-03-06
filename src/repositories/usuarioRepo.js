@@ -107,6 +107,22 @@ export const usuarioRepo = {
     return this.get(id)
   },
 
+  updateMenusByRole(roleName, menus, { user_id } = {}) {
+    const role = String(roleName || '').trim().toLowerCase()
+    const list = Array.isArray(menus) ? menus.map((x) => String(x)) : []
+    const menus_json = JSON.stringify(list)
+    return db
+      .prepare(
+        `UPDATE usuario
+         SET menus_json=@menus_json,
+             updated_by_user_id=@updated_by_user_id,
+             updated_at=datetime('now')
+         WHERE LOWER(role)=@role
+           AND deleted_at IS NULL`,
+      )
+      .run({ menus_json, role, updated_by_user_id: user_id ?? null })
+  },
+
   remove(id, { user_id } = {}) {
     // soft delete
     return db

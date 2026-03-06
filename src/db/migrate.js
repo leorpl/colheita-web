@@ -619,6 +619,7 @@ export function migrate() {
     'contrato_silo',
     'contrato_silo_faixa',
     'contrato_silo_arquivo',
+    'user_notification_preferences',
     'usuario',
     'role',
     'role_permission',
@@ -708,16 +709,17 @@ export function migrate() {
         db.prepare('SELECT id, name FROM role').all().map((r) => [String(r.name), Number(r.id)]),
       )
 
-       const modules = [
-         'painel',
-         'colheita',
-         'relatorios',
-         'producao',
-         'quitacao-motoristas',
-         'safras',
-         'talhoes',
-         'destinos',
-         'motoristas',
+        const modules = [
+          'painel',
+          'colheita',
+          'relatorios',
+          'producao',
+          'comunicacao',
+          'quitacao-motoristas',
+          'safras',
+          'talhoes',
+          'destinos',
+          'motoristas',
          'fretes',
         'regras-destino',
         'tipos-plantio',
@@ -750,6 +752,9 @@ export function migrate() {
         if (moduleKey === 'producao') {
           if (action === 'view') return has(Permissions.RELATORIOS_READ)
           return has(Permissions.CONFIG_WRITE)
+        }
+        if (moduleKey === 'comunicacao') {
+          return action === 'view' || action === 'update'
         }
         if (moduleKey === 'quitacao-motoristas') {
           if (action === 'view') return has(Permissions.RELATORIOS_READ) || has(Permissions.QUITACOES_WRITE)
@@ -972,6 +977,42 @@ export function migrate() {
       FOREIGN KEY (contrato_silo_id) REFERENCES contrato_silo(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_contrato_silo_arquivo_contrato ON contrato_silo_arquivo(contrato_silo_id);
+  `)
+
+  // Preferencias de notificacao por e-mail
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_notification_preferences (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      module TEXT NOT NULL,
+      notify_create INTEGER NOT NULL DEFAULT 0,
+      notify_update INTEGER NOT NULL DEFAULT 0,
+      notify_delete INTEGER NOT NULL DEFAULT 0,
+      notify_status_change INTEGER NOT NULL DEFAULT 0,
+      notify_security_events INTEGER NOT NULL DEFAULT 0,
+      delivery_mode TEXT NOT NULL DEFAULT 'immediate',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      UNIQUE (user_id, module),
+      FOREIGN KEY (user_id) REFERENCES usuario(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_notif_pref_user ON user_notification_preferences(user_id);
+  `)
+
+  // Dedup de e-mails enviados por evento de auditoria (preparado p/ resumo diario futuramente)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_notification_sent (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      audit_log_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'sent',
+      error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (user_id, audit_log_id),
+      FOREIGN KEY (user_id) REFERENCES usuario(id) ON DELETE CASCADE,
+      FOREIGN KEY (audit_log_id) REFERENCES audit_log(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_notif_audit ON email_notification_sent(audit_log_id);
   `)
   db.exec(
     'CREATE INDEX IF NOT EXISTS idx_umidade_faixa_plantio_regra ON umidade_faixa_plantio(destino_regra_plantio_id)',

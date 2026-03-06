@@ -37,6 +37,11 @@ const EnvSchema = z.object({
   SMTP_USER: z.string().default(''),
   SMTP_PASS: z.string().default(''),
   SMTP_FROM: z.string().default(''),
+
+  // Comunicacao (atalho webmail)
+  WEBMAIL_URL: z.string().default(''),
+  WEBMAIL_LABEL: z.string().default('Webmail da fazenda'),
+  WEBMAIL_HINT: z.string().default(''),
 })
 
 export const env = EnvSchema.parse(process.env)

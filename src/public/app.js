@@ -2324,6 +2324,7 @@ async function renderUsuarios() {
     { key: 'area-colhida', label: 'Área colhida' },
     { key: 'relatorios', label: 'Relatórios' },
     { key: 'producao', label: 'Producao e divisao' },
+    { key: 'comunicacao', label: 'E-mail e notificacoes' },
     { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { key: 'safras', label: 'Safras' },
     { key: 'talhoes', label: 'Talhões' },
@@ -2392,6 +2393,7 @@ async function renderUsuarios() {
     { key: 'area-colhida', label: 'Área colhida' },
     { key: 'relatorios', label: 'Relatórios' },
     { key: 'producao', label: 'Producao e divisao' },
+    { key: 'comunicacao', label: 'E-mail e notificacoes' },
     { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { key: 'safras', label: 'Safras' },
     { key: 'talhoes', label: 'Talhões' },
@@ -2791,6 +2793,7 @@ async function renderPerfis() {
     { key: 'area-colhida', label: 'Área colhida' },
     { key: 'relatorios', label: 'Relatórios' },
     { key: 'producao', label: 'Producao e divisao' },
+    { key: 'comunicacao', label: 'E-mail e notificacoes' },
     { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { key: 'safras', label: 'Safras' },
     { key: 'talhoes', label: 'Talhões' },
@@ -3721,6 +3724,7 @@ async function renderRegrasDestino() {
   let conflictBlock = false
   let currentUsedCount = 0
   const currentId = !isNew && Number.isFinite(editId) && editId > 0 ? editId : null
+  let contratoId = null
 
   if (btnHistRule) {
     btnHistRule.disabled = !currentId
@@ -3734,6 +3738,41 @@ async function renderRegrasDestino() {
   if (btnBackRules) {
     btnBackRules.onclick = () => {
       window.location.hash = '#/regras-destino'
+    }
+  }
+
+  if (btnUploadCt) {
+    btnUploadCt.onclick = async () => {
+      if (!Number.isFinite(contratoId) || contratoId <= 0) {
+        toast('Atenção', 'Salve o contrato para anexar arquivos.')
+        return
+      }
+      if (!canUpdate) {
+        toast('Erro', 'Sem permissao para anexar arquivos.')
+        return
+      }
+
+      const file = inputCtFile?.files?.[0]
+      if (!file) {
+        toast('Atenção', 'Selecione um arquivo.')
+        return
+      }
+      if (file.size > 30 * 1024 * 1024) {
+        toast('Erro', 'Arquivo muito grande (max 30MB).')
+        return
+      }
+
+      try {
+        btnUploadCt.disabled = true
+        await apiUploadBytes(`/api/contratos-silo/${encodeURIComponent(String(contratoId))}/arquivos`, { file })
+        toast('OK', 'Arquivo enviado.')
+        if (inputCtFile) inputCtFile.value = ''
+        await load()
+      } catch (e) {
+        toast('Erro', String(e?.message || e))
+      } finally {
+        btnUploadCt.disabled = false
+      }
     }
   }
 
@@ -3811,7 +3850,6 @@ async function renderRegrasDestino() {
 
   async function load() {
     let regra
-    let contratoId = null
     if (currentId) {
       regra = await api(`/api/destino-regras/plantio/${currentId}`)
       // fixar a identidade ao id carregado (nao alternar registro durante edicao)
@@ -4609,41 +4647,6 @@ async function renderColheitaBase(variant) {
         selMot.value = String(boundMotoristaId)
       }
       selMot.disabled = true
-    }
-  }
-
-  if (btnUploadCt) {
-    btnUploadCt.onclick = async () => {
-      if (!Number.isFinite(contratoId) || contratoId <= 0) {
-        toast('Atenção', 'Salve o contrato para anexar arquivos.')
-        return
-      }
-
-      // ACL efetiva
-      const aclRD = await api('/api/auth/can?module=regras-destino').catch(() => null)
-      if (aclRD && !aclRD.can_update) {
-        toast('Erro', 'Sem permissao para anexar arquivos.')
-        return
-      }
-
-      const file = inputCtFile?.files?.[0]
-      if (!file) {
-        toast('Atenção', 'Selecione um arquivo.')
-        return
-      }
-      if (file.size > 30 * 1024 * 1024) {
-        toast('Erro', 'Arquivo muito grande (max 30MB).')
-        return
-      }
-      try {
-        btnUploadCt.disabled = true
-        await apiUploadBytes(`/api/contratos-silo/${encodeURIComponent(String(contratoId))}/arquivos`, { file })
-        toast('OK', 'Arquivo enviado.')
-        if (inputCtFile) inputCtFile.value = ''
-        load()
-      } finally {
-        btnUploadCt.disabled = false
-      }
     }
   }
 
@@ -8663,6 +8666,170 @@ async function renderProducao() {
   return await tabApuracao()
 }
 
+async function renderComunicacao() {
+  activeNav('comunicacao')
+  const me = window.__me || null
+  const can = await api('/api/auth/can?module=comunicacao').catch(() => null)
+  const canUpdate = can ? Boolean(can.can_update) : true
+
+  const webmail = await api('/api/comunicacao/webmail').catch(() => null)
+  const prefsR = await api('/api/notifications/preferences').catch(() => ({ prefs: [] }))
+  const prefs = Array.isArray(prefsR?.prefs) ? prefsR.prefs : []
+
+  const modules = [
+    { key: '*', label: 'Todos os modulos (geral)' },
+    { key: 'colheita', label: 'Colheita' },
+    { key: 'regras-destino', label: 'Regras do destino' },
+    { key: 'contratos-silo', label: 'Contratos (travas)' },
+    { key: 'safras', label: 'Safras' },
+    { key: 'talhoes', label: 'Talhoes' },
+    { key: 'destinos', label: 'Destinos' },
+    { key: 'motoristas', label: 'Motoristas' },
+    { key: 'fretes', label: 'Fretes' },
+    { key: 'tipos-plantio', label: 'Tipos de plantio' },
+    { key: 'usuarios', label: 'Usuarios' },
+    { key: 'acl', label: 'Permissoes/ACL' },
+    { key: 'auth', label: 'Seguranca (login/reset)' },
+  ]
+
+  const map = new Map(prefs.map((p) => [String(p.module || '').toLowerCase(), p]))
+  function getRow(mod) {
+    return (
+      map.get(String(mod).toLowerCase()) || {
+        module: mod,
+        notify_create: 0,
+        notify_update: 0,
+        notify_delete: 0,
+        notify_status_change: 0,
+        notify_security_events: 0,
+        delivery_mode: 'immediate',
+      }
+    )
+  }
+
+  const rowsHtml = modules
+    .map((m) => {
+      const r = getRow(m.key)
+      const dis = canUpdate ? '' : 'disabled'
+      return `
+        <tr>
+          <td><code class="mono">${escapeHtml(m.key)}</code><div class="hint">${escapeHtml(m.label)}</div></td>
+          <td class="t-center"><input ${dis} type="checkbox" name="${escapeHtml(`c_${m.key}`)}" ${Number(r.notify_create) === 1 ? 'checked' : ''} /></td>
+          <td class="t-center"><input ${dis} type="checkbox" name="${escapeHtml(`u_${m.key}`)}" ${Number(r.notify_update) === 1 ? 'checked' : ''} /></td>
+          <td class="t-center"><input ${dis} type="checkbox" name="${escapeHtml(`d_${m.key}`)}" ${Number(r.notify_delete) === 1 ? 'checked' : ''} /></td>
+          <td class="t-center"><input ${dis} type="checkbox" name="${escapeHtml(`s_${m.key}`)}" ${Number(r.notify_status_change) === 1 ? 'checked' : ''} /></td>
+          <td class="t-center"><input ${dis} type="checkbox" name="${escapeHtml(`sec_${m.key}`)}" ${Number(r.notify_security_events) === 1 ? 'checked' : ''} /></td>
+        </tr>
+      `.trim()
+    })
+    .join('')
+
+  const webmailUrl = webmail?.url || ''
+  const webmailLabel = webmail?.label || 'Webmail da fazenda'
+  const webmailHint = webmail?.hint || ''
+
+  setView(`
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Comunicacao</div>
+          <div class="panel-sub">Atalhos e preferencia de notificacoes por e-mail.</div>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="grid">
+          <div class="span6">
+            <div class="stat">
+              <div class="stat-k">Webmail da fazenda</div>
+              <div class="hint" style="margin-top:6px">Abertura em nova aba (provedor oficial).</div>
+              ${webmailHint ? `<div class="hint" style="margin-top:6px">${escapeHtml(webmailHint)}</div>` : ''}
+              <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+                <a class="btn" href="${escapeHtml(webmailUrl || '#')}" target="_blank" rel="noreferrer" ${webmailUrl ? '' : 'aria-disabled="true"'}>${escapeHtml(webmailLabel)}</a>
+              </div>
+              ${!webmailUrl ? `<div class="hint" style="margin-top:10px">Configure <code class="mono">WEBMAIL_URL</code> no ambiente para habilitar o atalho.</div>` : ''}
+            </div>
+          </div>
+
+          <div class="span6">
+            <div class="stat">
+              <div class="stat-k">Preferencias de notificacao</div>
+              <div class="hint" style="margin-top:6px">Escolha o que voce quer receber por e-mail. (Envio imediato; resumo diario pode ser adicionado depois.)</div>
+              ${!canUpdate ? `<div class="pill" style="margin-top:10px"><span class="dot muted"></span><span>Somente leitura: sem permissao para alterar preferencias.</span></div>` : ''}
+              <form id="notifForm" style="margin-top:10px">
+                <div class="table-wrap rule-wrap">
+                  <table>
+                    <thead><tr><th>Modulo</th><th class="t-center">Criar</th><th class="t-center">Alterar</th><th class="t-center">Excluir</th><th class="t-center">Status</th><th class="t-center">Seguranca</th></tr></thead>
+                    <tbody>${rowsHtml}</tbody>
+                  </table>
+                </div>
+                <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+                  <button class="btn ghost" type="button" id="btnNotifDefaults">Defaults</button>
+                  <button class="btn" type="button" id="btnNotifSave">Salvar preferencias</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  `)
+
+  const form = view.querySelector('#notifForm')
+  const btnSave = view.querySelector('#btnNotifSave')
+  const btnDef = view.querySelector('#btnNotifDefaults')
+
+  function applyDefaults() {
+    const isAdmin = String(me?.role || '').toLowerCase() === 'admin'
+    // Default: security for all; admins get broader
+    for (const m of modules) {
+      const k = m.key
+      const set = (name, v) => {
+        const el = form.querySelector(`input[name="${CSS.escape(name)}"]`)
+        if (el) el.checked = Boolean(v)
+      }
+      const sec = k === 'auth' || k === 'acl' || k === 'usuarios' || k === '*'
+      set(`sec_${k}`, sec)
+      if (isAdmin) {
+        set(`c_${k}`, k === '*' || k === 'colheita' || k === 'regras-destino' || k === 'usuarios')
+        set(`u_${k}`, k === '*' || k === 'colheita' || k === 'regras-destino' || k === 'usuarios')
+        set(`d_${k}`, k === '*' || k === 'colheita' || k === 'usuarios')
+        set(`s_${k}`, k === '*' || k === 'usuarios')
+      }
+    }
+  }
+
+  if (btnDef) {
+    btnDef.disabled = !canUpdate
+    btnDef.onclick = () => {
+      if (!canUpdate) return
+      applyDefaults()
+      toast('OK', 'Defaults aplicados (nao esquece de salvar).')
+    }
+  }
+
+  if (btnSave) {
+    btnSave.disabled = !canUpdate
+    btnSave.onclick = async () => {
+      if (!canUpdate) return
+      const out = modules.map((m) => {
+        const k = m.key
+        const get = (name) => Boolean(form.querySelector(`input[name="${CSS.escape(name)}"]`)?.checked)
+        return {
+          module: k,
+          notify_create: get(`c_${k}`),
+          notify_update: get(`u_${k}`),
+          notify_delete: get(`d_${k}`),
+          notify_status_change: get(`s_${k}`),
+          notify_security_events: get(`sec_${k}`),
+          delivery_mode: 'immediate',
+        }
+      })
+      await api('/api/notifications/preferences', { method: 'PUT', body: { prefs: out } })
+      toast('OK', 'Preferencias salvas.')
+    }
+  }
+}
+
 const routes = {
   painel: renderPainel,
   fazenda: renderFazenda,
@@ -8680,6 +8847,7 @@ const routes = {
   viagens: renderColheita,
   relatorios: renderRelatorios,
   producao: renderProducao,
+  comunicacao: renderComunicacao,
   usuarios: renderUsuarios,
   perfis: renderPerfis,
   auditoria: renderAuditoria,
@@ -9198,7 +9366,27 @@ async function applyMenuAccess() {
   }
 }
 
+// Keep menu visibility in sync with server-side session/user changes.
+// (e.g. when an admin updates ACL/role menus while a user is logged in)
+const MENU_REFRESH_MS = 20000
+let _lastMenuAccessAt = 0
+let _menuRefreshPromise = null
+
+async function refreshMenuAccessIfNeeded({ force = false } = {}) {
+  const now = Date.now()
+  if (!force && _lastMenuAccessAt && now - _lastMenuAccessAt < MENU_REFRESH_MS) return
+  if (_menuRefreshPromise) return _menuRefreshPromise
+  _menuRefreshPromise = Promise.resolve()
+    .then(() => applyMenuAccess())
+    .finally(() => {
+      _lastMenuAccessAt = Date.now()
+      _menuRefreshPromise = null
+    })
+  return _menuRefreshPromise
+}
+
 async function navigate() {
+  await refreshMenuAccessIfNeeded().catch(() => {})
   const hash = window.location.hash || '#/fazenda'
   const route = hash.replace('#/', '').split('?')[0] || 'fazenda'
   const allowed = window.__allowedRoutes
@@ -9214,7 +9402,7 @@ async function navigate() {
   }
 }
 
-btnRefresh.onclick = () => navigate()
+btnRefresh.onclick = () => refreshMenuAccessIfNeeded({ force: true }).finally(() => navigate())
 
 function setNavCollapsed(collapsed) {
   document.body.classList.toggle('nav-collapsed', collapsed)
@@ -9254,3 +9442,9 @@ applyMenuAccess().finally(() => {
   }
   navigate()
 })
+
+// Passive refresh so the menu updates even without navigation.
+setInterval(() => {
+  if (!window.__me) return
+  refreshMenuAccessIfNeeded().catch(() => {})
+}, MENU_REFRESH_MS)
