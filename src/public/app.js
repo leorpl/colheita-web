@@ -3652,13 +3652,14 @@ async function renderColheitaBase(variant) {
           : Number(v.pct_rateio_100)
 
       const toggleBtn = showToggle
-        ? `<button class="btn small ghost" data-act="toggle" data-id="${v.id}">${toggled ? '▼' : '▶'}</button>`
+        ? `<button class="icon-btn" data-act="toggle" data-id="${v.id}" title="${toggled ? 'Recolher rateio' : 'Expandir rateio'}" aria-label="${toggled ? 'Recolher rateio' : 'Expandir rateio'}">${toggled ? '▼' : '▶'}</button>`
         : ''
 
       const actionCell = isChild
-        ? `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" data-rateio-index="${v.rateio_index}" title="Editar" aria-label="Editar">${iconSvg('edit')}</button></td>`
-        : `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button>
+        ? `<td class="actions"><button class="icon-btn" data-act="edit" data-id="${v.id}" data-rateio-index="${v.rateio_index}" title="Editar" aria-label="Editar">${iconSvg('edit')}</button>${toggleBtn}</td>`
+        : `<td class="actions"><button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button>
             <button class="icon-btn danger" data-act="del" data-id="${v.id}" title="Excluir" aria-label="Excluir">${iconSvg('trash')}</button>
+            ${toggleBtn}
           </td>`
 
       const childAttrs = isChild ? ` data-parent="${v.id}" style="${expanded.has(v.id) ? '' : 'display:none'}"` : ''
