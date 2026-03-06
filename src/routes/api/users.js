@@ -7,6 +7,7 @@ import { requireCan } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { notFound } from '../../errors.js'
 import { S, UsersSchemas } from '../../validation/apiSchemas.js'
+import { auditService } from '../../services/auditService.js'
 
 export const usersRouter = Router()
 
@@ -28,7 +29,7 @@ usersRouter.post('/', requireCan(Modules.USUARIOS, Actions.CREATE), validateBody
     motorista_id: req.body.motorista_id || null,
     password_hash: hash,
     password_salt: salt,
-  })
+  }, { user_id: req.user?.id })
 
   if (req.body.menus && Array.isArray(req.body.menus)) {
     usuarioRepo.update(row.id, {
@@ -38,8 +39,10 @@ usersRouter.post('/', requireCan(Modules.USUARIOS, Actions.CREATE), validateBody
       motorista_id: row.motorista_id,
       active: row.active,
       menus_json: JSON.stringify(req.body.menus),
-    })
+    }, { user_id: req.user?.id })
   }
+
+  auditService.log(req, { module_name: 'usuarios', record_id: row.id, action_type: 'create', new_values: row })
   res.status(201).json(row)
 })
 
@@ -57,7 +60,8 @@ usersRouter.put('/:id', requireCan(Modules.USUARIOS, Actions.UPDATE), validatePa
     motorista_id: req.body.motorista_id || null,
     active: req.body.active,
     menus_json: req.body.menus ? JSON.stringify(req.body.menus) : null,
-  })
+  }, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'usuarios', record_id: id, action_type: 'update', old_values: exists, new_values: row })
   res.json(row)
 })
 
@@ -74,7 +78,8 @@ usersRouter.put(
   const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')
   const { salt, hash } = hashPassword(req.body.password)
-  const row = usuarioRepo.setPassword(id, { password_hash: hash, password_salt: salt })
+  const row = usuarioRepo.setPassword(id, { password_hash: hash, password_salt: salt }, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'usuarios', record_id: id, action_type: 'password_reset', notes: 'senha alterada via admin' })
   res.json(row)
   },
 )
@@ -84,6 +89,7 @@ usersRouter.delete('/:id', requireCan(Modules.USUARIOS, Actions.DELETE), validat
   const id = req.params.id
   const exists = usuarioRepo.get(id)
   if (!exists) throw notFound('Usuario nao encontrado')
-  usuarioRepo.remove(id)
+  usuarioRepo.remove(id, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'usuarios', record_id: id, action_type: 'delete', old_values: exists })
   res.status(204).send()
 })

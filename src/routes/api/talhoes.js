@@ -5,6 +5,7 @@ import { validateBody, validateParams } from '../../middleware/validate.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Permissions } from '../../auth/permissions.js'
 import { S, TalhaoSchemas } from '../../validation/apiSchemas.js'
+import { auditService } from '../../services/auditService.js'
 
 export const talhoesRouter = Router()
 
@@ -19,7 +20,8 @@ talhoesRouter.post(
   requirePerm(Permissions.CADASTROS_WRITE),
   validateBody(TalhaoBody),
   (req, res) => {
-  const row = talhaoRepo.create(req.body)
+  const row = talhaoRepo.create(req.body, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'talhoes', record_id: row.id, action_type: 'create', new_values: row })
   res.status(201).json(row)
   },
 )
@@ -44,7 +46,9 @@ talhoesRouter.put(
   const id = req.params.id
   const exists = talhaoRepo.get(id)
   if (!exists) throw notFound('Talhao nao encontrado')
-  res.json(talhaoRepo.update(id, req.body))
+  const row = talhaoRepo.update(id, req.body, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'talhoes', record_id: id, action_type: 'update', old_values: exists, new_values: row })
+  res.json(row)
   },
 )
 
@@ -56,6 +60,7 @@ talhoesRouter.delete(
   const id = req.params.id
   const exists = talhaoRepo.get(id)
   if (!exists) throw notFound('Talhao nao encontrado')
+  auditService.log(req, { module_name: 'talhoes', record_id: id, action_type: 'delete', old_values: exists })
   talhaoRepo.remove(id)
   res.status(204).send()
   },

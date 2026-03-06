@@ -4,7 +4,7 @@
   "description": "NazcaTraker: controle interno de colheita (viagens, descontos, sacas, fretes e relatorios).",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test",
     "start": "node src/server.js",
     "dev": "nodemon --watch src --ext js,json --signal SIGINT src/server.js",
     "lint": "eslint .",

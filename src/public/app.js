@@ -1963,6 +1963,7 @@ async function renderUsuarios() {
     { key: 'tipos-plantio', label: 'Tipos de plantio' },
     { key: 'fazenda', label: 'Fazenda Nazca' },
     { key: 'usuarios', label: 'Usuários' },
+    { key: 'auditoria', label: 'Auditoria' },
   ]
 
   function parseMenusJson(s) {
@@ -2065,6 +2066,9 @@ async function renderUsuarios() {
     })
 
     setupPwdToggles(dlgBody)
+  }
+  if (name === 'view') {
+    return `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 12a5 5 0 110-10 5 5 0 010 10z"/></svg>`
   }
 
   view.querySelectorAll('[data-act]').forEach((btn) => {
@@ -3970,6 +3974,13 @@ async function renderColheitaBase(variant) {
             ? `<div id="preview"><div class="hint">Preencha os campos para ver o calculo (preview).</div></div>`
             : ''
         }
+        ${
+          isEdit
+            ? `<div style="display:flex;justify-content:flex-end;margin:0 0 10px">
+                 <button class="btn ghost small" type="button" id="btnHist">Histórico</button>
+               </div>`
+            : ''
+        }
         <div id="vForm" class="colheita-form">
            <div class="form-card">
              <div class="card-head"><div class="card-title">Identificacao da carga</div></div>
@@ -4191,6 +4202,43 @@ async function renderColheitaBase(variant) {
         refreshList()
       },
     })
+
+    const btnHist = dlgBody.querySelector('#btnHist')
+    if (btnHist && isEdit && viagem?.id) {
+      btnHist.onclick = async () => {
+        const rows = await api(
+          `/api/audit-logs?module_name=colheita&record_id=${encodeURIComponent(String(viagem.id))}&limit=200`,
+        ).catch(() => [])
+
+        openDialog({
+          title: `Histórico (colheita #${viagem.id})`,
+          submitLabel: 'Fechar',
+          size: 'lg',
+          bodyHtml: `
+            <div class="table-wrap">
+              <table class="grid-table">
+                <thead><tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Resumo</th></tr></thead>
+                <tbody>
+                  ${(Array.isArray(rows) ? rows : [])
+                    .map((r) => {
+                      const who = r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'
+                      return `<tr>
+                        <td>${escapeHtml(String(r.created_at || ''))}</td>
+                        <td>${escapeHtml(String(who || '-'))}</td>
+                        <td><code class="mono">${escapeHtml(String(r.action_type || ''))}</code></td>
+                        <td>${escapeHtml(String(r.summary || ''))}</td>
+                      </tr>`
+                    })
+                    .join('') || '<tr><td colspan="4">Sem eventos.</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+            <div class="hint" style="margin-top:10px">Para detalhes completos, use a tela <span class="kbd">Auditoria</span>.</div>
+          `,
+          onSubmit: async () => {},
+        })
+      }
+    }
 
     const inputFicha = dlgForm.querySelector('input[name="ficha"]')
     const selPlantio = dlgForm.querySelector('select[name="tipo_plantio"]')
@@ -6435,6 +6483,252 @@ const routes = {
   viagens: renderColheita,
   relatorios: renderRelatorios,
   usuarios: renderUsuarios,
+  auditoria: renderAuditoria,
+}
+
+async function renderAuditoria() {
+  activeNav('auditoria')
+  await loadLookups()
+
+  const users = await api('/api/users').catch(() => [])
+  const userOptions = [{ value: '', label: 'Todos' }].concat(
+    (users || []).map((u) => ({
+      value: u.id,
+      label: `${u.nome || u.username} (#${u.id})`,
+    })),
+  )
+
+  const moduleOptions = [
+    { value: '', label: 'Todos' },
+    { value: 'colheita', label: 'Colheita' },
+    { value: 'safras', label: 'Safras' },
+    { value: 'talhoes', label: 'Talhões' },
+    { value: 'destinos', label: 'Destinos' },
+    { value: 'motoristas', label: 'Motoristas' },
+    { value: 'fretes', label: 'Fretes' },
+    { value: 'usuarios', label: 'Usuários' },
+    { value: 'auditoria', label: 'Auditoria' },
+    { value: 'auth', label: 'Auth' },
+  ]
+
+  const actionOptions = [
+    { value: '', label: 'Todas' },
+    { value: 'create', label: 'Create' },
+    { value: 'update', label: 'Update' },
+    { value: 'delete', label: 'Delete' },
+    { value: 'login', label: 'Login' },
+    { value: 'logout', label: 'Logout' },
+    { value: 'password_reset', label: 'Password reset' },
+    { value: 'permission_change', label: 'Permissões' },
+    { value: 'status_change', label: 'Status' },
+  ]
+
+  const now = new Date()
+  const ymd = (d) => {
+    const dt = new Date(d)
+    const yyyy = dt.getFullYear()
+    const mm = String(dt.getMonth() + 1).padStart(2, '0')
+    const dd = String(dt.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
+  const today = ymd(now)
+  const last7 = ymd(new Date(now.getTime() - 6 * 86400 * 1000))
+  const last30 = ymd(new Date(now.getTime() - 29 * 86400 * 1000))
+
+  setView(`
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Auditoria</div>
+          <div class="panel-sub">Histórico de alterações e eventos de acesso.</div>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="toolbar">
+          <div class="filters">
+            <div class="field col3">
+              <div class="label">De</div>
+              <input type="date" id="aDe" value="${escapeHtml(last7)}" />
+            </div>
+            <div class="field col3">
+              <div class="label">Até</div>
+              <input type="date" id="aAte" value="${escapeHtml(today)}" />
+            </div>
+            <div class="field col3">
+              <div class="label">Usuário</div>
+              <select id="aUser">${userOptions
+                .map((o) => `<option value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</option>`)
+                .join('')}</select>
+            </div>
+            <div class="field col3">
+              <div class="label">Módulo</div>
+              <select id="aMod">${moduleOptions
+                .map((o) => `<option value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</option>`)
+                .join('')}</select>
+            </div>
+            <div class="field col3">
+              <div class="label">Ação</div>
+              <select id="aAct">${actionOptions
+                .map((o) => `<option value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</option>`)
+                .join('')}</select>
+            </div>
+            <div class="field col4">
+              <div class="label">Busca</div>
+              <input type="text" id="aQ" placeholder="texto livre" />
+            </div>
+            <div class="field col2">
+              <div class="label">ID</div>
+              <input type="text" id="aRid" inputmode="numeric" pattern="[0-9]*" placeholder="#" />
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn ghost" id="btnToday">Hoje</button>
+            <button class="btn ghost" id="btn7">7d</button>
+            <button class="btn ghost" id="btn30">30d</button>
+            <button class="btn" id="btnFetch">Filtrar</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="grid-table">
+            <thead>
+              <tr>
+                <th class="actions">Ações</th>
+                <th>Data/Hora</th>
+                <th>Usuário</th>
+                <th>Módulo</th>
+                <th>Registro</th>
+                <th>Ação</th>
+                <th>Resumo</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody id="aBody"><tr><td colspan="8">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="hint" id="aCount" style="margin-top:10px"></div>
+      </div>
+    </section>
+  `)
+
+  const elDe = view.querySelector('#aDe')
+  const elAte = view.querySelector('#aAte')
+  const elUser = view.querySelector('#aUser')
+  const elMod = view.querySelector('#aMod')
+  const elAct = view.querySelector('#aAct')
+  const elQ = view.querySelector('#aQ')
+  const elRid = view.querySelector('#aRid')
+  const body = view.querySelector('#aBody')
+  const count = view.querySelector('#aCount')
+
+  function setPeriod(from, to) {
+    if (elDe) elDe.value = from
+    if (elAte) elAte.value = to
+  }
+
+  const btnToday = view.querySelector('#btnToday')
+  if (btnToday) btnToday.onclick = () => setPeriod(today, today)
+  const btn7 = view.querySelector('#btn7')
+  if (btn7) btn7.onclick = () => setPeriod(last7, today)
+  const btn30 = view.querySelector('#btn30')
+  if (btn30) btn30.onclick = () => setPeriod(last30, today)
+
+  async function fetchLogs() {
+    if (!body) return
+    body.innerHTML = '<tr><td colspan="8">Carregando...</td></tr>'
+
+    const qp = new URLSearchParams({ limit: '200' })
+    if (elDe?.value) qp.set('de', `${elDe.value} 00:00:00`)
+    if (elAte?.value) qp.set('ate', `${elAte.value} 23:59:59`)
+    if (elUser?.value) qp.set('user_id', String(elUser.value))
+    if (elMod?.value) qp.set('module_name', String(elMod.value))
+    if (elAct?.value) qp.set('action_type', String(elAct.value))
+    if (elQ?.value) qp.set('q', String(elQ.value).trim())
+    if (elRid?.value) qp.set('record_id', String(elRid.value).trim())
+
+    const rows = await api(`/api/audit-logs?${qp.toString()}`)
+    if (count) count.innerHTML = `Registros: <b>${escapeHtml(String((rows || []).length))}</b>`
+
+    if (!Array.isArray(rows) || !rows.length) {
+      body.innerHTML = '<tr><td colspan="8">Nenhum evento.</td></tr>'
+      return
+    }
+
+    body.innerHTML = rows
+      .map((r) => {
+        const who = r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'
+        return `<tr>
+          <td class="actions">
+            <button class="act-btn" data-act="adetail" data-id="${escapeHtml(String(r.id))}" title="Detalhes" aria-label="Detalhes">${iconSvg('view')}<span>Ver</span></button>
+          </td>
+          <td>${escapeHtml(String(r.created_at || ''))}</td>
+          <td>${escapeHtml(String(who || '-'))}</td>
+          <td><code class="mono">${escapeHtml(String(r.module_name || ''))}</code></td>
+          <td>${escapeHtml(r.record_id == null ? '-' : String(r.record_id))}</td>
+          <td><code class="mono">${escapeHtml(String(r.action_type || ''))}</code></td>
+          <td>${escapeHtml(String(r.summary || ''))}</td>
+          <td>${escapeHtml(String(r.ip_address || ''))}</td>
+        </tr>`
+      })
+      .join('')
+
+    body.querySelectorAll('button[data-act="adetail"]').forEach((b) => {
+      b.onclick = async () => {
+        const id = Number(b.dataset.id)
+        const r = await api(`/api/audit-logs/${id}`)
+        const fields = (() => {
+          try {
+            const arr = r.changed_fields_json ? JSON.parse(r.changed_fields_json) : []
+            return Array.isArray(arr) ? arr : []
+          } catch {
+            return []
+          }
+        })()
+        const oldV = r.old_values_json ? String(r.old_values_json) : ''
+        const newV = r.new_values_json ? String(r.new_values_json) : ''
+        openDialog({
+          title: `Auditoria #${id}`,
+          submitLabel: 'Fechar',
+          size: 'lg',
+          bodyHtml: `
+            <div class="hint">${escapeHtml(String(r.created_at || ''))} — <b>${escapeHtml(String(r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'))}</b></div>
+            <div class="hint">Módulo: <code class="mono">${escapeHtml(String(r.module_name || ''))}</code> | Registro: <b>${escapeHtml(r.record_id == null ? '-' : String(r.record_id))}</b> | Ação: <code class="mono">${escapeHtml(String(r.action_type || ''))}</code></div>
+            <div class="hint">IP: ${escapeHtml(String(r.ip_address || ''))}</div>
+            <div class="hint" style="margin-top:10px"><b>Campos</b>: ${escapeHtml(fields.join(', ') || '-')}</div>
+            <div class="table-wrap" style="margin-top:10px">
+              <table class="grid-table">
+                <thead><tr><th>Antes</th><th>Depois</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><pre class="mono" style="white-space:pre-wrap;margin:0">${escapeHtml(oldV)}</pre></td>
+                    <td><pre class="mono" style="white-space:pre-wrap;margin:0">${escapeHtml(newV)}</pre></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="hint" style="margin-top:10px">User-Agent: ${escapeHtml(String(r.user_agent || ''))}</div>
+          `,
+          onSubmit: async () => {},
+        })
+      }
+    })
+  }
+
+  const btnFetch = view.querySelector('#btnFetch')
+  if (btnFetch) btnFetch.onclick = fetchLogs
+
+  // Enter in search triggers
+  ;[elQ, elRid].forEach((el) => {
+    if (!el) return
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        fetchLogs()
+      }
+    })
+  })
+
+  fetchLogs()
 }
 
 async function applyMenuAccess() {

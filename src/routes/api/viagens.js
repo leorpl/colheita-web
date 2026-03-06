@@ -6,6 +6,7 @@ import { viagemService } from '../../services/viagemService.js'
 import { requireCan } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { S, ViagemSchemas } from '../../validation/apiSchemas.js'
+import { auditService } from '../../services/auditService.js'
 
 export const viagensRouter = Router()
 
@@ -79,7 +80,8 @@ viagensRouter.post(
   requireCan(Modules.COLHEITA, Actions.CREATE),
   validateBody(ViagemBody),
   (req, res) => {
-  const row = viagemService.create(req.body)
+  const row = viagemService.create(req.body, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'colheita', record_id: row?.id ?? null, action_type: 'create', new_values: row })
   res.status(201).json(row)
   },
 )
@@ -116,7 +118,9 @@ viagensRouter.put(
   const id = req.params.id
   const exists = viagemRepo.get(id)
   if (!exists) throw notFound('Viagem nao encontrada')
-  res.json(viagemService.update(id, req.body))
+  const row = viagemService.update(id, req.body, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'colheita', record_id: id, action_type: 'update', old_values: exists, new_values: row })
+  res.json(row)
   },
 )
 
@@ -128,6 +132,7 @@ viagensRouter.delete(
   const id = req.params.id
   const exists = viagemRepo.get(id)
   if (!exists) throw notFound('Viagem nao encontrada')
+  auditService.log(req, { module_name: 'colheita', record_id: id, action_type: 'delete', old_values: exists })
   viagemRepo.remove(id)
   res.status(204).send()
   },

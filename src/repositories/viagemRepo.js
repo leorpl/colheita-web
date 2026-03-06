@@ -239,7 +239,7 @@ export const viagemRepo = {
       .get(params)
   },
 
-  create(data) {
+  create(data, { user_id } = {}) {
     const info = db
       .prepare(
         `INSERT INTO viagem (
@@ -253,14 +253,14 @@ export const viagemRepo = {
           impureza_kg, ardidos_kg, queimados_kg, avariados_kg, esverdiados_kg, quebrados_kg,
           peso_limpo_seco_kg, sacas,
            sacas_frete, frete_tabela, sub_total_frete,
-           secagem_custo_por_saca, sub_total_secagem,
+            secagem_custo_por_saca, sub_total_secagem,
 
            valor_compra_por_saca_aplicado, valor_compra_total, valor_compra_detalhe_json,
            valor_compra_entrega_antes, valor_compra_entrega_depois,
            custo_silo_por_saca, sub_total_custo_silo, abatimento_total_silo, abatimento_por_saca_silo,
-           custo_terceiros_por_saca, sub_total_custo_terceiros, abatimento_total_terceiros, abatimento_por_saca_terceiros,
-           updated_at
-         ) VALUES (
+            custo_terceiros_por_saca, sub_total_custo_terceiros, abatimento_total_terceiros, abatimento_por_saca_terceiros,
+            created_by_user_id, updated_by_user_id, updated_at
+          ) VALUES (
           @ficha, @safra_id, @tipo_plantio, @talhao_id, @local, @destino_id, @motorista_id, @placa,
           @data_saida, @hora_saida, @data_entrega, @hora_entrega,
           @carga_total_kg, @tara_kg,
@@ -275,15 +275,15 @@ export const viagemRepo = {
            @valor_compra_por_saca_aplicado, @valor_compra_total, @valor_compra_detalhe_json,
            @valor_compra_entrega_antes, @valor_compra_entrega_depois,
            @custo_silo_por_saca, @sub_total_custo_silo, @abatimento_total_silo, @abatimento_por_saca_silo,
-           @custo_terceiros_por_saca, @sub_total_custo_terceiros, @abatimento_total_terceiros, @abatimento_por_saca_terceiros,
-           datetime('now')
-         )`,
+            @custo_terceiros_por_saca, @sub_total_custo_terceiros, @abatimento_total_terceiros, @abatimento_por_saca_terceiros,
+            @created_by_user_id, @updated_by_user_id, datetime('now')
+          )`,
       )
-      .run(data)
+      .run({ ...data, created_by_user_id: user_id ?? null, updated_by_user_id: user_id ?? null })
     return this.get(info.lastInsertRowid)
   },
 
-  update(id, data) {
+  update(id, data, { user_id } = {}) {
     db.prepare(
       `UPDATE viagem SET
           ficha=@ficha, safra_id=@safra_id, tipo_plantio=@tipo_plantio, talhao_id=@talhao_id, local=@local,
@@ -310,9 +310,10 @@ export const viagemRepo = {
           valor_compra_entrega_depois=@valor_compra_entrega_depois,
           custo_silo_por_saca=@custo_silo_por_saca, sub_total_custo_silo=@sub_total_custo_silo, abatimento_total_silo=@abatimento_total_silo, abatimento_por_saca_silo=@abatimento_por_saca_silo,
           custo_terceiros_por_saca=@custo_terceiros_por_saca, sub_total_custo_terceiros=@sub_total_custo_terceiros, abatimento_total_terceiros=@abatimento_total_terceiros, abatimento_por_saca_terceiros=@abatimento_por_saca_terceiros,
+          updated_by_user_id=@updated_by_user_id,
           updated_at=datetime('now')
        WHERE id=@id`,
-    ).run({ ...data, id })
+    ).run({ ...data, id, updated_by_user_id: user_id ?? null })
 
     return this.get(id)
   },

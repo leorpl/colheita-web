@@ -976,7 +976,7 @@ export const viagemService = {
     }
   },
 
-  create(input) {
+  create(input, { user_id } = {}) {
     const payload = this.buildPayload(input)
 
     if (!payload.data_saida) throw unprocessable('data_saida obrigatoria')
@@ -1003,7 +1003,7 @@ export const viagemService = {
     }
     try {
       const tx = db.transaction(() => {
-        const row = viagemRepo.create(payload)
+        const row = viagemRepo.create(payload, { user_id })
         viagemTalhaoRepo.replaceForViagem({ viagem_id: row.id, items: rateioItems })
         return viagemRepo.get(row.id)
       })
@@ -1024,7 +1024,7 @@ export const viagemService = {
     }
   },
 
-  update(id, input) {
+  update(id, input, { user_id } = {}) {
     const payload = this.buildPayload(input, { current_id: id, exclude_id: id })
 
     if (!payload.data_saida) throw unprocessable('data_saida obrigatoria')
@@ -1055,7 +1055,7 @@ export const viagemService = {
 
     try {
       const tx = db.transaction(() => {
-        viagemRepo.update(id, payload)
+        viagemRepo.update(id, payload, { user_id })
         viagemTalhaoRepo.replaceForViagem({ viagem_id: id, items: rateioItems })
         return viagemRepo.get(id)
       })

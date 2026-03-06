@@ -23,6 +23,7 @@ export const Modules = {
   AREA_COLHIDA: 'area-colhida',
   FAZENDA: 'fazenda',
   USUARIOS: 'usuarios',
+  AUDITORIA: 'auditoria',
 }
 
 function normKey(x) {
@@ -52,6 +53,11 @@ function legacyRoleAllow(roleName, moduleKey, action) {
   }
   if (moduleKey === Modules.USUARIOS) {
     return has(Permissions.USERS_MANAGE)
+  }
+
+  if (moduleKey === Modules.AUDITORIA) {
+    // Inicialmente: somente admin (via fallback admin acima).
+    return false
   }
   if (isCad) {
     if (action === Actions.VIEW) return has(Permissions.CADASTROS_READ)

@@ -5,6 +5,7 @@ import { notFound } from '../../errors.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Permissions } from '../../auth/permissions.js'
 import { S, SafraSchemas } from '../../validation/apiSchemas.js'
+import { auditService } from '../../services/auditService.js'
 
 export const safrasRouter = Router()
 
@@ -19,7 +20,8 @@ safrasRouter.post(
   requirePerm(Permissions.CONFIG_WRITE),
   validateBody(SafraBody),
   (req, res) => {
-  const row = safraRepo.create(req.body)
+  const row = safraRepo.create(req.body, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'safras', record_id: row.id, action_type: 'create', new_values: row })
   res.status(201).json(row)
   },
 )
@@ -44,7 +46,9 @@ safrasRouter.put(
   const id = req.params.id
   const exists = safraRepo.get(id)
   if (!exists) throw notFound('Safra nao encontrada')
-  res.json(safraRepo.update(id, req.body))
+  const row = safraRepo.update(id, req.body, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'safras', record_id: id, action_type: 'update', old_values: exists, new_values: row })
+  res.json(row)
   },
 )
 
@@ -62,7 +66,9 @@ safrasRouter.put(
   const exists = safraRepo.get(id)
   if (!exists) throw notFound('Safra nao encontrada')
   if (!req.body.painel) return res.json(exists)
-  res.json(safraRepo.setPainel(id))
+  const row = safraRepo.setPainel(id)
+  auditService.log(req, { module_name: 'safras', record_id: id, action_type: 'status_change', old_values: exists, new_values: row, notes: 'definiu painel=1' })
+  res.json(row)
   },
 )
 
@@ -74,6 +80,7 @@ safrasRouter.delete(
   const id = req.params.id
   const exists = safraRepo.get(id)
   if (!exists) throw notFound('Safra nao encontrada')
+  auditService.log(req, { module_name: 'safras', record_id: id, action_type: 'delete', old_values: exists })
   safraRepo.remove(id)
   res.status(204).send()
   },

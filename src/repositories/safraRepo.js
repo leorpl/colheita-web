@@ -15,20 +15,25 @@ export const safraRepo = {
   get(id) {
     return db.prepare('SELECT * FROM safra WHERE id = ?').get(id)
   },
-  create(data) {
+  create(data, { user_id } = {}) {
     const stmt = db.prepare(
-      `INSERT INTO safra (safra, plantio, data_referencia, area_ha, updated_at)
-       VALUES (@safra, @plantio, @data_referencia, @area_ha, datetime('now'))`,
+      `INSERT INTO safra (safra, plantio, data_referencia, area_ha, created_by_user_id, updated_by_user_id, updated_at)
+       VALUES (@safra, @plantio, @data_referencia, @area_ha, @created_by_user_id, @updated_by_user_id, datetime('now'))`,
     )
-    const info = stmt.run(data)
+    const info = stmt.run({
+      ...data,
+      created_by_user_id: user_id ?? null,
+      updated_by_user_id: user_id ?? null,
+    })
     return this.get(info.lastInsertRowid)
   },
-  update(id, data) {
+  update(id, data, { user_id } = {}) {
     db.prepare(
       `UPDATE safra
-       SET safra=@safra, plantio=@plantio, data_referencia=@data_referencia, area_ha=@area_ha, updated_at=datetime('now')
+       SET safra=@safra, plantio=@plantio, data_referencia=@data_referencia, area_ha=@area_ha,
+           updated_by_user_id=@updated_by_user_id, updated_at=datetime('now')
        WHERE id=@id`,
-    ).run({ ...data, id })
+    ).run({ ...data, id, updated_by_user_id: user_id ?? null })
     return this.get(id)
   },
   remove(id) {

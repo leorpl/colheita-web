@@ -14,6 +14,7 @@ import { publicRouter } from './public.js'
 import { authRouter } from './auth.js'
 import { usersRouter } from './users.js'
 import { contratosSiloRouter } from './contratosSilo.js'
+import { auditLogsRouter } from './auditLogs.js'
 import { requireAuth } from '../../middleware/auth.js'
 
 export const apiRouter = Router()
@@ -31,6 +32,7 @@ apiRouter.use(requireAuth)
 
 // Admin/management
 apiRouter.use('/users', usersRouter)
+apiRouter.use('/audit-logs', auditLogsRouter)
 
 apiRouter.use('/safras', safrasRouter)
 apiRouter.use('/talhoes', talhoesRouter)

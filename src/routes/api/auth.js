@@ -12,6 +12,7 @@ import { AuthSchemas } from '../../validation/apiSchemas.js'
 import crypto from 'node:crypto'
 import { passwordResetRepo } from '../../repositories/passwordResetRepo.js'
 import { sendPasswordResetEmail } from '../../services/mailer.js'
+import { auditService } from '../../services/auditService.js'
 
 export const authRouter = Router()
 
@@ -26,10 +27,16 @@ authRouter.post('/login', validateBody(LoginBody), (req, res) => {
 
   const { username, password } = req.body
   const u = usuarioRepo.getAuthByUsername(username)
-  if (!u || Number(u.active) !== 1) throw unauthorized('Usuario/senha invalidos')
+  if (!u || Number(u.active) !== 1) {
+    auditService.log(req, { module_name: 'auth', record_id: null, action_type: 'login_failed', notes: `username=${username}` })
+    throw unauthorized('Usuario/senha invalidos')
+  }
 
   const ok = verifyPassword(password, u.password_salt, u.password_hash)
-  if (!ok) throw unauthorized('Usuario/senha invalidos')
+  if (!ok) {
+    auditService.log(req, { module_name: 'auth', record_id: u.id, action_type: 'login_failed', notes: `username=${username}` })
+    throw unauthorized('Usuario/senha invalidos')
+  }
 
   const token = newToken()
   const token_hash = sha256Hex(token)
@@ -38,6 +45,16 @@ authRouter.post('/login', validateBody(LoginBody), (req, res) => {
   const expires = new Date(Date.now() + ttlDays * 86400 * 1000)
   const expires_at = expires.toISOString().slice(0, 19).replace('T', ' ')
   usuarioSessaoRepo.create({ usuario_id: u.id, token_hash, expires_at })
+
+  // Attach req.user for audit context.
+  req.user = {
+    id: u.id,
+    username: u.username,
+    nome: u.nome,
+    role: u.role,
+    motorista_id: u.motorista_id,
+  }
+  auditService.log(req, { module_name: 'auth', record_id: u.id, action_type: 'login', notes: 'login ok' })
 
   res.setHeader(
     'Set-Cookie',
@@ -81,6 +98,9 @@ authRouter.post('/forgot', validateBody(ForgotBody), async (req, res) => {
       const base = String(env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '') || `${req.protocol}://${req.get('host')}`
       const resetUrl = `${base}/reset?token=${encodeURIComponent(token)}`
       await sendPasswordResetEmail({ to: email, resetUrl })
+
+      req.user = { id: u.id, username: u.username, nome: u.nome, role: u.role, motorista_id: u.motorista_id }
+      auditService.log(req, { module_name: 'auth', record_id: u.id, action_type: 'password_reset', notes: 'solicitou redefinicao (forgot)' })
     }
   } catch {
     // Swallow errors; keep generic response.
@@ -106,9 +126,12 @@ authRouter.post('/reset', validateBody(ResetBody), (req, res) => {
   }
 
   const { salt, hash } = hashPassword(password)
-  usuarioRepo.setPassword(row.user_id, { password_hash: hash, password_salt: salt })
+  usuarioRepo.setPassword(row.user_id, { password_hash: hash, password_salt: salt }, { user_id: row.user_id })
   passwordResetRepo.markUsed(row.id)
   usuarioSessaoRepo.deleteByUserId(row.user_id)
+
+  req.user = { id: u.id, username: u.username, nome: u.nome, role: u.role, motorista_id: u.motorista_id }
+  auditService.log(req, { module_name: 'auth', record_id: u.id, action_type: 'password_reset', notes: 'redefiniu senha (token)' })
 
   res.json({ ok: true })
 })
@@ -119,6 +142,10 @@ authRouter.post('/logout', (req, res) => {
   const token = m ? decodeURIComponent(m[1]) : ''
   if (token) {
     usuarioSessaoRepo.deleteByTokenHash(sha256Hex(token))
+  }
+
+  if (req.user?.id) {
+    auditService.log(req, { module_name: 'auth', record_id: req.user.id, action_type: 'logout' })
   }
   res.setHeader(
     'Set-Cookie',

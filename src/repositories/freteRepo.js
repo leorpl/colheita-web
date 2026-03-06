@@ -24,14 +24,21 @@ export const freteRepo = {
       .get(safra_id, motorista_id, destino_id)
     return row?.valor_por_saca ?? null
   },
-  upsert({ safra_id, motorista_id, destino_id, valor_por_saca }) {
+  upsert({ safra_id, motorista_id, destino_id, valor_por_saca }, { user_id } = {}) {
     // tabela frete agora e (safra_id, motorista_id, destino_id)
     db.prepare(
-      `INSERT INTO frete (safra_id, motorista_id, destino_id, valor_por_saca, updated_at)
-       VALUES (@safra_id, @motorista_id, @destino_id, @valor_por_saca, datetime('now'))
+      `INSERT INTO frete (safra_id, motorista_id, destino_id, valor_por_saca, created_by_user_id, updated_by_user_id, updated_at)
+       VALUES (@safra_id, @motorista_id, @destino_id, @valor_por_saca, @created_by_user_id, @updated_by_user_id, datetime('now'))
        ON CONFLICT(safra_id, motorista_id, destino_id)
-       DO UPDATE SET valor_por_saca=excluded.valor_por_saca, updated_at=datetime('now')`,
-    ).run({ safra_id, motorista_id, destino_id, valor_por_saca })
+       DO UPDATE SET valor_por_saca=excluded.valor_por_saca, updated_by_user_id=@updated_by_user_id, updated_at=datetime('now')`,
+    ).run({
+      safra_id,
+      motorista_id,
+      destino_id,
+      valor_por_saca,
+      created_by_user_id: user_id ?? null,
+      updated_by_user_id: user_id ?? null,
+    })
 
     // Se o frete mudou, atualizar os valores calculados nas viagens ja lancadas
     db.prepare(
@@ -39,11 +46,12 @@ export const freteRepo = {
        SET frete_tabela = @valor,
            sacas_frete = (COALESCE(peso_bruto_kg, 0) / 60.0),
            sub_total_frete = (COALESCE(peso_bruto_kg, 0) / 60.0) * @valor,
-           updated_at = datetime('now')
+           updated_at = datetime('now'),
+           updated_by_user_id = COALESCE(@updated_by_user_id, updated_by_user_id)
        WHERE safra_id = @safra_id
          AND motorista_id = @motorista_id
          AND destino_id = @destino_id`,
-    ).run({ safra_id, motorista_id, destino_id, valor: Number(valor_por_saca) })
+    ).run({ safra_id, motorista_id, destino_id, valor: Number(valor_por_saca), updated_by_user_id: user_id ?? null })
 
     return db
       .prepare(
@@ -65,13 +73,13 @@ export const freteRepo = {
     db.exec('BEGIN')
     try {
       for (const r of rows) {
-        this.upsert({
-          safra_id: to_safra_id,
-          motorista_id: r.motorista_id,
-          destino_id: r.destino_id,
-          valor_por_saca: r.valor_por_saca,
-        })
-      }
+          this.upsert({
+            safra_id: to_safra_id,
+            motorista_id: r.motorista_id,
+            destino_id: r.destino_id,
+            valor_por_saca: r.valor_por_saca,
+          })
+        }
       db.exec('COMMIT')
     } catch (e) {
       db.exec('ROLLBACK')

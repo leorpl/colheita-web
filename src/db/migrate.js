@@ -363,12 +363,36 @@ export function migrate() {
       FOREIGN KEY (user_id) REFERENCES usuario(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY,
+      module_name TEXT NOT NULL,
+      record_id INTEGER,
+      action_type TEXT NOT NULL,
+      changed_by_user_id INTEGER,
+      changed_by_name_snapshot TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      old_values_json TEXT,
+      new_values_json TEXT,
+      changed_fields_json TEXT,
+      summary TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (changed_by_user_id) REFERENCES usuario(id) ON DELETE SET NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_usuario_sessao_user ON usuario_sessao(usuario_id);
     CREATE INDEX IF NOT EXISTS idx_usuario_sessao_exp ON usuario_sessao(expires_at);
     CREATE INDEX IF NOT EXISTS idx_role_permission_module ON role_permission(module);
     CREATE INDEX IF NOT EXISTS idx_user_permission_module ON user_permission(module);
     CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_token(user_id);
     CREATE INDEX IF NOT EXISTS idx_password_reset_exp ON password_reset_token(expires_at);
+
+    CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(changed_by_user_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_module ON audit_log(module_name);
+    CREATE INDEX IF NOT EXISTS idx_audit_record ON audit_log(module_name, record_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action_type);
   `)
 
   // backfill de rateio: viagens antigas (1 talhao -> 100%)
@@ -387,6 +411,57 @@ export function migrate() {
 
   if (!hasColumn('usuario', 'menus_json')) {
     db.exec('ALTER TABLE usuario ADD COLUMN menus_json TEXT')
+  }
+
+  // Rastreabilidade padrao (created/updated by).
+  // Campos sao adicionados como NULLable para compatibilidade com registros antigos.
+  const traceTables = [
+    'safra',
+    'destino',
+    'talhao',
+    'motorista',
+    'frete',
+    'viagem',
+    'usuario',
+    'role',
+    'role_permission',
+    'user_permission',
+  ]
+
+  for (const t of traceTables) {
+    if (!hasColumn(t, 'created_by_user_id')) {
+      try {
+        db.exec(`ALTER TABLE ${t} ADD COLUMN created_by_user_id INTEGER`)
+      } catch {
+        // ignore
+      }
+    }
+    if (!hasColumn(t, 'updated_by_user_id')) {
+      try {
+        db.exec(`ALTER TABLE ${t} ADD COLUMN updated_by_user_id INTEGER`)
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Soft delete (apenas para tabelas onde faz sentido manter historico).
+  const softDeleteTables = ['usuario']
+  for (const t of softDeleteTables) {
+    if (!hasColumn(t, 'deleted_at')) {
+      try {
+        db.exec(`ALTER TABLE ${t} ADD COLUMN deleted_at TEXT`)
+      } catch {
+        // ignore
+      }
+    }
+    if (!hasColumn(t, 'deleted_by_user_id')) {
+      try {
+        db.exec(`ALTER TABLE ${t} ADD COLUMN deleted_by_user_id INTEGER`)
+      } catch {
+        // ignore
+      }
+    }
   }
 
   // Seed de roles e permissões (nao afeta usuarios existentes).
@@ -419,6 +494,7 @@ export function migrate() {
         'area-colhida',
         'fazenda',
         'usuarios',
+        'auditoria',
       ]
 
       function roleAllows(roleName, moduleKey, action) {

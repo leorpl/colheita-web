@@ -21,6 +21,7 @@ export const Menus = {
   'tipos-plantio': 'tipos-plantio',
   fazenda: 'fazenda',
   usuarios: 'usuarios',
+  auditoria: 'auditoria',
 }
 
 export const Permissions = {
@@ -70,7 +71,7 @@ export function permsForRole(role) {
 
 const RoleMenus = {
   [Roles.ADMIN]: Object.values(Menus),
-  [Roles.GESTOR]: Object.values(Menus).filter((m) => m !== Menus.usuarios),
+  [Roles.GESTOR]: Object.values(Menus).filter((m) => m !== Menus.usuarios && m !== Menus.auditoria),
   [Roles.OPERADOR]: [
     Menus.painel,
     Menus.colheita,

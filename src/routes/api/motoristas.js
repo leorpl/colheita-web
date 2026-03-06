@@ -5,6 +5,7 @@ import { validateBody, validateParams } from '../../middleware/validate.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Permissions } from '../../auth/permissions.js'
 import { S, MotoristaSchemas } from '../../validation/apiSchemas.js'
+import { auditService } from '../../services/auditService.js'
 
 export const motoristasRouter = Router()
 
@@ -19,7 +20,8 @@ motoristasRouter.post(
   requirePerm(Permissions.CADASTROS_WRITE),
   validateBody(MotoristaBody),
   (req, res) => {
-  const row = motoristaRepo.create(req.body)
+  const row = motoristaRepo.create(req.body, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'motoristas', record_id: row.id, action_type: 'create', new_values: row })
   res.status(201).json(row)
   },
 )
@@ -44,7 +46,9 @@ motoristasRouter.put(
   const id = req.params.id
   const exists = motoristaRepo.get(id)
   if (!exists) throw notFound('Motorista nao encontrado')
-  res.json(motoristaRepo.update(id, req.body))
+  const row = motoristaRepo.update(id, req.body, { user_id: req.user?.id })
+  auditService.log(req, { module_name: 'motoristas', record_id: id, action_type: 'update', old_values: exists, new_values: row })
+  res.json(row)
   },
 )
 
@@ -56,6 +60,7 @@ motoristasRouter.delete(
   const id = req.params.id
   const exists = motoristaRepo.get(id)
   if (!exists) throw notFound('Motorista nao encontrado')
+  auditService.log(req, { module_name: 'motoristas', record_id: id, action_type: 'delete', old_values: exists })
   motoristaRepo.remove(id)
   res.status(204).send()
   },
