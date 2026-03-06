@@ -1,4 +1,18 @@
 import { db } from '../db/db.js'
+import fs from 'node:fs'
+import path from 'node:path'
+import { env } from '../config/env.js'
+
+function storageBaseDir() {
+  const root = path.resolve(path.dirname(env.DB_PATH))
+  return path.join(root, 'uploads', 'contratos-silo')
+}
+
+function fileAbsPath(storage_key) {
+  const p = path.normalize(String(storage_key || ''))
+  if (!p || p.startsWith('..') || path.isAbsolute(p)) return null
+  return path.join(storageBaseDir(), p)
+}
 
 export const contratoSiloRepo = {
   getById(id) {
@@ -65,6 +79,29 @@ export const contratoSiloRepo = {
           )
           .get({ safra_id, destino_id, tipo_plantio: tp })
         if (cur?.id) {
+          // cleanup files (best-effort)
+          try {
+            const files = db
+              .prepare('SELECT storage_key FROM contrato_silo_arquivo WHERE contrato_silo_id=?')
+              .all(cur.id)
+            for (const f of files || []) {
+              const abs = fileAbsPath(f.storage_key)
+              if (abs && fs.existsSync(abs)) {
+                try {
+                  fs.unlinkSync(abs)
+                } catch {
+                  // ignore
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+          try {
+            db.prepare('DELETE FROM contrato_silo_arquivo WHERE contrato_silo_id=?').run(cur.id)
+          } catch {
+            // ignore
+          }
           db.prepare('DELETE FROM contrato_silo_faixa WHERE contrato_silo_id=?').run(cur.id)
           db.prepare('DELETE FROM contrato_silo WHERE id=?').run(cur.id)
         }

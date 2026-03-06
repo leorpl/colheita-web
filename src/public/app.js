@@ -738,6 +738,33 @@ function helpTip(text) {
   return `<button class="help" type="button" aria-label="Ajuda" data-help="${t}" title="${t}">?</button>`
 }
 
+async function apiUploadBytes(path, { file } = {}) {
+  if (!file) throw new Error('Arquivo nao informado')
+  const nameEnc = encodeURIComponent(String(file.name || 'arquivo'))
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {
+      'content-type': file.type || 'application/octet-stream',
+      'x-file-name': nameEnc,
+      'x-file-size': String(file.size || 0),
+    },
+    body: file,
+  })
+  const text = await res.text()
+  const data = text ? JSON.parse(text) : null
+  if (!res.ok) {
+    if (res.status === 401 && location.pathname !== '/login') {
+      location.href = '/login'
+      return null
+    }
+    const msg = data?.message || `Erro ${res.status}`
+    const err = new Error(msg)
+    if (data?.details) err.details = data.details
+    throw err
+  }
+  return data
+}
+
 function setupPwdToggles(rootEl) {
   if (!rootEl) return
   rootEl.querySelectorAll('button.pwd-toggle').forEach((btn) => {
@@ -3398,6 +3425,11 @@ async function renderRegrasDestino() {
   activeNav('regras-destino')
   await loadLookups()
 
+  // ACL efetiva (backend) para ajustar a UI.
+  const aclRD = await api('/api/auth/can?module=regras-destino').catch(() => null)
+  const canUpdate = aclRD ? Boolean(aclRD.can_update) : false
+  const canDelete = aclRD ? Boolean(aclRD.can_delete) : false
+
   const hash = window.location.hash || ''
   const qs = hash.includes('?') ? hash.split('?')[1] : ''
   const params = new URLSearchParams(qs)
@@ -3411,12 +3443,12 @@ async function renderRegrasDestino() {
     const destinoOptions2 = [{ value: '', label: 'Todos' }, ...cache.destinos.map((d) => ({ value: d.id, label: d.local }))]
     const plantioOptions2 = [{ value: '', label: 'Todos' }, ...cache.tiposPlantio.map((p) => ({ value: p.nome, label: p.nome }))]
 
-    await renderCrudPage({
-      route: 'regras-destino',
-      title: 'Regras do destino',
-      subtitle: 'Regras por safra + destino + plantio. Edite para configurar tabelas.',
-      fetchPath: '/api/destino-regras/plantio',
-      items: rules,
+     await renderCrudPage({
+       route: 'regras-destino',
+       title: 'Regras do destino',
+       subtitle: 'Regras por safra + destino + plantio. Edite para configurar tabelas.',
+       fetchPath: '/api/destino-regras/plantio',
+       items: rules,
       columns: [
         { key: 'id', label: 'Item' },
         { key: 'safra_nome', label: 'Safra' },
@@ -3489,40 +3521,57 @@ async function renderRegrasDestino() {
         })
       },
       showDefaultHint: false,
-      onCreate: () => {
-        window.location.hash = '#/regras-destino?new=1'
-      },
+       onCreate: canUpdate
+         ? () => {
+             window.location.hash = '#/regras-destino?new=1'
+           }
+         : null,
       onEdit: (r) => {
         if (!r) return
         const id = Number(r.id)
         const qp = new URLSearchParams({ edit_id: String(id) })
         window.location.hash = `#/regras-destino?${qp.toString()}`
       },
-      onDelete: async (r) => {
-        if (!r) return
-        const id = Number(r.id)
-        const msg = `Excluir a regra?\n\nSafra: ${r.safra_nome}\nDestino: ${r.destino_local}\nPlantio: ${r.tipo_plantio}`
-        if (!(await confirmAction(msg, { title: 'Confirmar', confirmLabel: 'Excluir' }))) return
+       onDelete: canDelete
+         ? async (r) => {
+             if (!r) return
+             const id = Number(r.id)
+             const msg = `Excluir a regra?\n\nSafra: ${r.safra_nome}\nDestino: ${r.destino_local}\nPlantio: ${r.tipo_plantio}`
+             if (!(await confirmAction(msg, { title: 'Confirmar', confirmLabel: 'Excluir' }))) return
 
-        try {
-          await api(`/api/destino-regras/plantio/${id}`, { method: 'DELETE' })
-          toast('Excluído', 'Regra removida.')
-          renderRegrasDestino()
-        } catch (e) {
-          if (e?.details?.used_count) {
-            const msg2 = `Esta regra já foi usada na colheita (${e.details.used_count} registros).\n\nExcluir não apaga as colheitas, mas pode afetar preview/indicadores.\n\nExcluir mesmo assim?`
-            if (!(await confirmAction(msg2, { title: 'Atenção', confirmLabel: 'Excluir mesmo assim' }))) return
-            await api(`/api/destino-regras/plantio/${id}?force=1`, { method: 'DELETE' })
-            toast('Excluído', 'Regra removida.')
-            renderRegrasDestino()
-            return
-          }
-          throw e
-        }
-      },
-    })
+             try {
+               await api(`/api/destino-regras/plantio/${id}`, { method: 'DELETE' })
+               toast('Excluído', 'Regra removida.')
+               renderRegrasDestino()
+             } catch (e) {
+               if (e?.details?.used_count) {
+                 const msg2 = `Esta regra já foi usada na colheita (${e.details.used_count} registros).\n\nExcluir não apaga as colheitas, mas pode afetar preview/indicadores.\n\nExcluir mesmo assim?`
+                 if (!(await confirmAction(msg2, { title: 'Atenção', confirmLabel: 'Excluir mesmo assim' }))) return
+                 await api(`/api/destino-regras/plantio/${id}?force=1`, { method: 'DELETE' })
+                 toast('Excluído', 'Regra removida.')
+                 renderRegrasDestino()
+                 return
+               }
+               throw e
+             }
+           }
+         : async () => {
+             toast('Erro', 'Sem permissao para excluir.')
+           },
+     })
 
-    return
+     // Ajuste visual: esconder acoes que o usuario nao pode executar.
+     if (!canUpdate) {
+       const addBtn = view.querySelector('#btnAdd')
+       if (addBtn) addBtn.style.display = 'none'
+     }
+     if (!canDelete) {
+       view.querySelectorAll('button[data-act="del"]').forEach((b) => {
+         b.style.display = 'none'
+       })
+     }
+
+     return
   }
 
   const safraOptions = cache.safras.map((s) => ({ value: s.id, label: s.safra }))
@@ -3556,8 +3605,9 @@ async function renderRegrasDestino() {
            <button class="btn" id="btnSalvar">Salvar</button>
          </div>
        </div>
-      <div class="panel-body">
-        <form class="form-grid rule-form" id="ruleForm">
+       <div class="panel-body">
+         ${!canUpdate ? `<div class="pill" style="margin-bottom:10px"><span class="dot muted"></span><span>Somente leitura: voce nao tem permissao para alterar regras/contratos.</span></div>` : ''}
+         <form class="form-grid rule-form" id="ruleForm">
           ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safraId, span: 'col6' })}
           ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: destinoId, span: 'col6' })}
 
@@ -3576,18 +3626,39 @@ async function renderRegrasDestino() {
            </div>
 
            <div class="field col12">
-             <div class="label">Contrato(s) com o silo</div>
-             <div class="hint">Adicione uma ou mais travas (ex: 10.000 sc a 120 + 5.000 sc a 130). A entrega vai abatendo em ordem.</div>
-             <div class="table-wrap rule-wrap" style="margin-top:8px">
-               <table>
-                 <thead><tr><th class="actions"></th><th>Sacas</th><th>Preco travado (R$/sc)</th></tr></thead>
-                 <tbody id="contratoFaixas"></tbody>
-               </table>
-             </div>
-             <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end">
-               <button class="btn ghost" type="button" id="btnAddContrato">Adicionar contrato</button>
-             </div>
-           </div>
+              <div class="label">Contrato(s) com o silo</div>
+              <div class="hint">Adicione uma ou mais travas (ex: 10.000 sc a 120 + 5.000 sc a 130). A entrega vai abatendo em ordem.</div>
+
+              <div class="contract-split" style="margin-top:10px">
+                <div>
+                  <div class="table-wrap rule-wrap">
+                    <table>
+                      <thead><tr><th class="actions"></th><th>Sacas</th><th>Preco travado (R$/sc)</th></tr></thead>
+                      <tbody id="contratoFaixas"></tbody>
+                    </table>
+                  </div>
+                  <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end">
+                    <button class="btn ghost" type="button" id="btnAddContrato">Adicionar contrato</button>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="label" style="font-size:12px;color:rgba(14,21,18,.86)">Arquivos do contrato</div>
+                  <div class="hint">Anexe documentos (PDF/JPG/PNG). Disponivel por safra+destino+plantio.</div>
+                  <div class="table-wrap rule-wrap" style="margin-top:8px">
+                    <table>
+                      <thead><tr><th>Arquivo</th><th>Upload</th><th>Usuario</th><th class="actions"></th></tr></thead>
+                      <tbody id="contratoArquivos"></tbody>
+                    </table>
+                  </div>
+                  <div class="upload-row" style="margin-top:10px">
+                    <input type="file" id="ctFile" />
+                    <button class="btn ghost" type="button" id="btnUploadCt">Enviar</button>
+                  </div>
+                  <div class="hint" id="ctFileHint" style="margin-top:6px">Salve o contrato para liberar anexos.</div>
+                </div>
+              </div>
+            </div>
 
             <div class="field col12">
            ${formField({ label: 'Custo p/ saca (Silo) R$/sc limpa', name: 'custo_silo_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
@@ -3621,6 +3692,10 @@ async function renderRegrasDestino() {
   const form = view.querySelector('#ruleForm')
   const faixasEl = view.querySelector('#faixas')
   const contratoEl = view.querySelector('#contratoFaixas')
+  const contratoArquivosEl = view.querySelector('#contratoArquivos')
+  const inputCtFile = view.querySelector('#ctFile')
+  const btnUploadCt = view.querySelector('#btnUploadCt')
+  const ctFileHint = view.querySelector('#ctFileHint')
   const btnSalvar = view.querySelector('#btnSalvar')
   const btnAddFaixa = view.querySelector('#btnAddFaixa')
   const btnAddContrato = view.querySelector('#btnAddContrato')
@@ -3630,6 +3705,17 @@ async function renderRegrasDestino() {
   const ruleTraceWrap = view.querySelector('#ruleTraceWrap')
   const ruleTrace = view.querySelector('#ruleTrace')
   const btnHistContrato = view.querySelector('#btnHistContrato')
+
+  // ACL -> UI
+  if (!canUpdate) {
+    if (btnSalvar) {
+      btnSalvar.disabled = true
+      btnSalvar.textContent = 'Somente leitura'
+    }
+    if (btnCopyRule) btnCopyRule.disabled = true
+    if (btnAddFaixa) btnAddFaixa.disabled = true
+    if (btnAddContrato) btnAddContrato.disabled = true
+  }
 
   const identityHint = view.querySelector('#ruleIdentityHint')
   let conflictBlock = false
@@ -3652,16 +3738,19 @@ async function renderRegrasDestino() {
   }
 
   function faixaRow(f = { umid_gt: '', umid_lte: '', desconto_pct: '' }) {
+    const dis = canUpdate ? '' : 'disabled'
+    const rmBtn = canUpdate && currentUsedCount === 0 ? '<button class="btn small danger" type="button" data-act="rm">Remover</button>' : ''
     return `<tr>
-      <td class="actions"><button class="btn small danger" type="button" data-act="rm">Remover</button></td>
-      <td style="width:90px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_gt" value="${escapeHtml(f.umid_gt)}" /></td>
-      <td style="width:90px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_lte" value="${escapeHtml(f.umid_lte)}" /></td>
-      <td style="width:110px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="desconto_pct" value="${escapeHtml(f.desconto_pct)}" /></td>
-      <td style="width:120px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="custo_secagem_por_saca" value="${escapeHtml(f.custo_secagem_por_saca ?? '')}" /></td>
+      <td class="actions">${rmBtn}</td>
+      <td style="width:90px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_gt" value="${escapeHtml(f.umid_gt)}" /></td>
+      <td style="width:90px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_lte" value="${escapeHtml(f.umid_lte)}" /></td>
+      <td style="width:110px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="desconto_pct" value="${escapeHtml(f.desconto_pct)}" /></td>
+      <td style="width:120px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="custo_secagem_por_saca" value="${escapeHtml(f.custo_secagem_por_saca ?? '')}" /></td>
     </tr>`
   }
 
   function bindFaixaRemove() {
+    if (!canUpdate || currentUsedCount > 0) return
     faixasEl.querySelectorAll('[data-act="rm"]').forEach((b) => {
       b.onclick = () => {
         b.closest('tr')?.remove()
@@ -3670,20 +3759,24 @@ async function renderRegrasDestino() {
   }
 
   function contratoRow(f = { sacas: '', preco_por_saca: '' }) {
+    const dis = canUpdate ? '' : 'disabled'
+    const rmBtn = canUpdate ? '<button class="btn small danger" type="button" data-act="rm-contrato">Remover</button>' : ''
     return `<tr>
-      <td class="actions"><button class="btn small danger" type="button" data-act="rm-contrato">Remover</button></td>
-      <td style="width:160px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_sacas" value="${escapeHtml(f.sacas)}" /></td>
-      <td style="width:160px"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_preco" value="${escapeHtml(f.preco_por_saca)}" /></td>
+      <td class="actions">${rmBtn}</td>
+      <td style="width:160px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_sacas" value="${escapeHtml(f.sacas)}" /></td>
+      <td style="width:160px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_preco" value="${escapeHtml(f.preco_por_saca)}" /></td>
     </tr>`
   }
 
   function bindContratoRemove() {
+    if (!canUpdate) return
     contratoEl?.querySelectorAll('[data-act="rm-contrato"]').forEach((b) => {
       b.onclick = () => b.closest('tr')?.remove()
     })
   }
 
   const checkConflict = debounce(async () => {
+    if (!canUpdate) return
     conflictBlock = false
     if (!identityHint) return
     if (!currentId) {
@@ -3735,18 +3828,18 @@ async function renderRegrasDestino() {
 
         // Bloquear edicao da regra, mas permitir alterar o contrato.
         if (btnSalvar) {
-          btnSalvar.disabled = false
-          btnSalvar.textContent = 'Salvar contrato'
+          btnSalvar.disabled = !canUpdate
+          btnSalvar.textContent = canUpdate ? 'Salvar contrato' : 'Somente leitura'
         }
         form.querySelectorAll('input,select,textarea').forEach((el) => {
           const name = String(el.getAttribute('name') || '')
           const isContrato = name === 'ct_sacas' || name === 'ct_preco'
-          el.disabled = !isContrato
+          el.disabled = !canUpdate || !isContrato
         })
 
         // Desabilitar botoes de faixas de umidade; manter contrato
         if (btnAddFaixa) btnAddFaixa.disabled = true
-        if (btnAddContrato) btnAddContrato.disabled = false
+        if (btnAddContrato) btnAddContrato.disabled = !canUpdate
         toast(
           'Atenção',
           'Esta regra de destino ja esta sendo utilizada em registros de colheita. Alteracoes podem comprometer calculos historicos.',
@@ -3754,15 +3847,15 @@ async function renderRegrasDestino() {
       } else {
         if (identityHint) identityHint.textContent = `Editando regra #${currentId}`
         if (btnSalvar) {
-          btnSalvar.disabled = false
-          btnSalvar.textContent = 'Salvar'
+          btnSalvar.disabled = !canUpdate
+          btnSalvar.textContent = canUpdate ? 'Salvar' : 'Somente leitura'
         }
 
         // re-habilitar campos (caso tenha mudado de regra via navegação)
         form.querySelectorAll('input,select,textarea').forEach((el) => {
-          el.disabled = false
+          el.disabled = !canUpdate
         })
-        if (btnAddFaixa) btnAddFaixa.disabled = false
+        if (btnAddFaixa) btnAddFaixa.disabled = !canUpdate
       }
     } else {
       const fd = new FormData(form)
@@ -3777,7 +3870,10 @@ async function renderRegrasDestino() {
       regra = await api(`/api/destino-regras/one?${qp.toString()}`)
       if (identityHint) identityHint.textContent = 'Nova regra'
       currentUsedCount = 0
-      if (btnSalvar) btnSalvar.textContent = 'Salvar'
+      if (btnSalvar) {
+        btnSalvar.textContent = canUpdate ? 'Salvar' : 'Somente leitura'
+        btnSalvar.disabled = !canUpdate
+      }
     }
 
     // contrato e entidade separada (pode ter varias faixas)
@@ -3790,6 +3886,7 @@ async function renderRegrasDestino() {
     )
 
     contratoId = contrato?.id ? Number(contrato.id) : null
+
     if (btnHistContrato) {
       btnHistContrato.disabled = !(Number.isFinite(contratoId) && contratoId > 0)
       btnHistContrato.onclick = async () => {
@@ -3823,6 +3920,75 @@ async function renderRegrasDestino() {
       bindContratoRemove()
     }
 
+    async function loadContratoArquivos() {
+      if (!contratoArquivosEl) return
+      const canUpdateFiles = canUpdate
+      const canDeleteFiles = canDelete
+      if (!Number.isFinite(contratoId) || contratoId <= 0) {
+        contratoArquivosEl.innerHTML = `<tr><td colspan="4" class="hint">Cadastre o contrato e salve para anexar arquivos.</td></tr>`
+        if (btnUploadCt) btnUploadCt.disabled = true
+        if (inputCtFile) inputCtFile.disabled = true
+        if (ctFileHint) {
+          ctFileHint.style.display = ''
+          ctFileHint.textContent = 'Salve o contrato para liberar anexos.'
+        }
+        return
+      }
+
+      if (btnUploadCt) btnUploadCt.disabled = !canUpdateFiles
+      if (inputCtFile) inputCtFile.disabled = !canUpdateFiles
+      if (ctFileHint) {
+        if (canUpdateFiles) {
+          ctFileHint.style.display = 'none'
+        } else {
+          ctFileHint.style.display = ''
+          ctFileHint.textContent = 'Sem permissao para anexar arquivos.'
+        }
+      }
+
+      const items = await api(`/api/contratos-silo/${encodeURIComponent(String(contratoId))}/arquivos`).catch(() => [])
+      const rows = (items || []).map((a) => {
+        const who = a.uploaded_by_nome || a.uploaded_by_username || (a.created_by_user_id ? `#${a.created_by_user_id}` : '')
+        const dt = String(a.created_at || '').slice(0, 19).replace('T', ' ')
+        const size = Number(a.file_size || 0)
+        const sizeTxt = size > 0 ? `${fmtNum(size / 1024, 0)} KB` : ''
+        const mime = String(a.mime_type || '')
+        const meta = [sizeTxt, mime].filter(Boolean).join(' | ')
+        const title = meta
+        return `
+          <tr>
+            <td title="${escapeHtml(title)}">${escapeHtml(a.file_name || '')}${meta ? `<div class="hint">${escapeHtml(meta)}</div>` : ''}</td>
+            <td>${escapeHtml(dt)}</td>
+            <td>${escapeHtml(who)}</td>
+            <td class="actions">
+              <a class="btn ghost small" href="/api/contratos-silo/arquivos/${escapeHtml(String(a.id))}/download" target="_blank" rel="noreferrer">Baixar</a>
+              ${canDeleteFiles ? `<button class="btn ghost small" type="button" data-act="ctdel" data-id="${escapeHtml(String(a.id))}">Excluir</button>` : ''}
+            </td>
+          </tr>
+        `.trim()
+      })
+      contratoArquivosEl.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="4" class="hint">Nenhum arquivo anexado.</td></tr>`
+
+      if (canDeleteFiles) {
+        contratoArquivosEl.querySelectorAll('button[data-act="ctdel"]').forEach((b) => {
+          b.onclick = async () => {
+            const id = Number(b.dataset.id)
+            if (!Number.isFinite(id) || id <= 0) return
+            if (!(await confirmDanger('Excluir este arquivo?'))) return
+            try {
+              await api(`/api/contratos-silo/arquivos/${id}`, { method: 'DELETE' })
+              toast('OK', 'Arquivo removido.')
+              loadContratoArquivos()
+            } catch (e) {
+              toast('Erro', String(e?.message || e))
+            }
+          }
+        })
+      }
+    }
+
+    await loadContratoArquivos()
+  
     form.custo_silo_por_saca.value = fmtNum(regra?.custo_silo_por_saca ?? 0, 2)
     form.custo_terceiros_por_saca.value = fmtNum(
       regra?.custo_terceiros_por_saca ?? 0,
@@ -3878,6 +4044,7 @@ async function renderRegrasDestino() {
   }
 
   btnAddFaixa.onclick = () => {
+    if (!canUpdate || currentUsedCount > 0) return
     if (faixasEl.textContent.includes('Nenhuma faixa')) faixasEl.innerHTML = ''
     faixasEl.insertAdjacentHTML('beforeend', faixaRow())
     bindFaixaRemove()
@@ -3885,6 +4052,7 @@ async function renderRegrasDestino() {
 
   if (btnAddContrato) {
     btnAddContrato.onclick = () => {
+      if (!canUpdate) return
       if (!contratoEl) return
       if (contratoEl.textContent.includes('Sem contrato')) contratoEl.innerHTML = ''
       contratoEl.insertAdjacentHTML('beforeend', contratoRow())
@@ -3893,6 +4061,10 @@ async function renderRegrasDestino() {
   }
 
   btnSalvar.onclick = async () => {
+    if (!canUpdate) {
+      toast('Erro', 'Sem permissao para alterar regras/contratos.')
+      return
+    }
     if (conflictBlock) {
       toast('Erro', 'Ja existe regra para esta combinacao (nao pode duplicar).')
       return
@@ -4105,6 +4277,10 @@ async function renderRegrasDestino() {
 
   if (btnCopyRule) {
     btnCopyRule.onclick = () => {
+      if (!canUpdate) {
+        toast('Erro', 'Sem permissao para copiar/aplicar regras.')
+        return
+      }
       const safraOptions2 = cache.safras.map((s) => ({ value: s.id, label: s.safra }))
       const destinoOptions2 = cache.destinos.map((d) => ({ value: d.id, label: `${d.local}` }))
       const plantioOptions2 = cache.tiposPlantio.map((p) => ({ value: p.nome, label: p.nome }))
@@ -4433,6 +4609,41 @@ async function renderColheitaBase(variant) {
         selMot.value = String(boundMotoristaId)
       }
       selMot.disabled = true
+    }
+  }
+
+  if (btnUploadCt) {
+    btnUploadCt.onclick = async () => {
+      if (!Number.isFinite(contratoId) || contratoId <= 0) {
+        toast('Atenção', 'Salve o contrato para anexar arquivos.')
+        return
+      }
+
+      // ACL efetiva
+      const aclRD = await api('/api/auth/can?module=regras-destino').catch(() => null)
+      if (aclRD && !aclRD.can_update) {
+        toast('Erro', 'Sem permissao para anexar arquivos.')
+        return
+      }
+
+      const file = inputCtFile?.files?.[0]
+      if (!file) {
+        toast('Atenção', 'Selecione um arquivo.')
+        return
+      }
+      if (file.size > 30 * 1024 * 1024) {
+        toast('Erro', 'Arquivo muito grande (max 30MB).')
+        return
+      }
+      try {
+        btnUploadCt.disabled = true
+        await apiUploadBytes(`/api/contratos-silo/${encodeURIComponent(String(contratoId))}/arquivos`, { file })
+        toast('OK', 'Arquivo enviado.')
+        if (inputCtFile) inputCtFile.value = ''
+        load()
+      } finally {
+        btnUploadCt.disabled = false
+      }
     }
   }
 

@@ -618,6 +618,7 @@ export function migrate() {
     'umidade_faixa_plantio',
     'contrato_silo',
     'contrato_silo_faixa',
+    'contrato_silo_arquivo',
     'usuario',
     'role',
     'role_permission',
@@ -662,6 +663,7 @@ export function migrate() {
     'talhao',
     'motorista',
     'viagem',
+    'contrato_silo_arquivo',
     'plantio_tipo',
     'motorista_quitacao',
 
@@ -954,6 +956,22 @@ export function migrate() {
       FOREIGN KEY (contrato_silo_id) REFERENCES contrato_silo(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_contrato_silo_faixa_contrato ON contrato_silo_faixa(contrato_silo_id);
+  `)
+
+  // arquivos do contrato (documentos digitais)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contrato_silo_arquivo (
+      id INTEGER PRIMARY KEY,
+      contrato_silo_id INTEGER NOT NULL,
+      file_name TEXT NOT NULL,
+      storage_key TEXT NOT NULL,
+      mime_type TEXT,
+      file_size INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      FOREIGN KEY (contrato_silo_id) REFERENCES contrato_silo(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_contrato_silo_arquivo_contrato ON contrato_silo_arquivo(contrato_silo_id);
   `)
   db.exec(
     'CREATE INDEX IF NOT EXISTS idx_umidade_faixa_plantio_regra ON umidade_faixa_plantio(destino_regra_plantio_id)',

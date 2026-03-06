@@ -1,13 +1,16 @@
 import { Router } from 'express'
+import { z } from 'zod'
 
 import { env } from '../../config/env.js'
-import { validateBody } from '../../middleware/validate.js'
+import { validateBody, validateQuery } from '../../middleware/validate.js'
+import { requireAuth } from '../../middleware/auth.js'
 import { usuarioRepo } from '../../repositories/usuarioRepo.js'
 import { usuarioSessaoRepo } from '../../repositories/usuarioSessaoRepo.js'
 import { buildCookie, newToken, sha256Hex } from '../../auth/cookies.js'
 import { verifyPassword, hashPassword } from '../../auth/password.js'
 import { unauthorized } from '../../errors.js'
 import { permsForRole } from '../../auth/permissions.js'
+import { can, Actions } from '../../auth/acl.js'
 import { AuthSchemas } from '../../validation/apiSchemas.js'
 import crypto from 'node:crypto'
 import { passwordResetRepo } from '../../repositories/passwordResetRepo.js'
@@ -166,3 +169,23 @@ authRouter.get('/me', (req, res) => {
   if (!req.user) return res.json({ user: null })
   res.json({ user: req.user })
 })
+
+authRouter.get(
+  '/can',
+  requireAuth,
+  validateQuery(
+    z.object({
+      module: z.string().trim().min(1).max(60),
+    }),
+  ),
+  (req, res) => {
+    const module = String(req.query.module || '').trim().toLowerCase()
+    res.json({
+      module,
+      can_view: can(req.user, module, Actions.VIEW),
+      can_create: can(req.user, module, Actions.CREATE),
+      can_update: can(req.user, module, Actions.UPDATE),
+      can_delete: can(req.user, module, Actions.DELETE),
+    })
+  },
+)

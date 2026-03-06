@@ -14,6 +14,7 @@ import { publicRouter } from './public.js'
 import { authRouter } from './auth.js'
 import { usersRouter } from './users.js'
 import { contratosSiloRouter } from './contratosSilo.js'
+import { contratosSiloArquivosRouter } from './contratosSiloArquivos.js'
 import { auditLogsRouter } from './auditLogs.js'
 import { aclRouter } from './acl.js'
 import { participantesRouter } from './participantes.js'
@@ -57,7 +58,8 @@ apiRouter.use('/motoristas', motoristasRouter)
 apiRouter.use('/tipos-plantio', tiposPlantioRouter)
 apiRouter.use('/fretes', fretesRouter)
 apiRouter.use('/destino-regras', destinoRegrasRouter)
-apiRouter.use('/contratos-silo', contratosSiloRouter)
+  apiRouter.use('/contratos-silo', contratosSiloRouter)
+  apiRouter.use('/', contratosSiloArquivosRouter)
 apiRouter.use('/talhao-safra', talhaoSafraRouter)
 apiRouter.use('/viagens', viagensRouter)
 apiRouter.use('/relatorios', relatoriosRouter)
