@@ -15,6 +15,7 @@ export const motoristaQuitacaoRepo = {
          WHERE (@motorista_id IS NULL OR q.motorista_id = @motorista_id)
            AND (@de IS NULL OR q.de >= @de)
            AND (@ate IS NULL OR q.ate <= @ate)
+           AND q.deleted_at IS NULL
          ORDER BY q.data_pagamento DESC, q.id DESC`,
       )
       .all(params)
@@ -49,7 +50,7 @@ export const motoristaQuitacaoRepo = {
         `SELECT q.*, m.nome as motorista_nome, m.placa as motorista_placa
          FROM motorista_quitacao q
          JOIN motorista m ON m.id = q.motorista_id
-         WHERE q.id = ?`,
+         WHERE q.id = ? AND q.deleted_at IS NULL`,
       )
       .get(id)
   },
@@ -66,12 +67,19 @@ export const motoristaQuitacaoRepo = {
            observacoes=@observacoes,
            updated_by_user_id=@updated_by_user_id,
            updated_at=datetime('now')
-       WHERE id=@id`,
+       WHERE id=@id AND deleted_at IS NULL`,
     ).run({ ...data, id, updated_by_user_id: user_id ?? null })
     return this.get(id)
   },
 
-  remove(id) {
-    return db.prepare('DELETE FROM motorista_quitacao WHERE id=?').run(id)
+  remove(id, { user_id } = {}) {
+    return db
+      .prepare(
+        `UPDATE motorista_quitacao
+         SET deleted_at=datetime('now'), deleted_by_user_id=@deleted_by_user_id,
+             updated_by_user_id=@updated_by_user_id, updated_at=datetime('now')
+         WHERE id=@id AND deleted_at IS NULL`,
+      )
+      .run({ id, deleted_by_user_id: user_id ?? null, updated_by_user_id: user_id ?? null })
   },
 }

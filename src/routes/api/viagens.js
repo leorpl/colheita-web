@@ -199,7 +199,7 @@ viagensRouter.delete(
   const exists = viagemRepo.get(id)
   if (!exists) throw notFound('Viagem nao encontrada')
   auditService.log(req, { module_name: 'colheita', record_id: id, action_type: 'delete', old_values: exists })
-  viagemRepo.remove(id)
+  viagemRepo.remove(id, { user_id: req.user?.id })
   res.status(204).send()
   },
 )

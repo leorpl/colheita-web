@@ -21,6 +21,17 @@ quitacoesMotoristasRouter.get(
   },
 )
 
+quitacoesMotoristasRouter.get(
+  '/:id',
+  requirePerm(Modules.QUITACOES, Actions.VIEW),
+  validateParams(S.IdParam),
+  (req, res) => {
+    const row = motoristaQuitacaoRepo.get(req.params.id)
+    if (!row) throw notFound('Quitacao nao encontrada')
+    res.json(row)
+  },
+)
+
 const CreateBody = QuitacoesSchemas.CreateBody
 
 quitacoesMotoristasRouter.post(
@@ -58,7 +69,7 @@ quitacoesMotoristasRouter.delete(
   const exists = motoristaQuitacaoRepo.get(id)
   if (!exists) throw notFound('Quitacao nao encontrada')
   auditService.log(req, { module_name: 'quitacao-motoristas', record_id: id, action_type: 'delete', old_values: exists })
-  motoristaQuitacaoRepo.remove(id)
+  motoristaQuitacaoRepo.remove(id, { user_id: req.user?.id })
   res.status(204).send()
   },
 )

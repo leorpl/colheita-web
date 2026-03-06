@@ -81,7 +81,7 @@ safrasRouter.delete(
   const exists = safraRepo.get(id)
   if (!exists) throw notFound('Safra nao encontrada')
   auditService.log(req, { module_name: 'safras', record_id: id, action_type: 'delete', old_values: exists })
-  safraRepo.remove(id)
+  safraRepo.remove(id, { user_id: req.user?.id })
   res.status(204).send()
   },
 )

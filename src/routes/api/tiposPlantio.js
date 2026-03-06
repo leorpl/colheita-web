@@ -15,6 +15,17 @@ tiposPlantioRouter.get('/', requirePerm(Modules.TIPOS_PLANTIO, Actions.VIEW), (_
   res.json(plantioTipoRepo.list())
 })
 
+tiposPlantioRouter.get(
+  '/:id',
+  requirePerm(Modules.TIPOS_PLANTIO, Actions.VIEW),
+  validateParams(S.IdParam),
+  (req, res) => {
+    const row = plantioTipoRepo.get(req.params.id)
+    if (!row) throw notFound('Tipo de plantio nao encontrado')
+    res.json(row)
+  },
+)
+
 tiposPlantioRouter.post(
   '/',
   requirePerm(Modules.TIPOS_PLANTIO, Actions.CREATE),
@@ -50,7 +61,7 @@ tiposPlantioRouter.delete(
   const exists = plantioTipoRepo.get(id)
   if (!exists) throw notFound('Tipo de plantio nao encontrado')
   auditService.log(req, { module_name: 'tipos-plantio', record_id: id, action_type: 'delete', old_values: exists })
-  plantioTipoRepo.remove(id)
+  plantioTipoRepo.remove(id, { user_id: req.user?.id })
   res.status(204).send()
   },
 )

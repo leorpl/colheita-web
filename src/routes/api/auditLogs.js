@@ -23,8 +23,32 @@ const ListQuery = z.object({
   limit: z.coerce.number().int().min(1).max(2000).optional(),
 })
 
+const PageQuery = ListQuery.extend({
+  offset: z.coerce.number().int().min(0).max(200000).optional(),
+  sort_key: z.string().trim().max(40).optional(),
+  sort_dir: z.string().trim().max(6).optional(),
+  critical: z.coerce.number().int().min(0).max(1).optional(),
+})
+
+const StatsQuery = z.object({
+  de: z.string().trim().max(30).optional(),
+  ate: z.string().trim().max(30).optional(),
+  module_name: z.string().trim().max(60).optional(),
+  user_id: z.coerce.number().int().positive().optional(),
+})
+
 auditLogsRouter.get('/', validateQuery(ListQuery), (req, res) => {
   res.json(auditLogRepo.list(req.query))
+})
+
+auditLogsRouter.get('/page', validateQuery(PageQuery), (req, res) => {
+  const total = auditLogRepo.count(req.query)
+  const items = auditLogRepo.listPage(req.query)
+  res.json({ total, items })
+})
+
+auditLogsRouter.get('/stats', validateQuery(StatsQuery), (req, res) => {
+  res.json(auditLogRepo.stats(req.query))
 })
 
 auditLogsRouter.get('/export.csv', validateQuery(ListQuery), (req, res) => {

@@ -48,7 +48,7 @@ export const viagemRepo = {
             ON rp.safra_id = v.safra_id
            AND rp.destino_id = v.destino_id
            AND rp.tipo_plantio = UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, '')))
-         WHERE v.id = ?`,
+          WHERE v.id = ? AND v.deleted_at IS NULL`,
       )
       .get(id)
     const v = recalcDerived(row)
@@ -82,14 +82,15 @@ export const viagemRepo = {
                 d.codigo as destino_codigo, d.local as destino_local, m.nome as motorista_nome,
                 rp.trava_sacas as regra_trava_sacas,
                 rp.valor_compra_por_saca as regra_valor_compra_por_saca,
-                (
-                  SELECT COALESCE(SUM(v2.sacas), 0)
-                  FROM viagem v2
-                  WHERE v2.safra_id = v.safra_id
-                    AND v2.destino_id = v.destino_id
-                    AND UPPER(COALESCE(NULLIF(v2.tipo_plantio, ''), NULLIF(s.plantio, ''))) = UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, '')))
-                    AND v2.id <> v.id
-                ) as entrega_atual_sacas
+                 (
+                   SELECT COALESCE(SUM(v2.sacas), 0)
+                   FROM viagem v2
+                   WHERE v2.safra_id = v.safra_id
+                     AND v2.destino_id = v.destino_id
+                     AND UPPER(COALESCE(NULLIF(v2.tipo_plantio, ''), NULLIF(s.plantio, ''))) = UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, '')))
+                     AND v2.id <> v.id
+                     AND v2.deleted_at IS NULL
+                 ) as entrega_atual_sacas
          FROM viagem v
          JOIN safra s ON s.id = v.safra_id
          JOIN talhao t ON t.id = v.talhao_id
@@ -107,8 +108,9 @@ export const viagemRepo = {
             AND (@destino_id IS NULL OR v.destino_id = @destino_id)
             AND (@motorista_id IS NULL OR v.motorista_id = @motorista_id)
             AND (@de IS NULL OR v.data_saida >= @de)
-            AND (@ate IS NULL OR v.data_saida <= @ate)
-          ORDER BY v.id DESC`,
+             AND (@ate IS NULL OR v.data_saida <= @ate)
+             AND v.deleted_at IS NULL
+           ORDER BY v.id DESC`,
       )
       .all(params)
 
@@ -211,9 +213,10 @@ export const viagemRepo = {
               AND (@destino_id IS NULL OR v.destino_id = @destino_id)
               AND (@motorista_id IS NULL OR v.motorista_id = @motorista_id)
               AND (@de IS NULL OR v.data_saida >= @de)
-              AND (@ate IS NULL OR v.data_saida <= @ate)`,
-          )
-         .get(params)
+              AND (@ate IS NULL OR v.data_saida <= @ate)
+              AND v.deleted_at IS NULL`,
+           )
+          .get(params)
     }
 
     return db
@@ -238,7 +241,8 @@ export const viagemRepo = {
            AND (@destino_id IS NULL OR destino_id = @destino_id)
            AND (@motorista_id IS NULL OR motorista_id = @motorista_id)
            AND (@de IS NULL OR data_saida >= @de)
-           AND (@ate IS NULL OR data_saida <= @ate)`,
+            AND (@ate IS NULL OR data_saida <= @ate)
+            AND deleted_at IS NULL`,
       )
       .get(params)
   },
@@ -347,8 +351,15 @@ export const viagemRepo = {
     return this.get(id)
   },
 
-  remove(id) {
-    return db.prepare('DELETE FROM viagem WHERE id=?').run(id)
+  remove(id, { user_id } = {}) {
+    return db
+      .prepare(
+        `UPDATE viagem
+         SET deleted_at=datetime('now'), deleted_by_user_id=@deleted_by_user_id,
+             updated_by_user_id=@updated_by_user_id, updated_at=datetime('now')
+         WHERE id=@id AND deleted_at IS NULL`,
+      )
+      .run({ id, deleted_by_user_id: user_id ?? null, updated_by_user_id: user_id ?? null })
   },
 
   fichaStatsBySafra({ safra_id, exclude_id } = {}) {
@@ -357,7 +368,8 @@ export const viagemRepo = {
         `SELECT ficha
          FROM viagem
          WHERE safra_id = @safra_id
-           AND (@exclude_id IS NULL OR id <> @exclude_id)`,
+           AND (@exclude_id IS NULL OR id <> @exclude_id)
+           AND deleted_at IS NULL`,
       )
       .all({ safra_id, exclude_id: exclude_id ?? null })
 

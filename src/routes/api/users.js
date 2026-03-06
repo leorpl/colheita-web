@@ -63,7 +63,42 @@ usersRouter.put('/:id', requireCan(Modules.USUARIOS, Actions.UPDATE), validatePa
     active: req.body.active,
     menus_json: req.body.menus ? JSON.stringify(req.body.menus) : null,
   }, { user_id: req.user?.id })
+
+  // Always log full diff
   auditService.log(req, { module_name: 'usuarios', record_id: id, action_type: 'update', old_values: exists, new_values: row })
+
+  // Extra breadcrumbs for sensitive changes (easier to filter in Auditoria)
+  if (String(exists.role || '') !== String(row.role || '')) {
+    auditService.log(req, {
+      module_name: 'usuarios',
+      record_id: id,
+      action_type: 'permission_change',
+      old_values: { role: exists.role },
+      new_values: { role: row.role },
+      notes: 'role change',
+    })
+  }
+  if (Number(exists.active) !== Number(row.active)) {
+    auditService.log(req, {
+      module_name: 'usuarios',
+      record_id: id,
+      action_type: 'status_change',
+      old_values: { active: exists.active },
+      new_values: { active: row.active },
+      notes: 'active toggle',
+    })
+  }
+  if (Number(exists.motorista_id || 0) !== Number(row.motorista_id || 0)) {
+    auditService.log(req, {
+      module_name: 'usuarios',
+      record_id: id,
+      action_type: 'update',
+      old_values: { motorista_id: exists.motorista_id || null },
+      new_values: { motorista_id: row.motorista_id || null },
+      notes: 'motorista link change',
+      ignoreKeys: ['motorista_id'],
+    })
+  }
   res.json(row)
 })
 

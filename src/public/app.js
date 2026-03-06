@@ -150,9 +150,163 @@ function iconSvg(name) {
 }
 
 function pillBadge({ label, tone = 'muted' } = {}) {
-  const dot = tone === 'warn' ? 'warn' : ''
-  // ok uses default dot
-  return `<span class="pill"><span class="dot ${dot}"></span><span>${escapeHtml(String(label || ''))}</span></span>`
+  const t = String(tone || '').toLowerCase()
+  const dot = t === 'warn' ? 'warn' : t === 'danger' || t === 'bad' ? 'bad' : t === 'muted' ? 'muted' : ''
+  return `<span class="pill"><span class="dot ${escapeHtml(dot)}"></span><span>${escapeHtml(String(label || ''))}</span></span>`
+}
+
+let _usersByIdPromise = null
+async function getUsersByIdSafe() {
+  if (_usersByIdPromise) return _usersByIdPromise
+  _usersByIdPromise = (async () => {
+    try {
+      const users = await api('/api/users')
+      const map = new Map()
+      for (const u of users || []) map.set(Number(u.id), u)
+      return map
+    } catch {
+      return new Map()
+    }
+  })()
+  return _usersByIdPromise
+}
+
+function actorLabel(usersById, id) {
+  const uid = Number(id)
+  if (!Number.isFinite(uid) || uid <= 0) return '-'
+  const u = usersById?.get(uid) || null
+  return String(u?.nome || u?.username || `#${uid}`)
+}
+
+async function hydrateTraceMeta(rootEl) {
+  const root = rootEl || document
+  const els = Array.from(root.querySelectorAll('[data-role="trace"]'))
+  if (!els.length) return
+  const usersById = await getUsersByIdSafe()
+  for (const el of els) {
+    const createdAt = String(el.dataset.createdAt || '').trim() || null
+    const updatedAt = String(el.dataset.updatedAt || '').trim() || null
+    const createdBy = el.dataset.createdBy || null
+    const updatedBy = el.dataset.updatedBy || null
+
+    const cWho = actorLabel(usersById, createdBy)
+    const uWho = actorLabel(usersById, updatedBy)
+    const cWhen = createdAt || '-'
+    const uWhen = updatedAt || '-'
+
+    el.innerHTML = `Criado por <b>${escapeHtml(cWho)}</b> em <span class="mono">${escapeHtml(cWhen)}</span> · Última edição por <b>${escapeHtml(uWho)}</b> em <span class="mono">${escapeHtml(uWhen)}</span>`
+  }
+}
+
+function auditTone({ module_name, action_type }) {
+  const mod = String(module_name || '').toLowerCase()
+  const act = String(action_type || '').toLowerCase()
+  if (act === 'permission_change') return 'danger'
+  if (act === 'password_reset') return 'danger'
+  if (act === 'delete') return 'danger'
+  if (act === 'login_failed') return 'warn'
+  if (act === 'status_change') return 'warn'
+  if (mod === 'auth' && (act === 'login' || act === 'logout')) return 'muted'
+  return 'muted'
+}
+
+async function openAuditDetail(id) {
+  const r = await api(`/api/audit-logs/${Number(id)}`)
+  const fields = (() => {
+    try {
+      const arr = r.changed_fields_json ? JSON.parse(r.changed_fields_json) : []
+      return Array.isArray(arr) ? arr : []
+    } catch {
+      return []
+    }
+  })()
+  const oldV = r.old_values_json ? String(r.old_values_json) : ''
+  const newV = r.new_values_json ? String(r.new_values_json) : ''
+  openDialog({
+    title: `Auditoria #${Number(id)}`,
+    submitLabel: 'Fechar',
+    size: 'lg',
+    bodyHtml: `
+      <div class="hint">${escapeHtml(String(r.created_at || ''))} — <b>${escapeHtml(String(r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'))}</b></div>
+      <div class="hint">Módulo: <code class="mono">${escapeHtml(String(r.module_name || ''))}</code> | Registro: <b>${escapeHtml(r.record_id == null ? '-' : String(r.record_id))}</b> | Ação: <code class="mono">${escapeHtml(String(r.action_type || ''))}</code></div>
+      <div class="hint">IP: ${escapeHtml(String(r.ip_address || ''))}</div>
+      <div class="hint" style="margin-top:10px"><b>Campos</b>: ${escapeHtml(fields.join(', ') || '-')}</div>
+      <div class="table-wrap" style="margin-top:10px">
+        <table class="grid-table">
+          <thead><tr><th>Antes</th><th>Depois</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><pre class="mono" style="white-space:pre-wrap;margin:0">${escapeHtml(oldV)}</pre></td>
+              <td><pre class="mono" style="white-space:pre-wrap;margin:0">${escapeHtml(newV)}</pre></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hint" style="margin-top:10px">User-Agent: ${escapeHtml(String(r.user_agent || ''))}</div>
+    `,
+    onSubmit: async () => {},
+  })
+}
+
+async function openAuditHistory({ module_name, record_id }) {
+  const mod = String(module_name || '').trim()
+  const rid = Number(record_id)
+  if (!mod || !Number.isFinite(rid)) return
+
+  const qp = new URLSearchParams({ module_name: mod, record_id: String(rid), limit: '200' })
+  const rows = await api(`/api/audit-logs?${qp.toString()}`)
+
+  const bodyRows = Array.isArray(rows) && rows.length
+    ? rows
+        .map((r) => {
+          const who = r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'
+          const tone = auditTone(r)
+          return `<tr>
+            <td>${escapeHtml(String(r.created_at || ''))}</td>
+            <td>${escapeHtml(String(who))}</td>
+            <td>${pillBadge({ label: String(r.action_type || ''), tone })}</td>
+            <td>${escapeHtml(String(r.summary || r.notes || ''))}</td>
+            <td class="actions"><button class="btn ghost small" type="button" data-act="adetail" data-id="${escapeHtml(String(r.id))}">Detalhes</button></td>
+          </tr>`
+        })
+        .join('')
+    : `<tr><td colspan="5">Nenhum evento.</td></tr>`
+
+  openDialog({
+    title: `Histórico — ${mod} #${rid}`,
+    submitLabel: 'Fechar',
+    size: 'lg',
+    bodyHtml: `
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+        <div class="hint">Mostrando os últimos 200 eventos deste registro.</div>
+        <a class="btn ghost small" href="/api/audit-logs/export.csv?${qp.toString()}" target="_blank" rel="noreferrer">Exportar CSV</a>
+      </div>
+      <div class="table-wrap" style="margin-top:10px">
+        <table class="grid-table">
+          <thead><tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Resumo</th><th class="actions"></th></tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+    `,
+    onSubmit: async () => {},
+  })
+
+  dlgBody.querySelectorAll('button[data-act="adetail"]').forEach((b) => {
+    b.onclick = () => openAuditDetail(Number(b.dataset.id))
+  })
+}
+
+function bindAuditButtons(rootEl) {
+  const root = rootEl || document
+  root.querySelectorAll('button[data-act="audit"]').forEach((b) => {
+    if (b.dataset.bound === '1') return
+    b.dataset.bound = '1'
+    b.onclick = () => {
+      const mod = String(b.dataset.module || '').trim()
+      const rid = Number(b.dataset.recordId)
+      openAuditHistory({ module_name: mod, record_id: rid })
+    }
+  })
 }
 
 function toast(title, message) {
@@ -490,6 +644,9 @@ function openDialog({ title, bodyHtml, onSubmit, submitLabel = 'Salvar', size } 
   dlg.dataset.size = size ? String(size) : ''
   dlgTitle.textContent = title
   dlgBody.innerHTML = bodyHtml
+  setupPwdToggles(dlgBody)
+  bindAuditButtons(dlgBody)
+  hydrateTraceMeta(dlgBody)
   dlgSubmit.textContent = submitLabel
   dlgForm.onsubmit = async (e) => {
     const submitterValue = String(e.submitter?.value || '')
@@ -1333,8 +1490,8 @@ async function renderCrudPage({
       const id = Number(btn.dataset.id)
       const act = btn.dataset.act
       const item = items.find((x) => x.id === id)
-      if (act === 'edit') return onEdit(item)
-      if (act === 'del') return onDelete(item)
+      if (act === 'edit') return await onEdit(item)
+      if (act === 'del') return await onDelete(item)
       if (onAction) return onAction(act, item)
     }
   })
@@ -1398,15 +1555,20 @@ async function renderSafras() {
         },
       })
     },
-    onEdit: (it) => {
+    onEdit: async (it) => {
+      const full = await api(`/api/safras/${it.id}`)
       openDialog({
         title: `Editar safra #${it.id}`,
         bodyHtml: `
           <div class="form-grid">
-            ${formField({ label: 'Safra', name: 'safra', value: it.safra, span: 'col6' })}
-            ${selectField({ label: 'Plantio', name: 'plantio', options: plantioOptions, value: it.plantio ?? plantioOptions[0]?.value, span: 'col6' })}
-            ${formField({ label: 'Data de referencia', name: 'data_referencia', type: 'date', value: it.data_referencia ?? '', span: 'col6' })}
+            ${formField({ label: 'Safra', name: 'safra', value: full.safra, span: 'col6' })}
+            ${selectField({ label: 'Plantio', name: 'plantio', options: plantioOptions, value: full.plantio ?? plantioOptions[0]?.value, span: 'col6' })}
+            ${formField({ label: 'Data de referencia', name: 'data_referencia', type: 'date', value: full.data_referencia ?? '', span: 'col6' })}
             <div class="field col12"><div class="label">Área</div><div class="hint">Campo mantido no banco por compatibilidade, mas a UI não edita.</div></div>
+            <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+              <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(full.created_at || ''))}" data-created-by="${escapeHtml(String(full.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(full.updated_at || ''))}" data-updated-by="${escapeHtml(String(full.updated_by_user_id || ''))}">Carregando...</div>
+              <button class="btn ghost small" type="button" data-act="audit" data-module="safras" data-record-id="${escapeHtml(String(it.id))}">Histórico</button>
+            </div>
           </div>`,
         onSubmit: async (obj) => {
           await api(`/api/safras/${it.id}`, {
@@ -1583,26 +1745,31 @@ async function renderTalhoes() {
         },
       })
     },
-    onEdit: (it) => {
+    onEdit: async (it) => {
+      const full = await api(`/api/talhoes/${it.id}`)
       openDialog({
         title: `Editar talhão #${it.id}`,
         bodyHtml: `
           <div class="form-grid">
-            ${formField({ label: 'Codigo', name: 'codigo', value: it.codigo, span: 'col6' })}
-            ${formField({ label: 'Local', name: 'local', value: it.local ?? '', span: 'col6' })}
-            ${formField({ label: 'Nome', name: 'nome', value: it.nome ?? '', span: 'col6' })}
-            ${formField({ label: 'Situacao', name: 'situacao', value: it.situacao ?? '', span: 'col6' })}
-            ${formField({ label: 'Hectares', name: 'hectares', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: String(it.hectares ?? ''), span: 'col6' })}
-            ${formField({ label: 'Posse', name: 'posse', value: it.posse ?? '', span: 'col6' })}
-            ${formField({ label: 'Contrato', name: 'contrato', value: it.contrato ?? '', span: 'col6' })}
-            ${formField({ label: 'Irrigacao', name: 'irrigacao', value: it.irrigacao ?? '', span: 'col4' })}
-            ${formField({ label: 'Foto (URL)', name: 'foto_url', value: it.foto_url ?? '', span: 'col8' })}
-            ${formField({ label: 'Mapa (URL)', name: 'maps_url', value: it.maps_url ?? DEFAULT_MAPS_URL, span: 'col12' })}
-            ${formField({ label: 'Tipo de solo', name: 'tipo_solo', value: it.tipo_solo ?? '', span: 'col4' })}
-            ${formField({ label: 'Calagem', name: 'calagem', value: it.calagem ?? '', span: 'col4' })}
-            ${formField({ label: 'Gessagem', name: 'gessagem', value: it.gessagem ?? '', span: 'col4' })}
-            ${formField({ label: 'Fosforo corretivo', name: 'fosforo_corretivo', value: it.fosforo_corretivo ?? '', span: 'col4' })}
-            ${textareaField({ label: 'Observacoes', name: 'observacoes', value: it.observacoes ?? '' })}
+            ${formField({ label: 'Codigo', name: 'codigo', value: full.codigo, span: 'col6' })}
+            ${formField({ label: 'Local', name: 'local', value: full.local ?? '', span: 'col6' })}
+            ${formField({ label: 'Nome', name: 'nome', value: full.nome ?? '', span: 'col6' })}
+            ${formField({ label: 'Situacao', name: 'situacao', value: full.situacao ?? '', span: 'col6' })}
+            ${formField({ label: 'Hectares', name: 'hectares', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: String(full.hectares ?? ''), span: 'col6' })}
+            ${formField({ label: 'Posse', name: 'posse', value: full.posse ?? '', span: 'col6' })}
+            ${formField({ label: 'Contrato', name: 'contrato', value: full.contrato ?? '', span: 'col6' })}
+            ${formField({ label: 'Irrigacao', name: 'irrigacao', value: full.irrigacao ?? '', span: 'col4' })}
+            ${formField({ label: 'Foto (URL)', name: 'foto_url', value: full.foto_url ?? '', span: 'col8' })}
+            ${formField({ label: 'Mapa (URL)', name: 'maps_url', value: full.maps_url ?? DEFAULT_MAPS_URL, span: 'col12' })}
+            ${formField({ label: 'Tipo de solo', name: 'tipo_solo', value: full.tipo_solo ?? '', span: 'col4' })}
+            ${formField({ label: 'Calagem', name: 'calagem', value: full.calagem ?? '', span: 'col4' })}
+            ${formField({ label: 'Gessagem', name: 'gessagem', value: full.gessagem ?? '', span: 'col4' })}
+            ${formField({ label: 'Fosforo corretivo', name: 'fosforo_corretivo', value: full.fosforo_corretivo ?? '', span: 'col4' })}
+            ${textareaField({ label: 'Observacoes', name: 'observacoes', value: full.observacoes ?? '' })}
+            <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+              <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(full.created_at || ''))}" data-created-by="${escapeHtml(String(full.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(full.updated_at || ''))}" data-updated-by="${escapeHtml(String(full.updated_by_user_id || ''))}">Carregando...</div>
+              <button class="btn ghost small" type="button" data-act="audit" data-module="talhoes" data-record-id="${escapeHtml(String(it.id))}">Histórico</button>
+            </div>
           </div>`,
         onSubmit: async (obj) => {
           await api(`/api/talhoes/${it.id}`, {
@@ -1742,23 +1909,28 @@ async function renderDestinos() {
       }
       refreshMaps()
     },
-    onEdit: (it) => {
+    onEdit: async (it) => {
+      const full = await api(`/api/destinos/${it.id}`)
       openDialog({
         title: `Editar destino #${it.id}`,
         bodyHtml: `
           <div class="form-grid">
-            ${formField({ label: 'Codigo', name: 'codigo', value: it.codigo, span: 'col6' })}
-            ${formField({ label: 'Nome', name: 'local', value: it.local, span: 'col6' })}
-            ${formField({ label: 'Mapa (URL)', name: 'maps_url', value: it.maps_url ?? '', span: 'col12' })}
-            <div class="field col12"><div class="label">Mapa</div><div class="hint">${it.maps_url ? `<a class="btn ghost" target="_blank" rel="noreferrer" href="${escapeHtml(it.maps_url)}">Abrir mapa</a>` : 'Sem mapa cadastrado.'}</div></div>
+            ${formField({ label: 'Codigo', name: 'codigo', value: full.codigo, span: 'col6' })}
+            ${formField({ label: 'Nome', name: 'local', value: full.local, span: 'col6' })}
+            ${formField({ label: 'Mapa (URL)', name: 'maps_url', value: full.maps_url ?? '', span: 'col12' })}
+            <div class="field col12"><div class="label">Mapa</div><div class="hint">${full.maps_url ? `<a class="btn ghost" target="_blank" rel="noreferrer" href="${escapeHtml(full.maps_url)}">Abrir mapa</a>` : 'Sem mapa cadastrado.'}</div></div>
             <div class="field col12">
               <div class="label">Ilustracao (Google Maps)</div>
               <div class="hint" id="destMapHint">Cole um link do Google Maps com coordenadas (ex: contém <span class="kbd">@lat,lng</span>) para mostrar o mapa e sugerir a distância.</div>
               <div class="mini-map" id="destMapPrev" style="margin-top:8px;display:none"><iframe title="Mapa" loading="lazy"></iframe></div>
               <div class="hint" style="margin-top:8px">Distância sugerida (linha reta): <b id="destDistSug">-</b> km</div>
             </div>
-            ${formField({ label: 'Distancia (km)', name: 'distancia_km', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: String(it.distancia_km ?? ''), span: 'col6' })}
-            ${textareaField({ label: 'Observacoes', name: 'observacoes', value: it.observacoes ?? '' })}
+            ${formField({ label: 'Distancia (km)', name: 'distancia_km', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: String(full.distancia_km ?? ''), span: 'col6' })}
+            ${textareaField({ label: 'Observacoes', name: 'observacoes', value: full.observacoes ?? '' })}
+            <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+              <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(full.created_at || ''))}" data-created-by="${escapeHtml(String(full.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(full.updated_at || ''))}" data-updated-by="${escapeHtml(String(full.updated_by_user_id || ''))}">Carregando...</div>
+              <button class="btn ghost small" type="button" data-act="audit" data-module="destinos" data-record-id="${escapeHtml(String(it.id))}">Histórico</button>
+            </div>
           </div>`,
         onSubmit: async (obj) => {
           await api(`/api/destinos/${it.id}`, {
@@ -1887,18 +2059,23 @@ async function renderMotoristas() {
         },
       })
     },
-    onEdit: (it) => {
+    onEdit: async (it) => {
+      const full = await api(`/api/motoristas/${it.id}`)
       openDialog({
         title: `Editar motorista #${it.id}`,
         bodyHtml: `
           <div class="form-grid">
-            ${formField({ label: 'Nome', name: 'nome', value: it.nome, span: 'col6' })}
-            ${formField({ label: 'Placa', name: 'placa', value: it.placa ?? '', span: 'col6' })}
-            ${formField({ label: 'CPF/RG', name: 'cpf', value: it.cpf ?? '', span: 'col6' })}
-            ${formField({ label: 'Banco', name: 'banco', value: it.banco ?? '', span: 'col6' })}
-            ${formField({ label: 'PIX/Conta', name: 'pix_conta', value: it.pix_conta ?? '', span: 'col6' })}
-            ${formField({ label: 'Tipo veiculo', name: 'tipo_veiculo', value: it.tipo_veiculo ?? '', span: 'col6' })}
-            ${formField({ label: 'Capacidade (kg)', name: 'capacidade_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: String(it.capacidade_kg ?? ''), span: 'col6' })}
+            ${formField({ label: 'Nome', name: 'nome', value: full.nome, span: 'col6' })}
+            ${formField({ label: 'Placa', name: 'placa', value: full.placa ?? '', span: 'col6' })}
+            ${formField({ label: 'CPF/RG', name: 'cpf', value: full.cpf ?? '', span: 'col6' })}
+            ${formField({ label: 'Banco', name: 'banco', value: full.banco ?? '', span: 'col6' })}
+            ${formField({ label: 'PIX/Conta', name: 'pix_conta', value: full.pix_conta ?? '', span: 'col6' })}
+            ${formField({ label: 'Tipo veiculo', name: 'tipo_veiculo', value: full.tipo_veiculo ?? '', span: 'col6' })}
+            ${formField({ label: 'Capacidade (kg)', name: 'capacidade_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: String(full.capacidade_kg ?? ''), span: 'col6' })}
+            <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+              <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(full.created_at || ''))}" data-created-by="${escapeHtml(String(full.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(full.updated_at || ''))}" data-updated-by="${escapeHtml(String(full.updated_by_user_id || ''))}">Carregando...</div>
+              <button class="btn ghost small" type="button" data-act="audit" data-module="motoristas" data-record-id="${escapeHtml(String(it.id))}">Histórico</button>
+            </div>
           </div>`,
         onSubmit: async (obj) => {
           await api(`/api/motoristas/${it.id}`, {
@@ -2308,6 +2485,12 @@ async function renderUsuarios() {
                 </details>
                 <div class="hint" style="margin-top:8px">As permissões são aplicadas no backend via <code class="mono">can(user,module,action)</code>. Overrides só valem após clicar <b>Salvar</b> neste usuário.</div>
               </div>
+
+              ${sectionTitle('Rastreabilidade')}
+              <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+                <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(u.created_at || ''))}" data-created-by="${escapeHtml(String(u.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(u.updated_at || ''))}" data-updated-by="${escapeHtml(String(u.updated_by_user_id || ''))}">Carregando...</div>
+                <button class="btn ghost small" type="button" data-act="audit" data-module="usuarios" data-record-id="${escapeHtml(String(u.id))}">Histórico</button>
+              </div>
             </div>
           `,
           onSubmit: async (obj) => {
@@ -2435,6 +2618,7 @@ async function renderPerfis() {
 
   const roles = await api('/api/acl/roles')
   const roleOptions = (roles || []).map((r) => ({ value: r.name, label: r.name }))
+  const roleIdByName = new Map((roles || []).map((r) => [String(r.name), Number(r.id)]))
   const firstRole = roleOptions[0]?.value || ''
 
   setView(`
@@ -2460,6 +2644,7 @@ async function renderPerfis() {
             ${selectField({ label: 'Perfil', name: 'role', options: roleOptions.length ? roleOptions : [{ value: '', label: '-' }], value: firstRole, span: 'field' }).replace('field field', 'field')}
           </form>
           <div style="display:flex;gap:10px;align-items:flex-end">
+            <button class="btn ghost" id="btnRoleHist" type="button">Histórico</button>
             <button class="btn ghost" id="btnReload" type="button">Recarregar</button>
           </div>
         </div>
@@ -2539,6 +2724,18 @@ async function renderPerfis() {
 
   const btnReload = view.querySelector('#btnReload')
   if (btnReload) btnReload.onclick = loadPerms
+  const btnRoleHist = view.querySelector('#btnRoleHist')
+  if (btnRoleHist) {
+    btnRoleHist.onclick = async () => {
+      const roleName = String(new FormData(roleForm).get('role') || '').trim()
+      const roleId = roleIdByName.get(roleName)
+      if (!Number.isFinite(roleId)) {
+        toast('Erro', 'Selecione um perfil.')
+        return
+      }
+      await openAuditHistory({ module_name: 'permissoes', record_id: roleId })
+    }
+  }
   const selRole = roleForm.querySelector('select[name="role"]')
   if (selRole) selRole.onchange = loadPerms
 
@@ -2608,12 +2805,21 @@ async function renderTiposPlantio() {
         },
       })
     },
-    onEdit: (item) => {
+    onEdit: async (item) => {
       if (!item) return
       const id = Number(item.id)
+      const full = await api(`/api/tipos-plantio/${id}`)
       openDialog({
         title: `Editar tipo #${id}`,
-        bodyHtml: `<div class="form-grid">${formField({ label: 'Nome', name: 'nome', value: item.nome, span: 'col6' })}</div>`,
+        bodyHtml: `
+          <div class="form-grid">
+            ${formField({ label: 'Nome', name: 'nome', value: full.nome, span: 'col6' })}
+            <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+              <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(full.created_at || ''))}" data-created-by="${escapeHtml(String(full.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(full.updated_at || ''))}" data-updated-by="${escapeHtml(String(full.updated_by_user_id || ''))}">Carregando...</div>
+              <button class="btn ghost small" type="button" data-act="audit" data-module="tipos-plantio" data-record-id="${escapeHtml(String(id))}">Histórico</button>
+            </div>
+          </div>
+        `,
         onSubmit: async (obj) => {
           await api(`/api/tipos-plantio/${id}`, { method: 'PUT', body: { nome: obj.nome } })
           toast('Atualizado', 'Tipo atualizado.')
@@ -2645,10 +2851,15 @@ async function renderFretes() {
 
   function openUpsertDialog({
     title,
+    id,
     safra_id,
     motorista_id,
     destino_id,
     valor_por_saca,
+    created_at,
+    created_by_user_id,
+    updated_at,
+    updated_by_user_id,
   }) {
     openDialog({
       title: title || 'Definir frete (upsert)',
@@ -2660,6 +2871,15 @@ async function renderFretes() {
           ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: destino_id ?? destinoOptions[0]?.value, span: 'col6' })}
           ${formField({ label: 'Valor por saca (R$)', name: 'valor_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: valor_por_saca ?? '4,50', span: 'col6' })}
           <div class="field col12"><div class="hint">Ao salvar, o sistema recalcula o frete nas colheitas já lançadas que baterem (safra, motorista, destino).</div></div>
+
+          ${
+            id
+              ? `<div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+                  <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(created_at || ''))}" data-created-by="${escapeHtml(String(created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(updated_at || ''))}" data-updated-by="${escapeHtml(String(updated_by_user_id || ''))}">Carregando...</div>
+                  <button class="btn ghost small" type="button" data-act="audit" data-module="fretes" data-record-id="${escapeHtml(String(id))}">Histórico</button>
+                </div>`
+              : ''
+          }
         </div>`,
       onSubmit: async (obj) => {
         const valor = parseNumberPt(obj.valor_por_saca)
@@ -2991,10 +3211,15 @@ async function renderFretes() {
       if (!item) return
       openUpsertDialog({
         title: `Editar frete #${item.id}`,
+        id: item.id,
         safra_id: item.safra_id,
         motorista_id: item.motorista_id,
         destino_id: item.destino_id,
         valor_por_saca: fmtNum(Number(item.valor_por_saca ?? 0), 2),
+        created_at: item.created_at,
+        created_by_user_id: item.created_by_user_id,
+        updated_at: item.updated_at,
+        updated_by_user_id: item.updated_by_user_id,
       })
     },
     onDelete: async (item) => {
@@ -3158,17 +3383,18 @@ async function renderRegrasDestino() {
 
   setView(`
     <section class="panel">
-      <div class="panel-head">
-           <div>
-             <div class="panel-title">Regras do destino (por safra)</div>
-           <div class="panel-sub">Limites de qualidade e tabela de umidade.</div>
-           </div>
+       <div class="panel-head">
+            <div>
+              <div class="panel-title">Regras do destino (por safra)</div>
+            <div class="panel-sub">Limites de qualidade e tabela de umidade.</div>
+            </div>
            <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn ghost" id="btnBackRules">Voltar</button>
-          <button class="btn ghost" id="btnCopyRule">Copiar regras</button>
-          <button class="btn" id="btnSalvar">Salvar</button>
-        </div>
-      </div>
+           <button class="btn ghost" id="btnBackRules">Voltar</button>
+           <button class="btn ghost" id="btnCopyRule">Copiar regras</button>
+           <button class="btn ghost" id="btnHistRule">Histórico</button>
+           <button class="btn" id="btnSalvar">Salvar</button>
+         </div>
+       </div>
       <div class="panel-body">
         <form class="form-grid rule-form" id="ruleForm">
           ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safraId, span: 'col6' })}
@@ -3179,6 +3405,13 @@ async function renderRegrasDestino() {
            <div class="field col6" style="align-self:end">
              <div class="label">Status</div>
              <div class="hint" id="ruleIdentityHint">${escapeHtml(isNew ? 'Nova regra' : `Editando regra #${editId}`)}</div>
+           </div>
+
+           <div class="field col12" id="ruleTraceWrap" style="display:none;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+             <div class="hint" id="ruleTrace" data-role="trace" data-created-at="" data-created-by="" data-updated-at="" data-updated-by="">Carregando...</div>
+             <div style="display:flex;gap:10px;flex-wrap:wrap">
+               <button class="btn ghost small" type="button" id="btnHistContrato">Histórico contrato</button>
+             </div>
            </div>
 
            <div class="field col12">
@@ -3232,11 +3465,24 @@ async function renderRegrasDestino() {
   const btnAddContrato = view.querySelector('#btnAddContrato')
   const btnCopyRule = view.querySelector('#btnCopyRule')
   const btnBackRules = view.querySelector('#btnBackRules')
+  const btnHistRule = view.querySelector('#btnHistRule')
+  const ruleTraceWrap = view.querySelector('#ruleTraceWrap')
+  const ruleTrace = view.querySelector('#ruleTrace')
+  const btnHistContrato = view.querySelector('#btnHistContrato')
 
   const identityHint = view.querySelector('#ruleIdentityHint')
   let conflictBlock = false
   let currentUsedCount = 0
   const currentId = !isNew && Number.isFinite(editId) && editId > 0 ? editId : null
+
+  if (btnHistRule) {
+    btnHistRule.disabled = !currentId
+    if (!currentId) btnHistRule.style.display = 'none'
+    btnHistRule.onclick = async () => {
+      if (!currentId) return
+      await openAuditHistory({ module_name: 'regras-destino', record_id: currentId })
+    }
+  }
 
   if (btnBackRules) {
     btnBackRules.onclick = () => {
@@ -3311,6 +3557,7 @@ async function renderRegrasDestino() {
 
   async function load() {
     let regra
+    let contratoId = null
     if (currentId) {
       regra = await api(`/api/destino-regras/plantio/${currentId}`)
       // fixar a identidade ao id carregado (nao alternar registro durante edicao)
@@ -3380,6 +3627,25 @@ async function renderRegrasDestino() {
         tipo_plantio: String(regra?.tipo_plantio ?? String(new FormData(form).get('tipo_plantio') || '')),
       }).toString()}`,
     )
+
+    contratoId = contrato?.id ? Number(contrato.id) : null
+    if (btnHistContrato) {
+      btnHistContrato.disabled = !(Number.isFinite(contratoId) && contratoId > 0)
+      btnHistContrato.onclick = async () => {
+        if (!Number.isFinite(contratoId) || contratoId <= 0) return
+        await openAuditHistory({ module_name: 'contratos-silo', record_id: contratoId })
+      }
+    }
+
+    if (ruleTraceWrap && ruleTrace) {
+      const show = Boolean(regra && (regra.created_at || regra.updated_at || regra.created_by_user_id || regra.updated_by_user_id))
+      ruleTraceWrap.style.display = show ? 'flex' : 'none'
+      ruleTrace.dataset.createdAt = String(regra?.created_at || '')
+      ruleTrace.dataset.createdBy = String(regra?.created_by_user_id || '')
+      ruleTrace.dataset.updatedAt = String(regra?.updated_at || '')
+      ruleTrace.dataset.updatedBy = String(regra?.updated_by_user_id || '')
+      await hydrateTraceMeta(ruleTraceWrap)
+    }
 
     if (contratoEl) {
       const faixas = Array.isArray(contrato?.faixas) ? contrato.faixas : []
@@ -4148,6 +4414,7 @@ async function renderColheitaBase(variant) {
         : isMotoristaUser
           ? `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button></td>`
           : `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button>
+              <button class="icon-btn" data-act="hist" data-id="${v.id}" title="Histórico" aria-label="Histórico">${iconSvg('more')}</button>
               <button class="icon-btn danger" data-act="del" data-id="${v.id}" title="Excluir" aria-label="Excluir">${iconSvg('trash')}</button>
             </td>`
 
@@ -4246,6 +4513,10 @@ async function renderColheitaBase(variant) {
           await api(`/api/viagens/${id}`, { method: 'DELETE' })
           toast('Excluída', 'Viagem removida.')
           refreshList()
+          return
+        }
+        if (act === 'hist') {
+          await openAuditHistory({ module_name: 'colheita', record_id: id })
           return
         }
         if (act === 'edit') {
@@ -4467,7 +4738,8 @@ async function renderColheitaBase(variant) {
         }
         ${
           isEdit
-            ? `<div style="display:flex;justify-content:flex-end;margin:0 0 10px">
+            ? `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px">
+                 <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(viagem?.created_at || ''))}" data-created-by="${escapeHtml(String(viagem?.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(viagem?.updated_at || ''))}" data-updated-by="${escapeHtml(String(viagem?.updated_by_user_id || ''))}">Carregando...</div>
                  <button class="btn ghost small" type="button" id="btnHist">Histórico</button>
                </div>`
             : ''
@@ -4696,39 +4968,7 @@ async function renderColheitaBase(variant) {
 
     const btnHist = dlgBody.querySelector('#btnHist')
     if (btnHist && isEdit && viagem?.id) {
-      btnHist.onclick = async () => {
-        const rows = await api(
-          `/api/audit-logs?module_name=colheita&record_id=${encodeURIComponent(String(viagem.id))}&limit=200`,
-        ).catch(() => [])
-
-        openDialog({
-          title: `Histórico (colheita #${viagem.id})`,
-          submitLabel: 'Fechar',
-          size: 'lg',
-          bodyHtml: `
-            <div class="table-wrap">
-              <table class="grid-table">
-                <thead><tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Resumo</th></tr></thead>
-                <tbody>
-                  ${(Array.isArray(rows) ? rows : [])
-                    .map((r) => {
-                      const who = r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'
-                      return `<tr>
-                        <td>${escapeHtml(String(r.created_at || ''))}</td>
-                        <td>${escapeHtml(String(who || '-'))}</td>
-                        <td><code class="mono">${escapeHtml(String(r.action_type || ''))}</code></td>
-                        <td>${escapeHtml(String(r.summary || ''))}</td>
-                      </tr>`
-                    })
-                    .join('') || '<tr><td colspan="4">Sem eventos.</td></tr>'}
-                </tbody>
-              </table>
-            </div>
-            <div class="hint" style="margin-top:10px">Para detalhes completos, use a tela <span class="kbd">Auditoria</span>.</div>
-          `,
-          onSubmit: async () => {},
-        })
-      }
+      btnHist.onclick = () => openAuditHistory({ module_name: 'colheita', record_id: Number(viagem.id) })
     }
 
     const inputFicha = dlgForm.querySelector('input[name="ficha"]')
@@ -6467,7 +6707,7 @@ async function renderAreaColhida() {
           <td><span data-act="area-ha">${fmtNum(areaColhidaHa, 2)}</span> ha</td>
           <td data-sort="${escapeHtml(String(sacas))}">${fmtNum(sacas, 2)}</td>
           <td><span data-act="prod-adj">${fmtNum(prodAdj, 2)}</span> sc/ha</td>
-          <td></td>
+          <td class="actions"><button class="btn ghost small" type="button" data-act="ac-hist" data-talhao="${escapeHtml(String(t.talhao_id))}" data-nome="${escapeHtml(String(t.talhao_nome || ''))}">Histórico</button></td>
         </tr>`
       })
       .join('')
@@ -6517,6 +6757,39 @@ async function renderAreaColhida() {
       }, 250)
 
       updateRowUi(el)
+    })
+
+    body.querySelectorAll('button[data-act="ac-hist"]').forEach((b) => {
+      b.onclick = async () => {
+        const talhao_id = Number(b.dataset.talhao)
+        const name = String(b.dataset.nome || '').trim() || `#${talhao_id}`
+        if (!Number.isFinite(talhao_id) || talhao_id <= 0) return
+
+        try {
+          const row = await api(
+            `/api/talhao-safra/one?${new URLSearchParams({
+              safra_id: String(safra_id),
+              talhao_id: String(talhao_id),
+            }).toString()}`,
+          )
+
+          openDialog({
+            title: `Área colhida — ${name}`,
+            submitLabel: 'Fechar',
+            bodyHtml: `
+              <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(row.created_at || ''))}" data-created-by="${escapeHtml(String(row.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(row.updated_at || ''))}" data-updated-by="${escapeHtml(String(row.updated_by_user_id || ''))}">Carregando...</div>
+              <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn" type="button" data-act="audit" data-module="area-colhida" data-record-id="${escapeHtml(String(row.id))}">Abrir histórico</button>
+              </div>
+              <div class="hint" style="margin-top:10px">Histórico do percentual de área colhida (talhão x safra).</div>
+            `,
+            onSubmit: async () => {},
+          })
+        } catch (e) {
+          const msg = String(e?.message || e)
+          toast('Histórico', msg.includes('nao encontrada') ? 'Ainda não há alterações registradas.' : msg)
+        }
+      }
     })
   }
 
@@ -6710,6 +6983,11 @@ async function renderQuitacaoMotoristas() {
               </div>
 
               ${formField({ label: 'Observacoes', name: 'observacoes', value: q.observacoes || '', span: 'col12' })}
+
+              <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+                <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(q.created_at || ''))}" data-created-by="${escapeHtml(String(q.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(q.updated_at || ''))}" data-updated-by="${escapeHtml(String(q.updated_by_user_id || ''))}">Carregando...</div>
+                <button class="btn ghost small" type="button" data-act="audit" data-module="quitacao-motoristas" data-record-id="${escapeHtml(String(id))}">Histórico</button>
+              </div>
         </div>
 
       `,
@@ -6999,7 +7277,13 @@ async function renderAuditoria() {
     { value: 'destinos', label: 'Destinos' },
     { value: 'motoristas', label: 'Motoristas' },
     { value: 'fretes', label: 'Fretes' },
+    { value: 'regras-destino', label: 'Regras do destino' },
+    { value: 'contratos-silo', label: 'Contratos do silo' },
+    { value: 'tipos-plantio', label: 'Tipos de plantio' },
+    { value: 'area-colhida', label: 'Área colhida' },
+    { value: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { value: 'usuarios', label: 'Usuários' },
+    { value: 'permissoes', label: 'Permissões' },
     { value: 'auditoria', label: 'Auditoria' },
     { value: 'auth', label: 'Auth' },
   ]
@@ -7078,6 +7362,11 @@ async function renderAuditoria() {
             <button class="btn ghost" id="btnToday">Hoje</button>
             <button class="btn ghost" id="btn7">7d</button>
             <button class="btn ghost" id="btn30">30d</button>
+            <button class="btn ghost" id="btnOnlyLogins">Logins</button>
+            <button class="btn ghost" id="btnOnlyPerms">Permissões</button>
+            <button class="btn ghost" id="btnOnlyColheita">Colheita</button>
+            <button class="btn ghost" id="btnOnlyUsers">Usuários</button>
+            <button class="btn ghost" id="btnExport">CSV</button>
             <button class="btn" id="btnFetch">Filtrar</button>
           </div>
         </div>
@@ -7158,7 +7447,7 @@ async function renderAuditoria() {
           <td>${escapeHtml(String(who || '-'))}</td>
           <td><code class="mono">${escapeHtml(String(r.module_name || ''))}</code></td>
           <td>${escapeHtml(r.record_id == null ? '-' : String(r.record_id))}</td>
-          <td><code class="mono">${escapeHtml(String(r.action_type || ''))}</code></td>
+          <td>${pillBadge({ label: String(r.action_type || ''), tone: auditTone(r) })}</td>
           <td>${escapeHtml(String(r.summary || ''))}</td>
           <td>${escapeHtml(String(r.ip_address || ''))}</td>
         </tr>`
@@ -7166,49 +7455,57 @@ async function renderAuditoria() {
       .join('')
 
     body.querySelectorAll('button[data-act="adetail"]').forEach((b) => {
-      b.onclick = async () => {
-        const id = Number(b.dataset.id)
-        const r = await api(`/api/audit-logs/${id}`)
-        const fields = (() => {
-          try {
-            const arr = r.changed_fields_json ? JSON.parse(r.changed_fields_json) : []
-            return Array.isArray(arr) ? arr : []
-          } catch {
-            return []
-          }
-        })()
-        const oldV = r.old_values_json ? String(r.old_values_json) : ''
-        const newV = r.new_values_json ? String(r.new_values_json) : ''
-        openDialog({
-          title: `Auditoria #${id}`,
-          submitLabel: 'Fechar',
-          size: 'lg',
-          bodyHtml: `
-            <div class="hint">${escapeHtml(String(r.created_at || ''))} — <b>${escapeHtml(String(r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'))}</b></div>
-            <div class="hint">Módulo: <code class="mono">${escapeHtml(String(r.module_name || ''))}</code> | Registro: <b>${escapeHtml(r.record_id == null ? '-' : String(r.record_id))}</b> | Ação: <code class="mono">${escapeHtml(String(r.action_type || ''))}</code></div>
-            <div class="hint">IP: ${escapeHtml(String(r.ip_address || ''))}</div>
-            <div class="hint" style="margin-top:10px"><b>Campos</b>: ${escapeHtml(fields.join(', ') || '-')}</div>
-            <div class="table-wrap" style="margin-top:10px">
-              <table class="grid-table">
-                <thead><tr><th>Antes</th><th>Depois</th></tr></thead>
-                <tbody>
-                  <tr>
-                    <td><pre class="mono" style="white-space:pre-wrap;margin:0">${escapeHtml(oldV)}</pre></td>
-                    <td><pre class="mono" style="white-space:pre-wrap;margin:0">${escapeHtml(newV)}</pre></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="hint" style="margin-top:10px">User-Agent: ${escapeHtml(String(r.user_agent || ''))}</div>
-          `,
-          onSubmit: async () => {},
-        })
-      }
+      b.onclick = () => openAuditDetail(Number(b.dataset.id))
     })
   }
 
   const btnFetch = view.querySelector('#btnFetch')
   if (btnFetch) btnFetch.onclick = fetchLogs
+
+  const btnExport = view.querySelector('#btnExport')
+  if (btnExport) {
+    btnExport.onclick = () => {
+      const qp = new URLSearchParams({ limit: '2000' })
+      if (elDe?.value) qp.set('de', `${elDe.value} 00:00:00`)
+      if (elAte?.value) qp.set('ate', `${elAte.value} 23:59:59`)
+      if (elUser?.value) qp.set('user_id', String(elUser.value))
+      if (elMod?.value) qp.set('module_name', String(elMod.value))
+      if (elAct?.value) qp.set('action_type', String(elAct.value))
+      if (elQ?.value) qp.set('q', String(elQ.value).trim())
+      if (elRid?.value) qp.set('record_id', String(elRid.value).trim())
+      window.open(`/api/audit-logs/export.csv?${qp.toString()}`, '_blank', 'noopener')
+    }
+  }
+
+  const btnOnlyLogins = view.querySelector('#btnOnlyLogins')
+  if (btnOnlyLogins) {
+    btnOnlyLogins.onclick = () => {
+      if (elMod) elMod.value = 'auth'
+      if (elAct) elAct.value = ''
+      fetchLogs()
+    }
+  }
+  const btnOnlyPerms = view.querySelector('#btnOnlyPerms')
+  if (btnOnlyPerms) {
+    btnOnlyPerms.onclick = () => {
+      if (elAct) elAct.value = 'permission_change'
+      fetchLogs()
+    }
+  }
+  const btnOnlyColheita = view.querySelector('#btnOnlyColheita')
+  if (btnOnlyColheita) {
+    btnOnlyColheita.onclick = () => {
+      if (elMod) elMod.value = 'colheita'
+      fetchLogs()
+    }
+  }
+  const btnOnlyUsers = view.querySelector('#btnOnlyUsers')
+  if (btnOnlyUsers) {
+    btnOnlyUsers.onclick = () => {
+      if (elMod) elMod.value = 'usuarios'
+      fetchLogs()
+    }
+  }
 
   // Enter in search triggers
   ;[elQ, elRid].forEach((el) => {

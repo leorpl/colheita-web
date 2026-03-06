@@ -61,7 +61,7 @@ talhoesRouter.delete(
   const exists = talhaoRepo.get(id)
   if (!exists) throw notFound('Talhao nao encontrado')
   auditService.log(req, { module_name: 'talhoes', record_id: id, action_type: 'delete', old_values: exists })
-  talhaoRepo.remove(id)
+  talhaoRepo.remove(id, { user_id: req.user?.id })
   res.status(204).send()
   },
 )

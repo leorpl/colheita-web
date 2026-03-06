@@ -474,7 +474,19 @@ export function migrate() {
   }
 
   // Soft delete (apenas para tabelas onde faz sentido manter historico).
-  const softDeleteTables = ['usuario']
+  // Nota: algumas tabelas possuem UNIQUE constraints no schema original; soft delete
+  // mantem a linha (logo nao libera o valor unico). Isso e intencional para nao
+  // quebrar compatibilidade sem rebuild de tabela.
+  const softDeleteTables = [
+    'usuario',
+    'safra',
+    'destino',
+    'talhao',
+    'motorista',
+    'viagem',
+    'plantio_tipo',
+    'motorista_quitacao',
+  ]
   for (const t of softDeleteTables) {
     if (!hasColumn(t, 'deleted_at')) {
       try {

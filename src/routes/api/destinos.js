@@ -61,7 +61,7 @@ destinosRouter.delete(
   const exists = destinoRepo.get(id)
   if (!exists) throw notFound('Destino nao encontrado')
   auditService.log(req, { module_name: 'destinos', record_id: id, action_type: 'delete', old_values: exists })
-  destinoRepo.remove(id)
+  destinoRepo.remove(id, { user_id: req.user?.id })
   res.status(204).send()
   },
 )

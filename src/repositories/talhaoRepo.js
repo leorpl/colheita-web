@@ -2,10 +2,10 @@ import { db } from '../db/db.js'
 
 export const talhaoRepo = {
   list() {
-    return db.prepare('SELECT * FROM talhao ORDER BY id DESC').all()
+    return db.prepare('SELECT * FROM talhao WHERE deleted_at IS NULL ORDER BY id DESC').all()
   },
   get(id) {
-    return db.prepare('SELECT * FROM talhao WHERE id = ?').get(id)
+    return db.prepare('SELECT * FROM talhao WHERE id = ? AND deleted_at IS NULL').get(id)
   },
   create(data, { user_id } = {}) {
     const info = db
@@ -31,11 +31,18 @@ export const talhaoRepo = {
             posse=@posse, contrato=@contrato, observacoes=@observacoes,
             irrigacao=@irrigacao, foto_url=@foto_url, maps_url=@maps_url, tipo_solo=@tipo_solo, calagem=@calagem, gessagem=@gessagem, fosforo_corretivo=@fosforo_corretivo,
             updated_by_user_id=@updated_by_user_id, updated_at=datetime('now')
-       WHERE id=@id`,
+        WHERE id=@id AND deleted_at IS NULL`,
     ).run({ ...data, id, updated_by_user_id: user_id ?? null })
     return this.get(id)
   },
-  remove(id) {
-    return db.prepare('DELETE FROM talhao WHERE id=?').run(id)
+  remove(id, { user_id } = {}) {
+    return db
+      .prepare(
+        `UPDATE talhao
+         SET deleted_at=datetime('now'), deleted_by_user_id=@deleted_by_user_id,
+             updated_by_user_id=@updated_by_user_id, updated_at=datetime('now')
+         WHERE id=@id AND deleted_at IS NULL`,
+      )
+      .run({ id, deleted_by_user_id: user_id ?? null, updated_by_user_id: user_id ?? null })
   },
 }

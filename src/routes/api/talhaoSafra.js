@@ -5,6 +5,8 @@ import { requirePerm } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { TalhaoSafraSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
+import { z } from 'zod'
+import { notFound } from '../../errors.js'
 
 export const talhaoSafraRouter = Router()
 
@@ -16,6 +18,22 @@ talhaoSafraRouter.get(
   validateQuery(ListQuery),
   (req, res) => {
   res.json(talhaoSafraRepo.listBySafra({ safra_id: req.query.safra_id }))
+  },
+)
+
+const OneQuery = z.object({
+  safra_id: z.coerce.number().int().positive(),
+  talhao_id: z.coerce.number().int().positive(),
+})
+
+talhaoSafraRouter.get(
+  '/one',
+  requirePerm(Modules.AREA_COLHIDA, Actions.VIEW),
+  validateQuery(OneQuery),
+  (req, res) => {
+    const row = talhaoSafraRepo.get({ safra_id: req.query.safra_id, talhao_id: req.query.talhao_id })
+    if (!row) throw notFound('Area colhida nao encontrada')
+    res.json(row)
   },
 )
 

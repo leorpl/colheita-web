@@ -28,8 +28,8 @@ aclRouter.post('/roles', validateBody(CreateRoleBody), (req, res) => {
   const roleId = aclRepo.createRole(req.body.name)
   if (!roleId) throw notFound('Nao foi possivel criar role')
   auditService.log(req, {
-    module_name: 'usuarios',
-    record_id: null,
+    module_name: 'permissoes',
+    record_id: roleId,
     action_type: 'permission_change',
     notes: `role_create ${String(req.body.name || '').trim()}`,
   })
@@ -65,8 +65,8 @@ aclRouter.put(
     if (!after) throw notFound('Role nao encontrada')
 
     auditService.log(req, {
-      module_name: 'usuarios',
-      record_id: null,
+      module_name: 'permissoes',
+      record_id: Number(aclRepo.getRoleIdByName(req.params.role) || null),
       action_type: 'permission_change',
       old_values: { role: req.params.role, permissions: before },
       new_values: { role: req.params.role, permissions: after },
@@ -90,8 +90,8 @@ aclRouter.post(
     if (!after) throw notFound('Role origem nao encontrada')
 
     auditService.log(req, {
-      module_name: 'usuarios',
-      record_id: null,
+      module_name: 'permissoes',
+      record_id: Number(aclRepo.getRoleIdByName(req.body.to_name) || null),
       action_type: 'permission_change',
       old_values: { role: req.params.role, permissions: before },
       new_values: { role: req.body.to_name, permissions: after },
@@ -129,7 +129,7 @@ aclRouter.put(
     if (!after) throw notFound('Usuario nao encontrado')
 
     auditService.log(req, {
-      module_name: 'usuarios',
+      module_name: 'permissoes',
       record_id: user_id,
       action_type: 'permission_change',
       old_values: before,
@@ -153,7 +153,7 @@ aclRouter.delete(
     const after = aclRepo.getUserPermissionOverrides(user_id)
 
     auditService.log(req, {
-      module_name: 'usuarios',
+      module_name: 'permissoes',
       record_id: user_id,
       action_type: 'permission_change',
       old_values: before,

@@ -50,7 +50,8 @@ export const freteRepo = {
            updated_by_user_id = COALESCE(@updated_by_user_id, updated_by_user_id)
        WHERE safra_id = @safra_id
          AND motorista_id = @motorista_id
-         AND destino_id = @destino_id`,
+         AND destino_id = @destino_id
+         AND deleted_at IS NULL`,
     ).run({ safra_id, motorista_id, destino_id, valor: Number(valor_por_saca), updated_by_user_id: user_id ?? null })
 
     return db
