@@ -18,6 +18,38 @@ relatoriosRouter.get(
   },
 )
 
+relatoriosRouter.get(
+  '/colheitas-completo.xlsx',
+  requirePerm(Modules.RELATORIOS, Actions.VIEW),
+  validateQuery(ColheitaQuery),
+  (req, res) => {
+    const buf = relatoriosService.colheitasCompletoXlsx(req.query)
+    const safra = req.query?.safra_id ? `-safra-${req.query.safra_id}` : ''
+    const de = req.query?.de ? `-${req.query.de}` : ''
+    const ate = req.query?.ate ? `-${req.query.ate}` : ''
+    const name = `colheitas-completo${safra}${de}${ate}.xlsx`
+    res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('content-disposition', `attachment; filename="${name}"`)
+    res.send(buf)
+  },
+)
+
+relatoriosRouter.get(
+  '/viagens-bruto.xlsx',
+  requirePerm(Modules.RELATORIOS, Actions.VIEW),
+  validateQuery(ColheitaQuery),
+  (req, res) => {
+    const buf = relatoriosService.viagensBrutoXlsx(req.query)
+    const safra = req.query?.safra_id ? `-safra-${req.query.safra_id}` : ''
+    const de = req.query?.de ? `-${req.query.de}` : ''
+    const ate = req.query?.ate ? `-${req.query.ate}` : ''
+    const name = `viagens-bruto${safra}${de}${ate}.xlsx`
+    res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('content-disposition', `attachment; filename="${name}"`)
+    res.send(buf)
+  },
+)
+
 relatoriosRouter.get('/painel', requirePerm(Modules.RELATORIOS, Actions.VIEW), (_req, res) => {
   res.json(relatoriosService.painel())
 })

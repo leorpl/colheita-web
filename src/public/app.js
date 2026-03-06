@@ -477,8 +477,9 @@ function downloadCsv(filename, headers, rows) {
   for (const r of rows) {
     lines.push(r.map(csvEscape).join(sep))
   }
-  const content = `\ufeff${lines.join('\n')}`
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
+  // Excel (Windows) tende a interpretar CSV como ANSI; BOM + CRLF melhora compatibilidade.
+  const content = `\ufeff${lines.join('\r\n')}`
+  const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -1219,6 +1220,14 @@ async function renderPainel() {
   const totals = p.totals_geral
   const ultima = p.ultima_safra
   const atual = p.safra_atual || p.safra_painel || ultima
+
+  // Persist the painel safra for other screens (relatorios default, etc.)
+  try {
+    const sid = Number(atual?.id)
+    if (Number.isFinite(sid) && sid > 0) localStorage.setItem('painel_safra_id', String(sid))
+  } catch {
+    // ignore
+  }
   const totalsUlt = p.totals_ultima_safra
   const safraLabel = atual?.safra ? String(atual.safra) : '-'
   const safraHint = p.safra_painel ? 'Definida em Safras' : 'Ultima safra cadastrada'
@@ -6485,8 +6494,59 @@ async function renderRelatorios() {
   activeNav('relatorios')
   await loadLookups()
 
+  function parseDateLike(s) {
+    const v = String(s || '').trim()
+    if (!v) return null
+    const t = Date.parse(v.replace(' ', 'T'))
+    return Number.isFinite(t) ? t : null
+  }
+
+  function pickPainelSafraIdOrLatest() {
+    const remembered = Number(localStorage.getItem('painel_safra_id') || '')
+    if (Number.isFinite(remembered) && remembered > 0) {
+      if (cache.safras.some((s) => Number(s.id) === remembered)) return remembered
+    }
+
+    const painel = cache.safras.find((s) => Number(s.painel) === 1)
+    if (painel?.id) return painel.id
+
+    const sorted = [...cache.safras].sort((a, b) => {
+      const ad =
+        parseDateLike(a.data_referencia) ??
+        parseDateLike(a.updated_at) ??
+        parseDateLike(a.created_at) ??
+        Number(a.id)
+      const bd =
+        parseDateLike(b.data_referencia) ??
+        parseDateLike(b.updated_at) ??
+        parseDateLike(b.created_at) ??
+        Number(b.id)
+      return bd - ad
+    })
+    return sorted[0]?.id ?? cache.safras[0]?.id ?? null
+  }
+
+  // Route state: #/relatorios?safra_id=1&de=YYYY-MM-DD&ate=YYYY-MM-DD
+  let qSafraId = null
+  let qDe = ''
+  let qAte = ''
+  try {
+    const h = window.location.hash || ''
+    const base = '#/relatorios'
+    if (h.startsWith(base) && h.includes('?')) {
+      const q = h.split('?')[1]
+      const p = new URLSearchParams(q)
+      const sid = Number(p.get('safra_id') || '')
+      if (Number.isFinite(sid) && sid > 0) qSafraId = sid
+      qDe = String(p.get('de') || '')
+      qAte = String(p.get('ate') || '')
+    }
+  } catch {
+    // ignore
+  }
+
   const safraOpts = cache.safras.map((s) => ({ value: s.id, label: s.safra }))
-  const safraId = safraOpts[0]?.value
+  const safraId = qSafraId || pickPainelSafraIdOrLatest() || safraOpts[0]?.value
 
   setView(`
     <section class="panel">
@@ -6510,8 +6570,9 @@ async function renderRelatorios() {
                 <button class="btn ghost" id="btnExpTal" type="button">Exportar resumo</button>
                 <button class="btn ghost" id="btnExpDes" type="button">Exportar destinos</button>
                 <button class="btn ghost" id="btnExpPay" type="button">Exportar motoristas</button>
-                <button class="btn" id="btnExpRaw" type="button">Dados brutos (CSV)</button>
-                <button class="btn" id="btnExpViagensAll" type="button">Colheitas completo (Excel)</button>
+                <button class="btn" id="btnExpRawXlsx" type="button">Exportar dados brutos</button>
+                <button class="btn ghost" id="btnExpRawCsv" type="button">Exportar texto</button>
+                <button class="btn" id="btnExpViagensAll" type="button">Exportar planilha</button>
               </div>
             </div>
           </div>
@@ -6554,19 +6615,55 @@ async function renderRelatorios() {
   const btnExpTal = view.querySelector('#btnExpTal')
   const btnExpDes = view.querySelector('#btnExpDes')
   const btnExpPay = view.querySelector('#btnExpPay')
-  const btnExpRaw = view.querySelector('#btnExpRaw')
+  const btnExpRawXlsx = view.querySelector('#btnExpRawXlsx')
+  const btnExpRawCsv = view.querySelector('#btnExpRawCsv')
   const btnExpViagensAll = view.querySelector('#btnExpViagensAll')
   const form = view.querySelector('#rFilters')
   const rTal = view.querySelector('#rtalhao')
   const rDes = view.querySelector('#rdest')
   const rPay = view.querySelector('#rpay')
 
+  // Restore route state (visible to user)
+  try {
+    if (form?.de && qDe) form.de.value = qDe
+    if (form?.ate && qAte) form.ate.value = qAte
+  } catch {
+    // ignore
+  }
+
+  function syncHashFromForm() {
+    try {
+      const fd = new FormData(form)
+      const safra_id = String(fd.get('safra_id') || '').trim()
+      const de = String(fd.get('de') || '').trim()
+      const ate = String(fd.get('ate') || '').trim()
+      const qs = new URLSearchParams()
+      if (safra_id) qs.set('safra_id', safra_id)
+      if (de) qs.set('de', de)
+      if (ate) qs.set('ate', ate)
+
+      const base = '#/relatorios'
+      const h = qs.toString() ? `${base}?${qs.toString()}` : base
+      history.replaceState(null, '', `${window.location.pathname}${window.location.search}${h}`)
+    } catch {
+      // ignore
+    }
+  }
+
   async function run() {
     try {
+      syncHashFromForm()
       const fd = new FormData(form)
       const safra_id = Number(fd.get('safra_id'))
       const de = fd.get('de') || null
       const ate = fd.get('ate') || null
+
+      if (!Number.isFinite(safra_id) || safra_id <= 0) {
+        rTal.innerHTML = '<tr><td colspan="9" class="hint">Selecione uma safra.</td></tr>'
+        rDes.innerHTML = '<tr><td colspan="5" class="hint">Selecione uma safra.</td></tr>'
+        rPay.innerHTML = '<tr><td colspan="4" class="hint">Selecione uma safra.</td></tr>'
+        return
+      }
 
       const [tal, des, pay] = await Promise.all([
         api(
@@ -6655,6 +6752,11 @@ async function renderRelatorios() {
   }
 
   btn.onclick = run
+
+  // Keep state consistent on manual filter changes
+  form?.querySelectorAll('select,input').forEach((el) => {
+    el.addEventListener('change', () => syncHashFromForm())
+  })
 
   btnExpTal.onclick = async () => {
     const fd = new FormData(form)
@@ -6772,266 +6874,153 @@ async function renderRelatorios() {
     )
   }
 
-  btnExpRaw.onclick = async () => {
-    const fd = new FormData(form)
-    const safra_id = fd.get('safra_id')
-    const de = fd.get('de') || null
-    const ate = fd.get('ate') || null
-    const qs = new URLSearchParams({
-      ...(safra_id ? { safra_id } : {}),
-      ...(de ? { de } : {}),
-      ...(ate ? { ate } : {}),
-    })
-    const r = await api(`/api/viagens?${qs}`)
-    const items = r.items || []
-    downloadCsv(
-      `viagens-bruto${safra_id ? `-safra-${safra_id}` : ''}${de ? `-${de}` : ''}${ate ? `-${ate}` : ''}.csv`,
-       [
-         'ID',
-         'Ficha',
-         'Safra',
-         'Talhão',
-         'Local',
-         'Destino',
-         'Motorista',
-         'Data saida',
+  if (btnExpRawXlsx) {
+    btnExpRawXlsx.onclick = async () => {
+      const fd = new FormData(form)
+      const safra_id = String(fd.get('safra_id') || '').trim()
+      const de = String(fd.get('de') || '').trim()
+      const ate = String(fd.get('ate') || '').trim()
+      const qs = new URLSearchParams({
+        ...(safra_id ? { safra_id } : {}),
+        ...(de ? { de } : {}),
+        ...(ate ? { ate } : {}),
+      })
+
+      const q = qs.toString()
+      const url = q ? `/api/relatorios/viagens-bruto.xlsx?${q}` : '/api/relatorios/viagens-bruto.xlsx'
+      const a = document.createElement('a')
+      a.href = url
+      a.rel = 'noreferrer'
+      a.style.display = 'none'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    }
+  }
+
+  if (btnExpRawCsv) {
+    btnExpRawCsv.onclick = async () => {
+      const fd = new FormData(form)
+      const safra_id = fd.get('safra_id')
+      const de = fd.get('de') || null
+      const ate = fd.get('ate') || null
+      const qs = new URLSearchParams({
+        ...(safra_id ? { safra_id } : {}),
+        view: 'flat',
+        ...(de ? { de } : {}),
+        ...(ate ? { ate } : {}),
+      })
+      const r = await api(`/api/viagens?${qs}`)
+      const items = r.items || []
+
+    // Exportar igual a grid detalhada (sem totalizador do agrupamento)
+      downloadCsv(
+        `viagens-bruto${safra_id ? `-safra-${safra_id}` : ''}${de ? `-${de}` : ''}${ate ? `-${ate}` : ''}.csv`,
+      [
+        'ID',
+        'Ficha',
+        'Safra',
+        'Talhão',
+        'Local',
+        '%',
+        'Destino',
+        'Data saida',
+        'Motorista',
+        'Umidade %',
         'Carga (kg)',
         'Tara (kg)',
         'Peso bruto (kg)',
+        'Peso limpo e seco (kg)',
+        'Desconto %',
         'Sacas',
         'Frete tabela (R$/sc)',
         'Frete (R$)',
+        'Compra (Silo) (R$/sc)',
+        'Silo (liquida) (R$/sc)',
+        'Terceiros (ideal) (R$/sc)',
       ],
-      items.map((v) => [
-        String(v.id),
-        v.ficha,
-        v.safra_nome,
-        `${v.talhao_nome || ''}`.trim(),
-        v.talhao_local || '',
-        v.destino_local,
-        v.motorista_nome,
-        v.data_saida || '',
-        csvNumber(v.carga_total_kg, 0),
-        csvNumber(v.tara_kg, 0),
-        csvNumber(v.peso_bruto_kg, 0),
-        csvNumber(v.sacas, 2),
-        csvNumber(v.frete_tabela, 2),
-        csvNumber(v.sub_total_frete, 2),
-      ]),
-    )
+      items.map((v) => {
+        const umidRaw = Number(v.umidade_pct)
+        const umid = Number.isFinite(umidRaw) && umidRaw > 1 ? umidRaw / 100 : umidRaw
+        const pb = Number(v.peso_bruto_kg)
+        const pls = Number(v.peso_limpo_seco_kg)
+        const descPct =
+          Number.isFinite(pb) && pb > 0 && Number.isFinite(pls)
+            ? clamp01(1 - pls / pb) * 100
+            : 0
+
+        const sacas = Number(v.sacas || 0)
+        const freteTotal = Number(v.sub_total_frete || 0)
+        const fretePorSaca = sacas > 0 ? freteTotal / sacas : 0
+        const secagemPorSaca = Number(v.secagem_custo_por_saca || 0)
+        const custoSiloPorSaca = Number(v.custo_silo_por_saca || 0)
+        const custoTercPorSaca = Number(v.custo_terceiros_por_saca || 0)
+
+        const valorCompraApplied = Number(v.valor_compra_por_saca_aplicado)
+        const valorCompraRule =
+          v.regra_valor_compra_por_saca === null || v.regra_valor_compra_por_saca === undefined
+            ? null
+            : Number(v.regra_valor_compra_por_saca)
+        const valorCompra = Number.isFinite(valorCompraApplied)
+          ? valorCompraApplied
+          : Number.isFinite(valorCompraRule)
+            ? valorCompraRule
+            : null
+
+        const compraSilo = valorCompra !== null && Number.isFinite(valorCompra) ? valorCompra : null
+        const siloLiquida =
+          compraSilo === null ? null : compraSilo - (fretePorSaca + secagemPorSaca + custoSiloPorSaca)
+        const terceirosIdeal = compraSilo === null ? null : compraSilo + custoTercPorSaca
+
+        return [
+          String(v.id ?? ''),
+          String(v.display_ficha ?? v.ficha ?? ''),
+          String(v.safra_nome ?? ''),
+          String(v.talhao_nome ?? ''),
+          String(v.talhao_local ?? ''),
+          v.pct_rateio_100 === null || v.pct_rateio_100 === undefined ? '' : csvNumber(v.pct_rateio_100, 2),
+          String(v.destino_local ?? ''),
+          String(v.data_saida ?? ''),
+          String(v.motorista_nome ?? ''),
+          Number.isFinite(umid) ? csvNumber(umid * 100, 2) : '',
+          csvNumber(v.carga_total_kg, 0),
+          csvNumber(v.tara_kg, 0),
+          csvNumber(v.peso_bruto_kg, 0),
+          csvNumber(v.peso_limpo_seco_kg, 0),
+          csvNumber(descPct, 2),
+          csvNumber(v.sacas, 2),
+          csvNumber(v.frete_tabela, 2),
+          csvNumber(v.sub_total_frete, 2),
+          compraSilo === null ? '' : csvNumber(compraSilo, 6),
+          siloLiquida === null ? '' : csvNumber(siloLiquida, 6),
+          terceirosIdeal === null ? '' : csvNumber(terceirosIdeal, 6),
+        ]
+      }),
+      )
+    }
   }
 
   btnExpViagensAll.onclick = async () => {
     const fd = new FormData(form)
-    const safra_id = fd.get('safra_id')
-    const de = fd.get('de') || null
-    const ate = fd.get('ate') || null
+    const safra_id = String(fd.get('safra_id') || '').trim()
+    const de = String(fd.get('de') || '').trim()
+    const ate = String(fd.get('ate') || '').trim()
     const qs = new URLSearchParams({
       ...(safra_id ? { safra_id } : {}),
       ...(de ? { de } : {}),
       ...(ate ? { ate } : {}),
     })
-    const r = await api(`/api/viagens?${qs}`)
-    const items = r.items || []
 
-    const headers = [
-      // Identificacao
-      'ID',
-      'Ficha',
-      'Safra',
-      'Safra ID',
-      'Plantio',
-      'Talhao',
-      'Talhao codigo',
-      'Talhao local',
-      'Talhao ID',
-      'Destino',
-      'Destino codigo',
-      'Destino ID',
-      'Motorista',
-      'Motorista ID',
-      'Placa',
-      'Local (colheita)',
-
-      // Datas
-      'Data saida',
-      'Hora saida',
-      'Data entrega',
-      'Hora entrega',
-
-      // Entradas (amostra)
-      'Umidade informada (%)',
-      'Impureza (%)',
-      'Ardidos (%)',
-      'Queimados (%)',
-      'Avariados (%)',
-      'Esverdiados (%)',
-      'Quebrados (%)',
-
-      // Limites usados
-      'Limite impureza (%)',
-      'Limite ardidos (%)',
-      'Limite queimados (%)',
-      'Limite avariados (%)',
-      'Limite esverdiados (%)',
-      'Limite quebrados (%)',
-
-      // Pesagens (entrada)
-      'Carga total (kg)',
-      'Tara (kg)',
-
-      // Calculados
-      'Peso bruto (kg)',
-      'Desc. umidade aplicado (%)',
-      'Desc. umidade manual (%)',
-      'Umidade (kg)',
-      'Impureza (kg)',
-      'Ardidos (kg)',
-      'Queimados (kg)',
-      'Avariados (kg)',
-      'Esverdiados (kg)',
-      'Quebrados (kg)',
-      'Peso limpo/seco (kg)',
-      'Sacas (sc)',
-
-      // Frete
-      'Sacas frete (sc)',
-      'Frete tabela (R$/sc)',
-      'Frete total (R$)',
-
-      // Secagem / custos
-      'Secagem (R$/sc)',
-      'Secagem total (R$)',
-      'Custos silo (R$/sc)',
-      'Custos silo total (R$)',
-      'Custos terceiros (R$/sc)',
-      'Custos terceiros total (R$)',
-
-      // Compra do silo (persistido)
-      'Compra silo aplicada (R$/sc)',
-      'Compra silo total (R$)',
-      'Compra entregue antes (sc)',
-      'Compra entregue depois (sc)',
-
-      // Derivados (nao persistidos diretamente)
-      'Frete por saca (R$/sc)',
-      'Despesas silo por saca (R$/sc)',
-      'Compra liquida silo (R$/sc)',
-      'Preco liquido silo (R$/sc)',
-      'Total liquido silo (R$)',
-
-      // Meta
-      'Criacao',
-      'Alteracao',
-    ]
-
-    const rows = items.map((v) => {
-      const sacas = Number(v.sacas || 0)
-      const freteTotal = Number(v.sub_total_frete || 0)
-      const fretePorSaca = sacas > 0 ? freteTotal / sacas : 0
-      const compraAplicada =
-        v.valor_compra_por_saca_aplicado === null || v.valor_compra_por_saca_aplicado === undefined
-          ? null
-          : Number(v.valor_compra_por_saca_aplicado)
-
-      const secagemPorSaca = Number(v.secagem_custo_por_saca || 0)
-      const custoSiloPorSaca = Number(v.custo_silo_por_saca || 0)
-      const despesasSiloPorSaca = secagemPorSaca + custoSiloPorSaca + fretePorSaca
-
-      const compraLiquidaSilo = compraAplicada === null ? null : compraAplicada - despesasSiloPorSaca
-      const precoLiquidoSilo =
-        compraAplicada === null ? null : compraAplicada - Number(v.abatimento_por_saca_silo || 0)
-      const totalLiquidoSilo =
-        precoLiquidoSilo === null ? null : sacas * Number(precoLiquidoSilo || 0)
-
-      const pct = (x) => (Number.isFinite(Number(x)) ? Number(x) * 100 : null)
-
-      return [
-        String(v.id ?? ''),
-        String(v.ficha ?? ''),
-        String(v.safra_nome ?? ''),
-        String(v.safra_id ?? ''),
-        String(v.tipo_plantio ?? ''),
-        String(v.talhao_nome ?? ''),
-        String(v.talhao_codigo ?? ''),
-        String(v.talhao_local ?? ''),
-        String(v.talhao_id ?? ''),
-        String(v.destino_local ?? ''),
-        String(v.destino_codigo ?? ''),
-        String(v.destino_id ?? ''),
-        String(v.motorista_nome ?? ''),
-        String(v.motorista_id ?? ''),
-        String(v.placa ?? ''),
-        String(v.local ?? ''),
-
-        String(v.data_saida ?? ''),
-        String(v.hora_saida ?? ''),
-        String(v.data_entrega ?? ''),
-        String(v.hora_entrega ?? ''),
-
-        csvNumber(pct(v.umidade_pct), 2),
-        csvNumber(pct(v.impureza_pct), 2),
-        csvNumber(pct(v.ardidos_pct), 2),
-        csvNumber(pct(v.queimados_pct), 2),
-        csvNumber(pct(v.avariados_pct), 2),
-        csvNumber(pct(v.esverdiados_pct), 2),
-        csvNumber(pct(v.quebrados_pct), 2),
-
-        csvNumber(pct(v.impureza_limite_pct), 2),
-        csvNumber(pct(v.ardidos_limite_pct), 2),
-        csvNumber(pct(v.queimados_limite_pct), 2),
-        csvNumber(pct(v.avariados_limite_pct), 2),
-        csvNumber(pct(v.esverdiados_limite_pct), 2),
-        csvNumber(pct(v.quebrados_limite_pct), 2),
-
-        csvNumber(v.carga_total_kg, 0),
-        csvNumber(v.tara_kg, 0),
-
-        csvNumber(v.peso_bruto_kg, 0),
-        csvNumber(pct(v.umidade_desc_pct), 2),
-        csvNumber(pct(v.umidade_desc_pct_manual), 2),
-        csvNumber(v.umidade_kg, 0),
-        csvNumber(v.impureza_kg, 0),
-        csvNumber(v.ardidos_kg, 0),
-        csvNumber(v.queimados_kg, 0),
-        csvNumber(v.avariados_kg, 0),
-        csvNumber(v.esverdiados_kg, 0),
-        csvNumber(v.quebrados_kg, 0),
-        csvNumber(v.peso_limpo_seco_kg, 0),
-        csvNumber(v.sacas, 2),
-
-        csvNumber(v.sacas_frete, 2),
-        csvNumber(v.frete_tabela, 2),
-        csvNumber(v.sub_total_frete, 2),
-
-        csvNumber(v.secagem_custo_por_saca, 2),
-        csvNumber(v.sub_total_secagem, 2),
-        csvNumber(v.custo_silo_por_saca, 2),
-        csvNumber(v.sub_total_custo_silo, 2),
-        csvNumber(v.custo_terceiros_por_saca, 2),
-        csvNumber(v.sub_total_custo_terceiros, 2),
-
-        compraAplicada === null ? '' : csvNumber(compraAplicada, 2),
-        csvNumber(v.valor_compra_total, 2),
-        csvNumber(v.valor_compra_entrega_antes, 2),
-        csvNumber(v.valor_compra_entrega_depois, 2),
-
-        csvNumber(fretePorSaca, 6),
-        csvNumber(despesasSiloPorSaca, 6),
-        compraLiquidaSilo === null ? '' : csvNumber(compraLiquidaSilo, 6),
-        precoLiquidoSilo === null ? '' : csvNumber(precoLiquidoSilo, 6),
-        totalLiquidoSilo === null ? '' : csvNumber(totalLiquidoSilo, 2),
-
-        String(v.created_at ?? ''),
-        String(v.updated_at ?? ''),
-      ]
-    })
-
-    downloadCsv(
-      `colheitas-completo${safra_id ? `-safra-${safra_id}` : ''}${de ? `-${de}` : ''}${ate ? `-${ate}` : ''}.csv`,
-      headers,
-      rows,
-    )
+    // Download via backend (XLSX real)
+    const q = qs.toString()
+    const url = q ? `/api/relatorios/colheitas-completo.xlsx?${q}` : '/api/relatorios/colheitas-completo.xlsx'
+    const a = document.createElement('a')
+    a.href = url
+    a.rel = 'noreferrer'
+    a.style.display = 'none'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
   }
 
   await run()

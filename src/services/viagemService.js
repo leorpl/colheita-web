@@ -234,8 +234,18 @@ export const viagemService = {
           motorista_id: r.motorista_id,
           motorista_nome: r.motorista_nome,
 
+          // Pesagens (entrada)
+          carga_total_kg: r.carga_total_kg,
+          tara_kg: r.tara_kg,
+
+          // Operacional
+          placa: r.placa,
+          local: r.local,
+
           data_saida: r.data_saida,
           hora_saida: r.hora_saida,
+          data_entrega: r.data_entrega,
+          hora_entrega: r.hora_entrega,
           tipo_plantio: r.tipo_plantio,
 
           umidade_pct: r.umidade_pct,
@@ -335,9 +345,16 @@ export const viagemService = {
         destino_codigo: parent.destino_codigo,
         motorista_id: parent.motorista_id,
         motorista_nome: parent.motorista_nome,
+        placa: parent.placa,
+        local: parent.local,
         data_saida: parent.data_saida,
         hora_saida: parent.hora_saida,
+        data_entrega: parent.data_entrega,
+        hora_entrega: parent.hora_entrega,
         tipo_plantio: parent.tipo_plantio,
+
+        carga_total_kg: alloc(parent.carga_total_kg),
+        tara_kg: alloc(parent.tara_kg),
 
         umidade_pct: parent.umidade_pct,
         peso_bruto_kg: totalPb > 0 ? round(portionKg, 6) : alloc(parent.peso_bruto_kg),
