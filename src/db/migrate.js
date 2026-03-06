@@ -570,7 +570,6 @@ export function migrate() {
     CREATE INDEX IF NOT EXISTS idx_custo_safra_talhao ON custo_lancamento(safra_id, talhao_id);
     CREATE INDEX IF NOT EXISTS idx_mov_safra_part ON participante_sacas_mov(safra_id, participante_id);
     CREATE INDEX IF NOT EXISTS idx_mov_safra_talhao ON participante_sacas_mov(safra_id, talhao_id);
-    CREATE INDEX IF NOT EXISTS idx_mov_safra_destino ON participante_sacas_mov(safra_id, destino_id);
     CREATE INDEX IF NOT EXISTS idx_mov_origem ON participante_sacas_mov(origem_tipo, origem_id);
   `)
 
