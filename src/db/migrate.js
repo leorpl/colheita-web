@@ -300,6 +300,7 @@ export function migrate() {
     CREATE TABLE IF NOT EXISTS usuario (
       id INTEGER PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
+      email TEXT,
       nome TEXT,
       role TEXT NOT NULL,
       motorista_id INTEGER,
@@ -413,6 +414,23 @@ export function migrate() {
     db.exec('ALTER TABLE usuario ADD COLUMN menus_json TEXT')
   }
 
+  if (!hasColumn('usuario', 'email')) {
+    db.exec('ALTER TABLE usuario ADD COLUMN email TEXT')
+    // Backfill: if username already looks like an email.
+    try {
+      db.exec("UPDATE usuario SET email=username WHERE email IS NULL AND INSTR(username, '@') > 0")
+    } catch {
+      // ignore
+    }
+  }
+
+  // Ensure unique index for email (case-insensitive).
+  try {
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_usuario_email_lower ON usuario(LOWER(email))")
+  } catch {
+    // ignore (older sqlite builds)
+  }
+
   // Rastreabilidade padrao (created/updated by).
   // Campos sao adicionados como NULLable para compatibilidade com registros antigos.
   const traceTables = [
@@ -422,6 +440,16 @@ export function migrate() {
     'motorista',
     'frete',
     'viagem',
+    'viagem_talhao',
+    'talhao_safra',
+    'plantio_tipo',
+    'motorista_quitacao',
+    'destino_regra',
+    'destino_regra_plantio',
+    'umidade_faixa',
+    'umidade_faixa_plantio',
+    'contrato_silo',
+    'contrato_silo_faixa',
     'usuario',
     'role',
     'role_permission',

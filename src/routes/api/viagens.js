@@ -1,14 +1,27 @@
 import { Router } from 'express'
 import { viagemRepo } from '../../repositories/viagemRepo.js'
-import { notFound } from '../../errors.js'
+import { forbidden, notFound } from '../../errors.js'
 import { validateBody, validateQuery, validateParams } from '../../middleware/validate.js'
 import { viagemService } from '../../services/viagemService.js'
 import { requireCan } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { S, ViagemSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
+import { Roles } from '../../auth/permissions.js'
 
 export const viagensRouter = Router()
+
+function isMotorista(user) {
+  return String(user?.role || '').toLowerCase() === Roles.MOTORISTA
+}
+
+function requireMotoristaBound(req) {
+  if (!isMotorista(req.user)) return
+  const mid = Number(req.user?.motorista_id)
+  if (!Number.isInteger(mid) || mid <= 0) {
+    throw forbidden('Usuario motorista sem motorista_id vinculado')
+  }
+}
 
 const ViagemBody = ViagemSchemas.Body
 const PreviewBody = ViagemSchemas.PreviewBody
@@ -19,6 +32,11 @@ viagensRouter.post(
   requireCan(Modules.COLHEITA, Actions.VIEW),
   validateBody(PreviewBody),
   (req, res) => {
+  requireMotoristaBound(req)
+  if (isMotorista(req.user)) {
+    const mid = Number(req.user.motorista_id)
+    if (Number(req.body.motorista_id) !== mid) throw forbidden('Sem permissao')
+  }
   const id = req.body.id ? Number(req.body.id) : null
   const payload = id
     ? viagemService.buildPayload(req.body, { current_id: id, exclude_id: id })
@@ -42,6 +60,11 @@ viagensRouter.post(
   requireCan(Modules.COLHEITA, Actions.VIEW),
   validateBody(CompareBody),
   (req, res) => {
+    requireMotoristaBound(req)
+    if (isMotorista(req.user)) {
+      const mid = Number(req.user.motorista_id)
+      if (Number(req.body.motorista_id) !== mid) throw forbidden('Sem permissao')
+    }
     const id = req.body.id ? Number(req.body.id) : null
     res.json(viagemService.compararDestinos({ ...req.body, id }))
   },
@@ -54,12 +77,17 @@ viagensRouter.get(
   requireCan(Modules.COLHEITA, Actions.VIEW),
   validateQuery(ListQuery),
   (req, res) => {
+  requireMotoristaBound(req)
+  const q = { ...req.query }
+  if (isMotorista(req.user)) {
+    q.motorista_id = Number(req.user.motorista_id)
+  }
   const view = String(req.query.view || 'legacy')
   const items =
     view === 'flat' || view === 'grouped'
-      ? viagemService.listView({ ...req.query, view })
-      : viagemRepo.list(req.query)
-  const totals = viagemRepo.totals(req.query)
+      ? viagemService.listView({ ...q, view })
+      : viagemRepo.list(q)
+  const totals = viagemRepo.totals(q)
   res.json({ items, totals, view })
   },
 )
@@ -94,6 +122,7 @@ viagensRouter.post(
   validateBody(RecalcAllBody),
   (req, res) => {
     const r = viagemService.recalcularTodas(req.body)
+    auditService.log(req, { module_name: 'colheita', record_id: null, action_type: 'update', notes: 'recalcular-todas' })
     res.status(201).json(r)
   },
 )
@@ -105,7 +134,44 @@ viagensRouter.get(
   (req, res) => {
   const row = viagemRepo.get(req.params.id)
   if (!row) throw notFound('Viagem nao encontrada')
+  requireMotoristaBound(req)
+  if (isMotorista(req.user)) {
+    const mid = Number(req.user.motorista_id)
+    if (Number(row.motorista_id) !== mid) throw forbidden('Sem permissao')
+  }
   res.json(row)
+  },
+)
+
+// Portal motorista: atualiza somente campos operacionais.
+const MotoristaUpdateBody = ViagemSchemas.MotoristaUpdateBody
+
+viagensRouter.put(
+  '/:id/motorista',
+  requireCan(Modules.COLHEITA, Actions.VIEW),
+  validateParams(S.IdParam),
+  validateBody(MotoristaUpdateBody),
+  (req, res) => {
+    requireMotoristaBound(req)
+    if (!isMotorista(req.user)) throw forbidden('Apenas motorista')
+
+    const id = req.params.id
+    const exists = viagemRepo.get(id)
+    if (!exists) throw notFound('Viagem nao encontrada')
+
+    const mid = Number(req.user.motorista_id)
+    if (Number(exists.motorista_id) !== mid) throw forbidden('Sem permissao')
+
+    const row = viagemRepo.updateMotoristaFields(id, req.body, { user_id: req.user?.id })
+    auditService.log(req, {
+      module_name: 'colheita',
+      record_id: id,
+      action_type: 'update',
+      old_values: exists,
+      new_values: row,
+      notes: 'motorista_update',
+    })
+    res.json(row)
   },
 )
 

@@ -1933,6 +1933,14 @@ async function renderUsuarios() {
   await loadLookups()
   const users = await api('/api/users')
 
+  const motoristasById = new Map((cache.motoristas || []).map((m) => [Number(m.id), m]))
+  const motoristaLabel = (id) => {
+    const m = motoristasById.get(Number(id))
+    if (!m) return ''
+    const placa = String(m.placa || '').trim()
+    return `${m.nome}${placa ? ` (${placa})` : ''}`
+  }
+
   const roleOptions = [
     { value: 'admin', label: 'Admin (tudo)' },
     { value: 'gestor', label: 'Gestor (operacao + config)' },
@@ -1963,6 +1971,7 @@ async function renderUsuarios() {
     { key: 'tipos-plantio', label: 'Tipos de plantio' },
     { key: 'fazenda', label: 'Fazenda Nazca' },
     { key: 'usuarios', label: 'Usuários' },
+    { key: 'perfis', label: 'Perfis e permissões' },
     { key: 'auditoria', label: 'Auditoria' },
   ]
 
@@ -1984,8 +1993,10 @@ async function renderUsuarios() {
           <button class="btn small danger" data-act="udel" data-id="${u.id}">Excluir</button>
         </td>
         <td>${escapeHtml(u.username)}</td>
+        <td>${escapeHtml(u.email || '')}</td>
         <td>${escapeHtml(u.nome || '')}</td>
         <td>${escapeHtml(u.role)}</td>
+        <td>${escapeHtml(u.motorista_id ? motoristaLabel(u.motorista_id) : '')}</td>
         <td>${escapeHtml(String(u.active ? 'SIM' : 'NAO'))}</td>
       </tr>`
     })
@@ -2003,8 +2014,8 @@ async function renderUsuarios() {
       <div class="panel-body">
         <div class="table-wrap">
           <table>
-            <thead><tr><th class="actions"></th><th>Usuario</th><th>Nome</th><th>Role</th><th>Ativo</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="5">Nenhum usuario.</td></tr>`}</tbody>
+            <thead><tr><th class="actions"></th><th>Login</th><th>E-mail</th><th>Nome</th><th>Role</th><th>Motorista</th><th>Ativo</th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="7">Nenhum usuario.</td></tr>`}</tbody>
           </table>
         </div>
         <div class="hint">Boas praticas: use \`admin\` só para cadastro e manutencao; operadores nao precisam ver valores de pagamento.</div>
@@ -2012,13 +2023,198 @@ async function renderUsuarios() {
     </section>
   `)
 
+  const aclModules = [
+    { key: 'painel', label: 'Painel' },
+    { key: 'colheita', label: 'Colheita' },
+    { key: 'area-colhida', label: 'Área colhida' },
+    { key: 'relatorios', label: 'Relatórios' },
+    { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
+    { key: 'safras', label: 'Safras' },
+    { key: 'talhoes', label: 'Talhões' },
+    { key: 'destinos', label: 'Destinos' },
+    { key: 'motoristas', label: 'Motoristas' },
+    { key: 'fretes', label: 'Fretes' },
+    { key: 'regras-destino', label: 'Regras do destino' },
+    { key: 'tipos-plantio', label: 'Tipos de plantio' },
+    { key: 'fazenda', label: 'Fazenda Nazca' },
+    { key: 'usuarios', label: 'Usuários' },
+    { key: 'auditoria', label: 'Auditoria' },
+  ]
+
+  function yn(v) {
+    if (v === 0 || v === 1) return v ? 'Y' : 'N'
+    return '-'
+  }
+
+  function triControl(name, value) {
+    const cur = value === 1 ? 'allow' : value === 0 ? 'deny' : 'inherit'
+    const n = escapeHtml(name)
+    const opt = (val, label, cls) => {
+      const checked = cur === val ? ' checked' : ''
+      return `<label class="tri-opt ${cls}">
+        <input type="radio" name="${n}" value="${val}"${checked} />
+        <span>${escapeHtml(label)}</span>
+      </label>`
+    }
+    return `<div class="tri" role="group" aria-label="Permissão">
+      ${opt('inherit', 'Herdar', 'inherit')}
+      ${opt('allow', 'Permitir', 'allow')}
+      ${opt('deny', 'Negar', 'deny')}
+    </div>`
+  }
+
+  function aclHelpHtml() {
+    return `
+      <div class="acl-help">
+        <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap">
+          <div>
+            <div style="font-family:var(--serif);font-size:14px">Permissões (ACL)</div>
+            <div class="hint" style="margin-top:6px">Cada módulo/tela tem 4 ações: <code class="mono">V</code> (ver), <code class="mono">C</code> (criar), <code class="mono">U</code> (editar), <code class="mono">D</code> (excluir).</div>
+            <div class="hint" style="margin-top:6px">Ordem de decisão: <b>Override do usuário</b> → <b>Base do perfil (role)</b> → (fallback legado).</div>
+            <div class="hint" style="margin-top:6px"><b>Herdar</b> = não sobrescreve; usa a base do perfil. <b>Permitir</b>/<b>Negar</b> força o resultado naquele módulo/ação.</div>
+          </div>
+          <div class="pill" style="align-self:flex-start"><span class="dot"></span><span>Base (role) aparece como <code class="mono">V/C/U/D</code></span></div>
+        </div>
+      </div>
+    `.trim()
+  }
+
+  async function populateAclMatrix({ userId, role, containerEl }) {
+    if (!containerEl) return { overMap: new Map() }
+    containerEl.innerHTML = '<div class="hint">Carregando permissões...</div>'
+
+    try {
+      const [baseRows, overRows] = await Promise.all([
+        api(`/api/acl/roles/${encodeURIComponent(String(role || ''))}/permissions`),
+        api(`/api/acl/users/${Number(userId)}/overrides`),
+      ])
+
+      const baseMap = new Map((baseRows || []).map((r) => [String(r.module), r]))
+      const overMap = new Map((overRows || []).map((r) => [String(r.module), r]))
+
+      const pickEff = (base, over, field) => {
+        const o = over?.[field]
+        if (o === 0 || o === 1) return o
+        const b = base?.[field]
+        if (b === 0 || b === 1) return b
+        return 0
+      }
+
+      const effTxt = (base, over) => {
+        const v = pickEff(base, over, 'can_view')
+        const c = pickEff(base, over, 'can_create')
+        const u = pickEff(base, over, 'can_update')
+        const d = pickEff(base, over, 'can_delete')
+        return `V:${yn(v)} C:${yn(c)} U:${yn(u)} D:${yn(d)}`
+      }
+
+      const rowsHtml = aclModules
+        .map((m) => {
+          const base = baseMap.get(m.key) || null
+          const over = overMap.get(m.key) || null
+          const baseTxt = base
+            ? `V:${yn(base.can_view)} C:${yn(base.can_create)} U:${yn(base.can_update)} D:${yn(base.can_delete)}`
+            : `V:- C:- U:- D:-`
+
+          const effectiveTxt = effTxt(base, over)
+
+          const mk = (field) => `acl__${m.key}__${field}`
+          return `<tr>
+            <td>${escapeHtml(m.label)}</td>
+            <td><code class="mono">${escapeHtml(baseTxt)}</code></td>
+            <td>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+                <label class="hint" style="display:flex;flex-direction:column;gap:6px">Ver${triControl(mk('can_view'), over?.can_view)}</label>
+                <label class="hint" style="display:flex;flex-direction:column;gap:6px">Criar${triControl(mk('can_create'), over?.can_create)}</label>
+                <label class="hint" style="display:flex;flex-direction:column;gap:6px">Editar${triControl(mk('can_update'), over?.can_update)}</label>
+                <label class="hint" style="display:flex;flex-direction:column;gap:6px">Excluir${triControl(mk('can_delete'), over?.can_delete)}</label>
+              </div>
+              <div class="hint" style="margin-top:10px">Efetivo: <code class="mono" data-role="acl-effective" data-mod="${escapeHtml(m.key)}">${escapeHtml(effectiveTxt)}</code></div>
+            </td>
+          </tr>`
+        })
+        .join('')
+
+      containerEl.innerHTML = `
+        ${aclHelpHtml()}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Módulo</th><th>Base</th><th>Override (usuário)</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px">
+          <button class="btn ghost small" type="button" id="btnAclClear">Limpar overrides (herdar tudo)</button>
+        </div>
+      `.trim()
+
+      // Interactions: update effective preview and clear button.
+      const computeFromForm = (mod) => {
+        const get = (field) => {
+          const name = `acl__${mod}__${field}`
+          const v = containerEl.querySelector(`input[name="${CSS.escape(name)}"]:checked`)?.value
+          if (v === 'allow') return 1
+          if (v === 'deny') return 0
+          return null
+        }
+
+        const base = baseMap.get(mod) || null
+        const over = {
+          can_view: get('can_view'),
+          can_create: get('can_create'),
+          can_update: get('can_update'),
+          can_delete: get('can_delete'),
+        }
+        // Translate null -> "inherit" behavior.
+        const normalizeOver = (x) => (x === 0 || x === 1 ? x : null)
+        const over2 = {
+          can_view: normalizeOver(over.can_view),
+          can_create: normalizeOver(over.can_create),
+          can_update: normalizeOver(over.can_update),
+          can_delete: normalizeOver(over.can_delete),
+        }
+        return effTxt(base, over2)
+      }
+
+      const updateEffective = (mod) => {
+        const el = containerEl.querySelector(`code[data-role="acl-effective"][data-mod="${CSS.escape(mod)}"]`)
+        if (!el) return
+        el.textContent = computeFromForm(mod)
+      }
+
+      containerEl.querySelectorAll('input[type="radio"][name^="acl__"]').forEach((inp) => {
+        inp.onchange = () => {
+          const m = String(inp.name || '').split('__')[1]
+          if (m) updateEffective(m)
+        }
+      })
+
+      const btnClear = containerEl.querySelector('#btnAclClear')
+      if (btnClear) {
+        btnClear.onclick = () => {
+          containerEl.querySelectorAll('input[type="radio"][value="inherit"]').forEach((i) => {
+            i.checked = true
+          })
+          for (const m of aclModules) updateEffective(m.key)
+          toast('OK', 'Overrides limpos (herdar tudo).')
+        }
+      }
+
+      return { overMap }
+    } catch (e) {
+      containerEl.innerHTML = `<div class="hint">Falha ao carregar permissões: ${escapeHtml(String(e?.message || e))}</div>`
+      return { overMap: new Map() }
+    }
+  }
+
   view.querySelector('#btnUAdd').onclick = () => {
     openDialog({
       title: 'Novo usuário',
       submitLabel: 'Criar',
       bodyHtml: `
         <div class="form-grid">
-          ${formField({ label: 'Usuario (login)', name: 'username', placeholder: 'joao', span: 'col6' })}
+          ${formField({ label: 'Login (usuario ou e-mail)', name: 'username', placeholder: 'joao', span: 'col6' })}
+          ${formField({ label: 'E-mail (obrigatório)', name: 'email', placeholder: 'joao@empresa.com', span: 'col6' })}
           ${formField({ label: 'Nome', name: 'nome', placeholder: 'Joao', span: 'col6' })}
           ${selectField({ label: 'Role', name: 'role', options: roleOptions, value: 'operador', span: 'col6' })}
           ${selectField({ label: 'Motorista (se role=motorista)', name: 'motorista_id', options: motOpts, value: '', span: 'col6' })}
@@ -2053,6 +2249,7 @@ async function renderUsuarios() {
           method: 'POST',
           body: {
             username: obj.username,
+            email: obj.email,
             nome: obj.nome || null,
             role: obj.role,
             motorista_id: obj.motorista_id ? Number(obj.motorista_id) : null,
@@ -2080,12 +2277,14 @@ async function renderUsuarios() {
 
       if (act === 'uedit') {
         const uMenus = parseMenusJson(u.menus_json)
+        let existingOverMap = new Map()
         openDialog({
           title: `Editar usuário #${u.id}`,
           submitLabel: 'Salvar',
           bodyHtml: `
             <div class="form-grid">
-              ${formField({ label: 'Usuario (login)', name: 'username', value: u.username, span: 'col6' })}
+              ${formField({ label: 'Login (usuario ou e-mail)', name: 'username', value: u.username, span: 'col6' })}
+              ${formField({ label: 'E-mail (obrigatório)', name: 'email', value: u.email || '', span: 'col6' })}
               ${formField({ label: 'Nome', name: 'nome', value: u.nome || '', span: 'col6' })}
               ${selectField({ label: 'Role', name: 'role', options: roleOptions, value: u.role, span: 'col6' })}
               ${selectField({ label: 'Motorista (se role=motorista)', name: 'motorista_id', options: motOpts, value: u.motorista_id || '', span: 'col6' })}
@@ -2100,6 +2299,15 @@ async function renderUsuarios() {
                     .join('')}
                 </div>
               </div>
+
+              ${sectionTitle('Permissões (ACL)')}
+              <div class="field col12">
+                <details open>
+                  <summary class="hint" style="cursor:pointer">Overrides por módulo (Herdar/Permitir/Negar) — clique para expandir</summary>
+                  <div id="aclMatrix" style="margin-top:10px"><div class="hint">Carregando permissões...</div></div>
+                </details>
+                <div class="hint" style="margin-top:8px">As permissões são aplicadas no backend via <code class="mono">can(user,module,action)</code>. Overrides só valem após clicar <b>Salvar</b> neste usuário.</div>
+              </div>
             </div>
           `,
           onSubmit: async (obj) => {
@@ -2109,10 +2317,12 @@ async function renderUsuarios() {
                 menus.push(m.key)
               }
             }
+
             await api(`/api/users/${u.id}`, {
               method: 'PUT',
               body: {
                 username: obj.username,
+                email: obj.email,
                 nome: obj.nome || null,
                 role: obj.role,
                 motorista_id: obj.motorista_id ? Number(obj.motorista_id) : null,
@@ -2120,10 +2330,49 @@ async function renderUsuarios() {
                 menus,
               },
             })
+
+            const toTri = (v) => {
+              if (v === 'allow') return true
+              if (v === 'deny') return false
+              return null
+            }
+
+            for (const mod of aclModules) {
+              const get = (field) => toTri(obj[`acl__${mod.key}__${field}`])
+              const payload = {
+                can_view: get('can_view'),
+                can_create: get('can_create'),
+                can_update: get('can_update'),
+                can_delete: get('can_delete'),
+              }
+
+              const allNull = Object.values(payload).every((x) => x === null)
+              const hadRow = existingOverMap.has(mod.key)
+
+              if (allNull && hadRow) {
+                await api(`/api/acl/users/${u.id}/overrides/${encodeURIComponent(mod.key)}`, { method: 'DELETE' })
+              } else if (!allNull) {
+                await api(`/api/acl/users/${u.id}/overrides/${encodeURIComponent(mod.key)}`, {
+                  method: 'PUT',
+                  body: payload,
+                })
+              }
+            }
+
             toast('OK', 'Usuário atualizado.')
             renderUsuarios()
           },
         })
+
+        const roleSel = dlgBody.querySelector('select[name="role"]')
+        const aclBox = dlgBody.querySelector('#aclMatrix')
+        const loadAcl = async () => {
+          const roleNow = String(roleSel?.value || u.role)
+          const r = await populateAclMatrix({ userId: u.id, role: roleNow, containerEl: aclBox })
+          existingOverMap = r.overMap || new Map()
+        }
+        if (roleSel) roleSel.onchange = () => loadAcl()
+        loadAcl()
       }
 
       if (act === 'upwd') {
@@ -2161,6 +2410,178 @@ async function renderUsuarios() {
       }
     }
   })
+}
+
+async function renderPerfis() {
+  activeNav('perfis')
+
+  const aclModules = [
+    { key: 'painel', label: 'Painel' },
+    { key: 'colheita', label: 'Colheita' },
+    { key: 'area-colhida', label: 'Área colhida' },
+    { key: 'relatorios', label: 'Relatórios' },
+    { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
+    { key: 'safras', label: 'Safras' },
+    { key: 'talhoes', label: 'Talhões' },
+    { key: 'destinos', label: 'Destinos' },
+    { key: 'motoristas', label: 'Motoristas' },
+    { key: 'fretes', label: 'Fretes' },
+    { key: 'regras-destino', label: 'Regras do destino' },
+    { key: 'tipos-plantio', label: 'Tipos de plantio' },
+    { key: 'fazenda', label: 'Fazenda Nazca' },
+    { key: 'usuarios', label: 'Usuários' },
+    { key: 'auditoria', label: 'Auditoria' },
+  ]
+
+  const roles = await api('/api/acl/roles')
+  const roleOptions = (roles || []).map((r) => ({ value: r.name, label: r.name }))
+  const firstRole = roleOptions[0]?.value || ''
+
+  setView(`
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Perfis e permissões</div>
+          <div class="panel-sub">Matriz por módulo e ação (V/C/U/D). Ajuste roles e clone perfis.</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn ghost" id="btnRoleCreate" type="button">Novo perfil</button>
+          <button class="btn" id="btnRoleClone" type="button">Clonar perfil</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="acl-help" style="margin-bottom:12px">
+          <div style="font-family:var(--serif);font-size:14px">Como funciona</div>
+          <div class="hint" style="margin-top:6px">A base do perfil fica em <code class="mono">role_permission</code>. O usuário pode ter exceções (override) em <code class="mono">user_permission</code>.</div>
+          <div class="hint" style="margin-top:6px">Na prática: <b>Override do usuário</b> → <b>Base do perfil</b> → (fallback legado). Ações: <code class="mono">V</code>, <code class="mono">C</code>, <code class="mono">U</code>, <code class="mono">D</code>.</div>
+        </div>
+        <div class="toolbar">
+          <form class="filters" id="roleForm">
+            ${selectField({ label: 'Perfil', name: 'role', options: roleOptions.length ? roleOptions : [{ value: '', label: '-' }], value: firstRole, span: 'field' }).replace('field field', 'field')}
+          </form>
+          <div style="display:flex;gap:10px;align-items:flex-end">
+            <button class="btn ghost" id="btnReload" type="button">Recarregar</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="grid-table">
+            <thead>
+              <tr>
+                <th>Módulo</th>
+                <th style="width:120px">Ver</th>
+                <th style="width:120px">Criar</th>
+                <th style="width:120px">Editar</th>
+                <th style="width:120px">Excluir</th>
+                <th class="actions">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="permBody"><tr><td colspan="6">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="hint" style="margin-top:10px">Dica: para exceções por usuário, use a matriz de overrides dentro de <b>Usuários</b> → Editar.</div>
+      </div>
+    </section>
+  `)
+
+  const roleForm = view.querySelector('#roleForm')
+  const permBody = view.querySelector('#permBody')
+
+  function toBool(v) {
+    return v === 1 || v === true
+  }
+
+  async function loadPerms() {
+    const roleName = String(new FormData(roleForm).get('role') || '').trim()
+    if (!roleName) {
+      permBody.innerHTML = '<tr><td colspan="6">Nenhum perfil.</td></tr>'
+      return
+    }
+
+    permBody.innerHTML = '<tr><td colspan="6">Carregando...</td></tr>'
+    const rows = await api(`/api/acl/roles/${encodeURIComponent(roleName)}/permissions`)
+    const map = new Map((rows || []).map((r) => [String(r.module), r]))
+
+    permBody.innerHTML = aclModules
+      .map((m) => {
+        const r = map.get(m.key) || { can_view: 0, can_create: 0, can_update: 0, can_delete: 0 }
+        return `<tr data-mod="${escapeHtml(m.key)}">
+          <td>${escapeHtml(m.label)}<div class="hint"><code class="mono">${escapeHtml(m.key)}</code></div></td>
+          <td><input type="checkbox" data-field="can_view" ${toBool(r.can_view) ? 'checked' : ''} /></td>
+          <td><input type="checkbox" data-field="can_create" ${toBool(r.can_create) ? 'checked' : ''} /></td>
+          <td><input type="checkbox" data-field="can_update" ${toBool(r.can_update) ? 'checked' : ''} /></td>
+          <td><input type="checkbox" data-field="can_delete" ${toBool(r.can_delete) ? 'checked' : ''} /></td>
+          <td class="actions"><button class="btn small" data-act="save">Salvar</button></td>
+        </tr>`
+      })
+      .join('')
+
+    permBody.querySelectorAll('button[data-act="save"]').forEach((btn) => {
+      btn.onclick = async () => {
+        const tr = btn.closest('tr')
+        if (!tr) return
+        const mod = String(tr.dataset.mod || '')
+        const roleName2 = String(new FormData(roleForm).get('role') || '').trim()
+        const pick = (field) => Boolean(tr.querySelector(`input[data-field="${field}"]`)?.checked)
+        await api(`/api/acl/roles/${encodeURIComponent(roleName2)}/permissions/${encodeURIComponent(mod)}`, {
+          method: 'PUT',
+          body: {
+            can_view: pick('can_view'),
+            can_create: pick('can_create'),
+            can_update: pick('can_update'),
+            can_delete: pick('can_delete'),
+          },
+        })
+        toast('OK', `Permissões salvas (${roleName2} / ${mod}).`)
+      }
+    })
+  }
+
+  const btnReload = view.querySelector('#btnReload')
+  if (btnReload) btnReload.onclick = loadPerms
+  const selRole = roleForm.querySelector('select[name="role"]')
+  if (selRole) selRole.onchange = loadPerms
+
+  const btnRoleCreate = view.querySelector('#btnRoleCreate')
+  if (btnRoleCreate) {
+    btnRoleCreate.onclick = () => {
+      openDialog({
+        title: 'Novo perfil',
+        submitLabel: 'Criar',
+        bodyHtml: `<div class="form-grid">${formField({ label: 'Nome do perfil', name: 'name', placeholder: 'ex: conferente', span: 'col6' })}</div>`,
+        onSubmit: async (obj) => {
+          await api('/api/acl/roles', { method: 'POST', body: { name: obj.name } })
+          toast('OK', 'Perfil criado.')
+          renderPerfis()
+        },
+      })
+    }
+  }
+
+  const btnRoleClone = view.querySelector('#btnRoleClone')
+  if (btnRoleClone) {
+    btnRoleClone.onclick = () => {
+      openDialog({
+        title: 'Clonar perfil',
+        submitLabel: 'Clonar',
+        bodyHtml: `
+          <div class="form-grid">
+            ${selectField({ label: 'Origem', name: 'from', options: roleOptions, value: firstRole, span: 'col6' })}
+            ${formField({ label: 'Novo nome', name: 'to', placeholder: 'ex: operador-sem-excluir', span: 'col6' })}
+          </div>
+        `,
+        onSubmit: async (obj) => {
+          const from = String(obj.from || '').trim()
+          const to = String(obj.to || '').trim()
+          await api(`/api/acl/roles/${encodeURIComponent(from)}/clone`, { method: 'POST', body: { to_name: to } })
+          toast('OK', 'Perfil clonado.')
+          renderPerfis()
+        },
+      })
+    }
+  }
+
+  await loadPerms()
 }
 
 async function renderTiposPlantio() {
@@ -3472,6 +3893,10 @@ async function renderColheitaBase(variant) {
   activeNav('colheita')
   await loadLookups()
 
+  const me = window.__me || null
+  const isMotoristaUser = String(me?.role || '').toLowerCase() === 'motorista'
+  const boundMotoristaId = isMotoristaUser ? Number(me?.motorista_id) : null
+
   const safraOptions = [{ value: '', label: 'Todas' }].concat(
     cache.safras.map((s) => ({ value: s.id, label: `${s.safra} (#${s.id})` })),
   )
@@ -3500,7 +3925,11 @@ async function renderColheitaBase(variant) {
             <div class="panel-title">Colheita</div>
             <div class="panel-sub">Lance cargas (colheita) e veja totais filtrados.</div>
           </div>
-        <button class="btn" id="btnAdd">Nova colheita</button>
+        ${
+          isMotoristaUser
+            ? ''
+            : '<button class="btn" id="btnAdd">Nova colheita</button>'
+        }
       </div>
       <div class="panel-body">
         <div class="toolbar">
@@ -3569,6 +3998,17 @@ async function renderColheitaBase(variant) {
   const totalsEl = view.querySelector('#totals')
   const filtersEl = view.querySelector('#filtersForm')
 
+  // Portal motorista: travar filtro por motorista.
+  if (isMotoristaUser) {
+    const selMot = filtersEl?.querySelector('select[name="motorista_id"]')
+    if (selMot) {
+      if (Number.isInteger(boundMotoristaId) && boundMotoristaId > 0) {
+        selMot.value = String(boundMotoristaId)
+      }
+      selMot.disabled = true
+    }
+  }
+
   // Persistir visualizacao (rateio)
   const selView = filtersEl?.querySelector('select[name="view"]')
   if (selView) {
@@ -3607,6 +4047,15 @@ async function renderColheitaBase(variant) {
     for (const [k, v] of fd.entries()) {
       if (v !== '') q.set(k, v)
     }
+
+    if (isMotoristaUser) {
+      if (!Number.isInteger(boundMotoristaId) || boundMotoristaId <= 0) {
+        toast('Erro', 'Usuario motorista sem motorista_id vinculado.')
+        return
+      }
+      q.set('motorista_id', String(boundMotoristaId))
+    }
+
     const data = await api(`/api/viagens?${q.toString()}`)
     const viewMode = String(data?.view || q.get('view') || 'legacy')
 
@@ -3696,9 +4145,11 @@ async function renderColheitaBase(variant) {
 
       const actionCell = isChild
         ? `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" data-rateio-index="${v.rateio_index}" title="Editar" aria-label="Editar">${iconSvg('edit')}</button></td>`
-        : `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button>
-            <button class="icon-btn danger" data-act="del" data-id="${v.id}" title="Excluir" aria-label="Excluir">${iconSvg('trash')}</button>
-          </td>`
+        : isMotoristaUser
+          ? `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button></td>`
+          : `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button>
+              <button class="icon-btn danger" data-act="del" data-id="${v.id}" title="Excluir" aria-label="Excluir">${iconSvg('trash')}</button>
+            </td>`
 
       const childAttrs = isChild ? ` data-parent="${v.id}" style="${expanded.has(v.id) ? '' : 'display:none'}"` : ''
 
@@ -3801,15 +4252,55 @@ async function renderColheitaBase(variant) {
           const full = await api(`/api/viagens/${id}`)
           const rix = btn.dataset.rateioIndex
           const focusRateioIndex = rix === undefined ? null : Number(rix)
-          openViagemDialog({ mode: 'edit', viagem: full, focusRateioIndex })
+          if (isMotoristaUser) {
+            openViagemMotoristaDialog(full)
+          } else {
+            openViagemDialog({ mode: 'edit', viagem: full, focusRateioIndex })
+          }
         }
       }
     })
   }
 
   view.querySelector('#btnApply').onclick = refreshList
-  view.querySelector('#btnAdd').onclick = () => openViagemDialog({ mode: 'create' })
+  const btnAdd = view.querySelector('#btnAdd')
+  if (btnAdd) btnAdd.onclick = () => openViagemDialog({ mode: 'create' })
   await refreshList()
+
+  function openViagemMotoristaDialog(viagem) {
+    const now = new Date()
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
+    openDialog({
+      title: `Atualizar viagem #${viagem.id}`,
+      submitLabel: 'Salvar',
+      size: 'md',
+      bodyHtml: `
+        <div class="form-grid">
+          ${formField({ label: 'Placa', name: 'placa', value: viagem.placa || '', placeholder: 'AAA0A00', span: 'col4' })}
+          ${formField({ label: 'Data saida', name: 'data_saida', type: 'date', value: viagem.data_saida || '', span: 'col4' })}
+          ${formField({ label: 'Hora saida', name: 'hora_saida', type: 'time', value: viagem.hora_saida || hhmm, span: 'col4' })}
+          ${formField({ label: 'Data entrega', name: 'data_entrega', type: 'date', value: viagem.data_entrega || '', span: 'col6' })}
+          ${formField({ label: 'Hora entrega', name: 'hora_entrega', type: 'time', value: viagem.hora_entrega || '', span: 'col6' })}
+          <div class="field col12"><div class="hint">Obs: este modo nao altera peso/qualidade/calculos.</div></div>
+        </div>
+      `,
+      onSubmit: async (obj) => {
+        await api(`/api/viagens/${viagem.id}/motorista`, {
+          method: 'PUT',
+          body: {
+            placa: obj.placa || null,
+            data_saida: obj.data_saida || null,
+            hora_saida: obj.hora_saida || null,
+            data_entrega: obj.data_entrega || null,
+            hora_entrega: obj.hora_entrega || null,
+          },
+        })
+        toast('Atualizado', 'Viagem atualizada.')
+        refreshList()
+      },
+    })
+  }
 
   function openViagemDialog({ mode, viagem, focusRateioIndex = null }) {
     dlg.dataset.variant = variant || ''
@@ -6219,9 +6710,10 @@ async function renderQuitacaoMotoristas() {
               </div>
 
               ${formField({ label: 'Observacoes', name: 'observacoes', value: q.observacoes || '', span: 'col12' })}
-            </div>
-          `,
-          onSubmit: async (obj) => {
+        </div>
+
+      `,
+      onSubmit: async (obj) => {
             await api(`/api/quitacoes-motoristas/${id}`, {
               method: 'PUT',
               body: {
@@ -6483,6 +6975,7 @@ const routes = {
   viagens: renderColheita,
   relatorios: renderRelatorios,
   usuarios: renderUsuarios,
+  perfis: renderPerfis,
   auditoria: renderAuditoria,
 }
 

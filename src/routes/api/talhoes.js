@@ -3,7 +3,7 @@ import { talhaoRepo } from '../../repositories/talhaoRepo.js'
 import { notFound } from '../../errors.js'
 import { validateBody, validateParams } from '../../middleware/validate.js'
 import { requirePerm } from '../../middleware/auth.js'
-import { Permissions } from '../../auth/permissions.js'
+import { Actions, Modules } from '../../auth/acl.js'
 import { S, TalhaoSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
 
@@ -11,13 +11,13 @@ export const talhoesRouter = Router()
 
 const TalhaoBody = TalhaoSchemas.Body
 
-talhoesRouter.get('/', requirePerm(Permissions.CADASTROS_READ), (_req, res) => {
+talhoesRouter.get('/', requirePerm(Modules.TALHOES, Actions.VIEW), (_req, res) => {
   res.json(talhaoRepo.list())
 })
 
 talhoesRouter.post(
   '/',
-  requirePerm(Permissions.CADASTROS_WRITE),
+  requirePerm(Modules.TALHOES, Actions.CREATE),
   validateBody(TalhaoBody),
   (req, res) => {
   const row = talhaoRepo.create(req.body, { user_id: req.user?.id })
@@ -28,7 +28,7 @@ talhoesRouter.post(
 
 talhoesRouter.get(
   '/:id',
-  requirePerm(Permissions.CADASTROS_READ),
+  requirePerm(Modules.TALHOES, Actions.VIEW),
   validateParams(S.IdParam),
   (req, res) => {
   const row = talhaoRepo.get(req.params.id)
@@ -39,7 +39,7 @@ talhoesRouter.get(
 
 talhoesRouter.put(
   '/:id',
-  requirePerm(Permissions.CADASTROS_WRITE),
+  requirePerm(Modules.TALHOES, Actions.UPDATE),
   validateParams(S.IdParam),
   validateBody(TalhaoBody),
   (req, res) => {
@@ -54,7 +54,7 @@ talhoesRouter.put(
 
 talhoesRouter.delete(
   '/:id',
-  requirePerm(Permissions.CADASTROS_WRITE),
+  requirePerm(Modules.TALHOES, Actions.DELETE),
   validateParams(S.IdParam),
   (req, res) => {
   const id = req.params.id

@@ -21,6 +21,19 @@ Interface web inclusa (cadastros, viagens e relatorios).
 
 O banco SQLite e criado em `./data/app.db`.
 
+## Auth, permissoes e reset de senha
+
+- Habilitar auth: `AUTH_ENABLED=1`.
+- Login cria sessao via cookie (tabela `usuario_sessao`).
+- Autorizacao usa ACL por modulo/acao (tabelas `role_permission` e `user_permission`).
+  - Fallback: roles antigas (`Permissions.*`) ainda sao consideradas quando nao houver dados na tabela de ACL.
+- Reset de senha:
+  - `POST /api/auth/forgot` gera token de uso unico (tabela `password_reset_token`) e envia link (em dev pode logar o link).
+  - `POST /api/auth/reset` valida token + expira + invalida sessoes.
+
+Variaveis importantes (ver `.env.example`):
+- `AUTH_ENABLED`, `PUBLIC_BASE_URL`, `SESSION_TTL_DAYS`, `SESSION_COOKIE_NAME`, `COOKIE_SECURE`, `COOKIE_SAMESITE`.
+
 ## Fluxo recomendado
 
 1) Cadastrar `safras`

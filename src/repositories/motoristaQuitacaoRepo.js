@@ -20,16 +20,18 @@ export const motoristaQuitacaoRepo = {
       .all(params)
   },
 
-  create(data) {
+  create(data, { user_id } = {}) {
     const info = db
       .prepare(
         `INSERT INTO motorista_quitacao (
-          motorista_id, de, ate, data_pagamento, valor, forma_pagamento, observacoes, updated_at
+          motorista_id, de, ate, data_pagamento, valor, forma_pagamento, observacoes,
+          created_by_user_id, updated_by_user_id, updated_at
         ) VALUES (
-          @motorista_id, @de, @ate, @data_pagamento, @valor, @forma_pagamento, @observacoes, datetime('now')
+          @motorista_id, @de, @ate, @data_pagamento, @valor, @forma_pagamento, @observacoes,
+          @created_by_user_id, @updated_by_user_id, datetime('now')
         )`,
       )
-      .run(data)
+      .run({ ...data, created_by_user_id: user_id ?? null, updated_by_user_id: user_id ?? null })
 
     return db
       .prepare(
@@ -52,7 +54,7 @@ export const motoristaQuitacaoRepo = {
       .get(id)
   },
 
-  update(id, data) {
+  update(id, data, { user_id } = {}) {
     db.prepare(
       `UPDATE motorista_quitacao
        SET motorista_id=@motorista_id,
@@ -62,9 +64,10 @@ export const motoristaQuitacaoRepo = {
            valor=@valor,
            forma_pagamento=@forma_pagamento,
            observacoes=@observacoes,
+           updated_by_user_id=@updated_by_user_id,
            updated_at=datetime('now')
        WHERE id=@id`,
-    ).run({ ...data, id })
+    ).run({ ...data, id, updated_by_user_id: user_id ?? null })
     return this.get(id)
   },
 

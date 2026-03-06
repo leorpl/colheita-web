@@ -24,6 +24,7 @@ usersRouter.post('/', requireCan(Modules.USUARIOS, Actions.CREATE), validateBody
   const { salt, hash } = hashPassword(req.body.password)
   const row = usuarioRepo.create({
     username: req.body.username,
+    email: req.body.email || null,
     nome: req.body.nome || null,
     role: req.body.role,
     motorista_id: req.body.motorista_id || null,
@@ -55,6 +56,7 @@ usersRouter.put('/:id', requireCan(Modules.USUARIOS, Actions.UPDATE), validatePa
   if (!exists) throw notFound('Usuario nao encontrado')
   const row = usuarioRepo.update(id, {
     username: req.body.username,
+    email: req.body.email || null,
     nome: req.body.nome || null,
     role: req.body.role,
     motorista_id: req.body.motorista_id || null,

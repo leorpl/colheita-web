@@ -3,7 +3,7 @@ import { freteRepo } from '../../repositories/freteRepo.js'
 import { validateBody, validateParams } from '../../middleware/validate.js'
 import { notFound } from '../../errors.js'
 import { requirePerm } from '../../middleware/auth.js'
-import { Permissions } from '../../auth/permissions.js'
+import { Actions, Modules } from '../../auth/acl.js'
 import { S, FreteSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
 import { db } from '../../db/db.js'
@@ -12,13 +12,13 @@ export const fretesRouter = Router()
 
 const FreteUpsertBody = FreteSchemas.UpsertBody
 
-fretesRouter.get('/', requirePerm(Permissions.CONFIG_READ), (_req, res) => {
+fretesRouter.get('/', requirePerm(Modules.FRETES, Actions.VIEW), (_req, res) => {
   res.json(freteRepo.list())
 })
 
 fretesRouter.post(
   '/',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.FRETES, Actions.UPDATE),
   validateBody(FreteUpsertBody),
   (req, res) => {
   // best-effort old snapshot
@@ -48,7 +48,7 @@ const CopySafraBody = FreteSchemas.CopySafraBody
 
 fretesRouter.post(
   '/copiar-safra',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.FRETES, Actions.UPDATE),
   validateBody(CopySafraBody),
   (req, res) => {
   const { from_safra_id, to_safra_id } = req.body
@@ -62,7 +62,7 @@ const BulkUpsertBody = FreteSchemas.BulkUpsertBody
 
 fretesRouter.post(
   '/bulk-upsert',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.FRETES, Actions.UPDATE),
   validateBody(BulkUpsertBody),
   (req, res) => {
   const { safra_id, items } = req.body
@@ -74,7 +74,7 @@ fretesRouter.post(
 
 fretesRouter.delete(
   '/:id',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.FRETES, Actions.DELETE),
   validateParams(S.IdParam),
   (req, res) => {
   const id = req.params.id

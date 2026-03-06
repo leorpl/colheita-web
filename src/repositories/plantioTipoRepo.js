@@ -7,18 +7,21 @@ export const plantioTipoRepo = {
   get(id) {
     return db.prepare('SELECT * FROM plantio_tipo WHERE id=?').get(id)
   },
-  create({ nome }) {
+  create({ nome }, { user_id } = {}) {
     const info = db
       .prepare(
-        `INSERT INTO plantio_tipo (nome, updated_at) VALUES (@nome, datetime('now'))`,
+        `INSERT INTO plantio_tipo (nome, created_by_user_id, updated_by_user_id, updated_at)
+         VALUES (@nome, @created_by_user_id, @updated_by_user_id, datetime('now'))`,
       )
-      .run({ nome })
+      .run({ nome, created_by_user_id: user_id ?? null, updated_by_user_id: user_id ?? null })
     return this.get(info.lastInsertRowid)
   },
-  update(id, { nome }) {
+  update(id, { nome }, { user_id } = {}) {
     db.prepare(
-      `UPDATE plantio_tipo SET nome=@nome, updated_at=datetime('now') WHERE id=@id`,
-    ).run({ id, nome })
+      `UPDATE plantio_tipo
+       SET nome=@nome, updated_by_user_id=@updated_by_user_id, updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({ id, nome, updated_by_user_id: user_id ?? null })
     return this.get(id)
   },
   remove(id) {

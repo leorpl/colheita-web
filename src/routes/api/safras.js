@@ -3,7 +3,7 @@ import { validateBody, validateParams } from '../../middleware/validate.js'
 import { safraRepo } from '../../repositories/safraRepo.js'
 import { notFound } from '../../errors.js'
 import { requirePerm } from '../../middleware/auth.js'
-import { Permissions } from '../../auth/permissions.js'
+import { Actions, Modules } from '../../auth/acl.js'
 import { S, SafraSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
 
@@ -11,13 +11,13 @@ export const safrasRouter = Router()
 
 const SafraBody = SafraSchemas.Body
 
-safrasRouter.get('/', requirePerm(Permissions.CONFIG_READ), (_req, res) => {
+safrasRouter.get('/', requirePerm(Modules.SAFRAS, Actions.VIEW), (_req, res) => {
   res.json(safraRepo.list())
 })
 
 safrasRouter.post(
   '/',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.SAFRAS, Actions.CREATE),
   validateBody(SafraBody),
   (req, res) => {
   const row = safraRepo.create(req.body, { user_id: req.user?.id })
@@ -28,7 +28,7 @@ safrasRouter.post(
 
 safrasRouter.get(
   '/:id',
-  requirePerm(Permissions.CONFIG_READ),
+  requirePerm(Modules.SAFRAS, Actions.VIEW),
   validateParams(S.IdParam),
   (req, res) => {
   const row = safraRepo.get(req.params.id)
@@ -39,7 +39,7 @@ safrasRouter.get(
 
 safrasRouter.put(
   '/:id',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.SAFRAS, Actions.UPDATE),
   validateParams(S.IdParam),
   validateBody(SafraBody),
   (req, res) => {
@@ -58,7 +58,7 @@ const PainelBody = SafraSchemas.PainelBody
 // obs: somente uma safra pode ficar marcada
 safrasRouter.put(
   '/:id/painel',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.SAFRAS, Actions.UPDATE),
   validateParams(S.IdParam),
   validateBody(PainelBody),
   (req, res) => {
@@ -74,7 +74,7 @@ safrasRouter.put(
 
 safrasRouter.delete(
   '/:id',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.SAFRAS, Actions.DELETE),
   validateParams(S.IdParam),
   (req, res) => {
   const id = req.params.id

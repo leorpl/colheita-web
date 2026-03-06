@@ -7,14 +7,21 @@ export const talhaoSafraRepo = {
       .get(safra_id, talhao_id)
   },
 
-  upsert({ safra_id, talhao_id, pct_area_colhida }) {
+  upsert({ safra_id, talhao_id, pct_area_colhida }, { user_id } = {}) {
     db.prepare(
-      `INSERT INTO talhao_safra (safra_id, talhao_id, pct_area_colhida, updated_at)
-       VALUES (@safra_id, @talhao_id, @pct_area_colhida, datetime('now'))
+      `INSERT INTO talhao_safra (safra_id, talhao_id, pct_area_colhida, created_by_user_id, updated_by_user_id, updated_at)
+       VALUES (@safra_id, @talhao_id, @pct_area_colhida, @created_by_user_id, @updated_by_user_id, datetime('now'))
        ON CONFLICT(safra_id, talhao_id) DO UPDATE SET
-         pct_area_colhida=excluded.pct_area_colhida,
-         updated_at=datetime('now')`,
-    ).run({ safra_id, talhao_id, pct_area_colhida })
+          pct_area_colhida=excluded.pct_area_colhida,
+          updated_by_user_id=@updated_by_user_id,
+          updated_at=datetime('now')`,
+    ).run({
+      safra_id,
+      talhao_id,
+      pct_area_colhida,
+      created_by_user_id: user_id ?? null,
+      updated_by_user_id: user_id ?? null,
+    })
 
     return this.get({ safra_id, talhao_id })
   },

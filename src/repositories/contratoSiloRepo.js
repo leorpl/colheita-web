@@ -43,7 +43,7 @@ export const contratoSiloRepo = {
   },
 
   // Replace faixas por chave natural. Se faixas vazio, remove contrato.
-  replaceFaixas({ safra_id, destino_id, tipo_plantio, faixas, observacoes }) {
+  replaceFaixas({ safra_id, destino_id, tipo_plantio, faixas, observacoes }, { user_id } = {}) {
     const tp = String(tipo_plantio || '').trim().toUpperCase()
     if (!tp) throw new Error('tipo_plantio obrigatorio')
 
@@ -79,16 +79,17 @@ export const contratoSiloRepo = {
         `INSERT INTO contrato_silo (
            safra_id, destino_id, tipo_plantio,
            sacas_contratadas, preco_travado_por_saca,
-           observacoes, updated_at
+           observacoes, created_by_user_id, updated_by_user_id, updated_at
          ) VALUES (
            @safra_id, @destino_id, @tipo_plantio,
            @sacas_contratadas, @preco_travado_por_saca,
-           @observacoes, datetime('now')
+           @observacoes, @created_by_user_id, @updated_by_user_id, datetime('now')
          )
          ON CONFLICT(safra_id, destino_id, tipo_plantio) DO UPDATE SET
            sacas_contratadas=excluded.sacas_contratadas,
            preco_travado_por_saca=excluded.preco_travado_por_saca,
            observacoes=excluded.observacoes,
+           updated_by_user_id=@updated_by_user_id,
            updated_at=datetime('now')`,
       ).run({
         safra_id,
@@ -97,6 +98,8 @@ export const contratoSiloRepo = {
         sacas_contratadas: sacas_total,
         preco_travado_por_saca: preco_first,
         observacoes: observacoes ?? null,
+        created_by_user_id: user_id ?? null,
+        updated_by_user_id: user_id ?? null,
       })
 
       const hdr = db
@@ -110,13 +113,18 @@ export const contratoSiloRepo = {
       db.prepare('DELETE FROM contrato_silo_faixa WHERE contrato_silo_id=?').run(hdr.id)
       const ins = db.prepare(
         `INSERT INTO contrato_silo_faixa (
-           contrato_silo_id, ordem, sacas, preco_por_saca, updated_at
-         ) VALUES (
-           @contrato_silo_id, @ordem, @sacas, @preco_por_saca, datetime('now')
-         )`,
+           contrato_silo_id, ordem, sacas, preco_por_saca, created_by_user_id, updated_by_user_id, updated_at
+          ) VALUES (
+           @contrato_silo_id, @ordem, @sacas, @preco_por_saca, @created_by_user_id, @updated_by_user_id, datetime('now')
+          )`,
       )
       for (const f of norm) {
-        ins.run({ contrato_silo_id: hdr.id, ...f })
+        ins.run({
+          contrato_silo_id: hdr.id,
+          ...f,
+          created_by_user_id: user_id ?? null,
+          updated_by_user_id: user_id ?? null,
+        })
       }
 
       return this.getOne({ safra_id, destino_id, tipo_plantio: tp })

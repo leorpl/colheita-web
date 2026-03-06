@@ -308,6 +308,34 @@ export const ViagemSchemas = {
       }
     }),
 
+  // Atualizacao limitada (portal motorista).
+  // Nao altera pesos/qualidade/calculos; apenas dados operacionais.
+  MotoristaUpdateBody: z
+    .object({
+      placa: z.preprocess(emptyToNull, z.string().trim().max(MAX.placa).nullable().optional()),
+      data_saida: z
+        .preprocess((v) => normalizeDateToYMD(emptyToNull(v)), z.string().nullable().optional())
+        .refine((v) => v == null || isValidDateYMD(v), 'data_saida invalida (YYYY-MM-DD)'),
+      hora_saida: z
+        .preprocess(emptyToNull, z.string().nullable().optional())
+        .refine((v) => v == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), 'hora_saida invalida (HH:MM)'),
+      data_entrega: z
+        .preprocess((v) => normalizeDateToYMD(emptyToNull(v)), z.string().nullable().optional())
+        .refine((v) => v == null || isValidDateYMD(v), 'data_entrega invalida (YYYY-MM-DD)'),
+      hora_entrega: z
+        .preprocess(emptyToNull, z.string().nullable().optional())
+        .refine((v) => v == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), 'hora_entrega invalida (HH:MM)'),
+    })
+    .superRefine((v, ctx) => {
+      if (v.hora_entrega && !v.data_entrega) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Informe a data de entrega quando houver hora de entrega.',
+          path: ['data_entrega'],
+        })
+      }
+    }),
+
   PreviewBody: null,
   CompareBody: null,
 
@@ -451,6 +479,7 @@ export const RelatoriosSchemas = {
 export const UsersSchemas = {
   CreateBody: z.object({
     username: z.string().trim().min(3).max(MAX.username),
+    email: z.preprocess(emptyToNull, z.string().trim().email().max(254).nullable().optional()),
     nome: z.preprocess(emptyToNull, z.string().trim().max(MAX.name).nullable().optional()),
     role: z
       .string()
@@ -467,9 +496,15 @@ export const UsersSchemas = {
         'menus invalidos',
       ),
     password: z.string().min(8).max(MAX.password),
+  }).superRefine((v, ctx) => {
+    const e = v.email || null
+    if (!e) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'email obrigatorio', path: ['email'] })
+    }
   }),
   UpdateBody: z.object({
     username: z.string().trim().min(3).max(MAX.username),
+    email: z.preprocess(emptyToNull, z.string().trim().email().max(254).nullable().optional()),
     nome: z.preprocess(emptyToNull, z.string().trim().max(MAX.name).nullable().optional()),
     role: z
       .string()
@@ -486,6 +521,12 @@ export const UsersSchemas = {
         'menus invalidos',
       ),
     active: z.coerce.boolean().optional().default(true),
+  }).superRefine((v, ctx) => {
+    // Keep backwards-compat for existing records, but require email for active users.
+    const e = v.email || null
+    if (v.active && !e) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'email obrigatorio', path: ['email'] })
+    }
   }),
   PasswordBody: z.object({
     password: z.string().min(8).max(MAX.password),

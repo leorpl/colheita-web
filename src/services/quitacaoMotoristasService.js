@@ -60,7 +60,7 @@ export const quitacaoMotoristasService = {
     return { period: { de, ate }, items, quitacoes }
   },
 
-  create(input) {
+  create(input, { user_id } = {}) {
     const motorista_id = Number(input.motorista_id)
     const de = input.de
     const ate = input.ate
@@ -87,9 +87,9 @@ export const quitacaoMotoristasService = {
     }
 
     if (input.id) {
-      return motoristaQuitacaoRepo.update(Number(input.id), data)
+      return motoristaQuitacaoRepo.update(Number(input.id), data, { user_id })
     }
 
-    return motoristaQuitacaoRepo.create(data)
+    return motoristaQuitacaoRepo.create(data, { user_id })
   },
 }

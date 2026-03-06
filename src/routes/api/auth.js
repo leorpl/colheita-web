@@ -26,7 +26,7 @@ authRouter.post('/login', validateBody(LoginBody), (req, res) => {
   }
 
   const { username, password } = req.body
-  const u = usuarioRepo.getAuthByUsername(username)
+  const u = usuarioRepo.getAuthByLogin(username)
   if (!u || Number(u.active) !== 1) {
     auditService.log(req, { module_name: 'auth', record_id: null, action_type: 'login_failed', notes: `username=${username}` })
     throw unauthorized('Usuario/senha invalidos')
@@ -72,6 +72,7 @@ authRouter.post('/login', validateBody(LoginBody), (req, res) => {
     user: {
       id: u.id,
       username: u.username,
+      email: u.email || null,
       nome: u.nome,
       role: u.role,
       motorista_id: u.motorista_id,
@@ -86,7 +87,7 @@ authRouter.post('/forgot', validateBody(ForgotBody), async (req, res) => {
 
   try {
     passwordResetRepo.purgeExpired()
-    const u = usuarioRepo.getAuthByUsername(email)
+    const u = usuarioRepo.getAuthByEmail(email) || usuarioRepo.getAuthByUsername(email)
     if (u && Number(u.active) === 1) {
       const token = crypto.randomBytes(32).toString('hex')
       const token_hash = sha256Hex(token)
@@ -97,7 +98,7 @@ authRouter.post('/forgot', validateBody(ForgotBody), async (req, res) => {
 
       const base = String(env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '') || `${req.protocol}://${req.get('host')}`
       const resetUrl = `${base}/reset?token=${encodeURIComponent(token)}`
-      await sendPasswordResetEmail({ to: email, resetUrl })
+      await sendPasswordResetEmail({ to: u.email || email, resetUrl })
 
       req.user = { id: u.id, username: u.username, nome: u.nome, role: u.role, motorista_id: u.motorista_id }
       auditService.log(req, { module_name: 'auth', record_id: u.id, action_type: 'password_reset', notes: 'solicitou redefinicao (forgot)' })

@@ -568,6 +568,51 @@ code.mono{font-family:var(--mono);font-size:12px}
 .sec-line{height:1px;flex:1;background:rgba(15,26,22,.12)}
 
 .hint{margin-top:10px;color:var(--muted);font-size:12px}
+
+/* ACL helpers */
+.acl-help{
+  padding:12px 12px;
+  border-radius:14px;
+  border:1px solid rgba(15,26,22,.12);
+  background:rgba(255,255,255,.62);
+}
+
+.tri{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.tri-opt{position:relative;display:block}
+.tri-opt input{position:absolute;opacity:0;pointer-events:none}
+.tri-opt span{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:8px 8px;
+  border-radius:12px;
+  border:1px solid rgba(15,26,22,.14);
+  background:rgba(255,255,255,.78);
+  color:rgba(15,26,22,.86);
+  font-size:12px;
+  cursor:pointer;
+  user-select:none;
+}
+.tri-opt span:hover{background:rgba(255,255,255,.92)}
+
+.tri-opt.inherit input:checked + span{
+  background:rgba(15,26,22,.06);
+  border-color:rgba(15,26,22,.18);
+}
+.tri-opt.allow input:checked + span{
+  background:rgba(2,122,72,.10);
+  border-color:rgba(2,122,72,.30);
+}
+.tri-opt.deny input:checked + span{
+  background:rgba(180,35,24,.10);
+  border-color:rgba(180,35,24,.30);
+}
+
+.tri-opt input:focus + span{
+  outline:none;
+  box-shadow:0 0 0 4px rgba(30,106,77,.10);
+  border-color:rgba(30,106,77,.55);
+}
 .kbd{font-family:var(--mono);font-size:11px;background:rgba(15,26,22,.06);border:1px solid rgba(15,26,22,.12);padding:2px 6px;border-radius:8px}
 
 .help{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:6px;border-radius:999px;border:1px solid rgba(15,26,22,.18);background:rgba(255,255,255,.72);color:rgba(15,26,22,.7);font-family:var(--mono);font-size:12px;line-height:1;cursor:pointer}

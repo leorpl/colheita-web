@@ -29,6 +29,7 @@ function getUserFromRequest(req) {
   return {
     id: sess.usuario_id,
     username: sess.username,
+    email: sess.email || null,
     nome: sess.nome,
     role: sess.role,
     motorista_id: sess.motorista_id,
@@ -81,11 +82,25 @@ export function authGate(req, _res, next) {
   next()
 }
 
-export function requirePerm(perm) {
+export function requirePerm(...args) {
+  // Overload:
+  // - requirePerm(Permissions.CONFIG_READ)  -> legacy perm gate
+  // - requirePerm(Modules.COLHEITA, Actions.VIEW) -> ACL gate (can)
+  const [permOrModuleKey, action] = args
+  if (args.length >= 2) {
+    const moduleKey = permOrModuleKey
+    return (req, _res, next) => {
+      if (Number(env.AUTH_ENABLED) !== 1) return next()
+      if (!req.user) throw unauthorized('Nao autenticado')
+      if (!can(req.user, moduleKey, action)) throw forbidden('Sem permissao')
+      next()
+    }
+  }
+
   return (req, _res, next) => {
     if (Number(env.AUTH_ENABLED) !== 1) return next()
     if (!req.user) throw unauthorized('Nao autenticado')
-    if (!hasPerm(req.user.role, perm)) throw forbidden('Sem permissao')
+    if (!hasPerm(req.user.role, permOrModuleKey)) throw forbidden('Sem permissao')
     next()
   }
 }

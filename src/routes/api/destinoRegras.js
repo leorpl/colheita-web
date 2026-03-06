@@ -6,8 +6,9 @@ import { normalizePercent100 } from '../../domain/normalize.js'
 import { conflict, notFound } from '../../errors.js'
 import { db } from '../../db/db.js'
 import { requirePerm } from '../../middleware/auth.js'
-import { Permissions } from '../../auth/permissions.js'
+import { Actions, Modules } from '../../auth/acl.js'
 import { S, DestinoRegrasSchemas } from '../../validation/apiSchemas.js'
+import { auditService } from '../../services/auditService.js'
 
 export const destinoRegrasRouter = Router()
 
@@ -17,7 +18,7 @@ const ListQuery = DestinoRegrasSchemas.ListQuery
 
 destinoRegrasRouter.get(
   '/',
-  requirePerm(Permissions.CONFIG_READ),
+  requirePerm(Modules.REGRAS_DESTINO, Actions.VIEW),
   validateQuery(ListQuery),
   (req, res) => {
   res.json(destinoRegraRepo.listBySafra({ safra_id: req.query.safra_id }))
@@ -29,7 +30,7 @@ const ListPlantioQuery = DestinoRegrasSchemas.ListPlantioQuery
 
 destinoRegrasRouter.get(
   '/plantio',
-  requirePerm(Permissions.CONFIG_READ),
+  requirePerm(Modules.REGRAS_DESTINO, Actions.VIEW),
   validateQuery(ListPlantioQuery),
   (req, res) => {
     res.json(destinoRegraRepo.listPlantio({ safra_id: req.query.safra_id }))
@@ -38,7 +39,7 @@ destinoRegrasRouter.get(
 
 destinoRegrasRouter.delete(
   '/plantio/:id',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.REGRAS_DESTINO, Actions.DELETE),
   validateParams(S.IdParam),
   validateQuery(DestinoRegrasSchemas.DeletePlantioQuery),
   (req, res) => {
@@ -72,6 +73,7 @@ destinoRegrasRouter.delete(
     )
   }
 
+  auditService.log(req, { module_name: 'regras-destino', record_id: id, action_type: 'delete', old_values: regra })
   destinoRegraRepo.removePlantio(id)
   res.status(204).send()
   },
@@ -80,7 +82,7 @@ destinoRegrasRouter.delete(
 // Get regra (plantio) por id (editor)
 destinoRegrasRouter.get(
   '/plantio/:id',
-  requirePerm(Permissions.CONFIG_READ),
+  requirePerm(Modules.REGRAS_DESTINO, Actions.VIEW),
   validateParams(S.IdParam),
   (req, res) => {
     const id = req.params.id
@@ -113,7 +115,7 @@ const UpsertBody = DestinoRegrasSchemas.UpsertBody
 
 destinoRegrasRouter.post(
   '/',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.REGRAS_DESTINO, Actions.UPDATE),
   validateBody(UpsertBody),
   (req, res) => {
   const body = req.body
@@ -197,7 +199,13 @@ destinoRegrasRouter.post(
     ),
   }
 
-  const regra = destinoRegraRepo.upsertPlantio({ ...base, tipo_plantio })
+  const oldRow = destinoRegraRepo.getBySafraDestinoPlantio({
+    safra_id: body.safra_id,
+    destino_id: body.destino_id,
+    tipo_plantio,
+  })
+
+  const regra = destinoRegraRepo.upsertPlantio({ ...base, tipo_plantio }, { user_id: req.user?.id })
 
   if (body.umidade_faixas) {
     const faixasNorm = body.umidade_faixas.map((f) => ({
@@ -206,11 +214,19 @@ destinoRegrasRouter.post(
       desconto_pct: normalizePercent100(f.desconto_pct, 'desconto_pct'),
       custo_secagem_por_saca: Number(f.custo_secagem_por_saca || 0),
     }))
-    destinoRegraRepo.replaceUmidadeFaixasPlantio(regra.id, faixasNorm)
+    destinoRegraRepo.replaceUmidadeFaixasPlantio(regra.id, faixasNorm, { user_id: req.user?.id })
   }
 
   const faixas = destinoRegraRepo.getUmidadeFaixasPlantio(regra.id)
-  res.status(201).json({ ...regra, umidade_faixas: faixas })
+  const out = { ...regra, umidade_faixas: faixas }
+  auditService.log(req, {
+    module_name: 'regras-destino',
+    record_id: regra.id,
+    action_type: oldRow ? 'update' : 'create',
+    old_values: oldRow,
+    new_values: out,
+  })
+  res.status(201).json(out)
   },
 )
 
@@ -218,7 +234,7 @@ destinoRegrasRouter.post(
 // mas bloqueia duplicacao (mesma safra+destino+tipo) com 409.
 destinoRegrasRouter.put(
   '/plantio/:id',
-  requirePerm(Permissions.CONFIG_WRITE),
+  requirePerm(Modules.REGRAS_DESTINO, Actions.UPDATE),
   validateParams(S.IdParam),
   validateBody(UpsertBody),
   (req, res) => {
@@ -326,7 +342,7 @@ destinoRegrasRouter.put(
     }
 
     const tx = db.transaction(() => {
-      destinoRegraRepo.updatePlantioById(id, { ...base, tipo_plantio })
+      destinoRegraRepo.updatePlantioById(id, { ...base, tipo_plantio }, { user_id: req.user?.id })
 
       if (body.umidade_faixas) {
         const faixasNorm = body.umidade_faixas.map((f) => ({
@@ -335,7 +351,7 @@ destinoRegrasRouter.put(
           desconto_pct: normalizePercent100(f.desconto_pct, 'desconto_pct'),
           custo_secagem_por_saca: Number(f.custo_secagem_por_saca || 0),
         }))
-        destinoRegraRepo.replaceUmidadeFaixasPlantio(Number(id), faixasNorm)
+        destinoRegraRepo.replaceUmidadeFaixasPlantio(Number(id), faixasNorm, { user_id: req.user?.id })
       }
 
       const regra2 = destinoRegraRepo.getPlantioById(id)
@@ -343,7 +359,9 @@ destinoRegrasRouter.put(
       return { ...regra2, umidade_faixas: faixas2 }
     })
 
-    res.json(tx())
+    const out = tx()
+    auditService.log(req, { module_name: 'regras-destino', record_id: id, action_type: 'update', old_values: exists, new_values: out })
+    res.json(out)
   },
 )
 
@@ -351,7 +369,7 @@ const GetQuery = DestinoRegrasSchemas.GetQuery
 
 destinoRegrasRouter.get(
   '/one',
-  requirePerm(Permissions.CONFIG_READ),
+  requirePerm(Modules.REGRAS_DESTINO, Actions.VIEW),
   validateQuery(GetQuery),
   (req, res) => {
   const tipo_plantio = String(req.query.tipo_plantio || '').trim().toUpperCase()

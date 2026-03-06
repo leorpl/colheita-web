@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { validateQuery } from '../../middleware/validate.js'
 import { relatoriosService } from '../../services/relatoriosService.js'
 import { requirePerm } from '../../middleware/auth.js'
-import { Permissions } from '../../auth/permissions.js'
+import { Actions, Modules } from '../../auth/acl.js'
 import { RelatoriosSchemas } from '../../validation/apiSchemas.js'
 
 export const relatoriosRouter = Router()
@@ -11,14 +11,14 @@ const ColheitaQuery = RelatoriosSchemas.ColheitaQuery
 
 relatoriosRouter.get(
   '/colheita',
-  requirePerm(Permissions.RELATORIOS_READ),
+  requirePerm(Modules.RELATORIOS, Actions.VIEW),
   validateQuery(ColheitaQuery),
   (req, res) => {
   res.json(relatoriosService.colheita(req.query))
   },
 )
 
-relatoriosRouter.get('/painel', requirePerm(Permissions.RELATORIOS_READ), (_req, res) => {
+relatoriosRouter.get('/painel', requirePerm(Modules.RELATORIOS, Actions.VIEW), (_req, res) => {
   res.json(relatoriosService.painel())
 })
 
@@ -26,7 +26,7 @@ const ResumoTalhaoQuery = RelatoriosSchemas.ResumoTalhaoQuery
 
 relatoriosRouter.get(
   '/resumo-talhao',
-  requirePerm(Permissions.RELATORIOS_READ),
+  requirePerm(Modules.RELATORIOS, Actions.VIEW),
   validateQuery(ResumoTalhaoQuery),
   (req, res) => {
     res.json(
@@ -43,7 +43,7 @@ const PagamentoQuery = RelatoriosSchemas.PagamentoQuery
 
 relatoriosRouter.get(
   '/pagamento-motoristas',
-  requirePerm(Permissions.RELATORIOS_READ),
+  requirePerm(Modules.RELATORIOS, Actions.VIEW),
   validateQuery(PagamentoQuery),
   (req, res) => {
     res.json(relatoriosService.pagamentoMotoristas(req.query))
@@ -54,7 +54,7 @@ const EntregasQuery = RelatoriosSchemas.EntregasQuery
 
 relatoriosRouter.get(
   '/entregas-por-destino',
-  requirePerm(Permissions.RELATORIOS_READ),
+  requirePerm(Modules.RELATORIOS, Actions.VIEW),
   validateQuery(EntregasQuery),
   (req, res) => {
     res.json(

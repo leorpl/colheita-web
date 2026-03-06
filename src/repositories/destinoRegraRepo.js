@@ -19,33 +19,34 @@ export const destinoRegraRepo = {
       .get(safra_id, destino_id)
   },
 
-  upsert(data) {
+  upsert(data, { user_id } = {}) {
     db.prepare(
        `INSERT INTO destino_regra (
-          safra_id, destino_id, trava_sacas,
-          custo_silo_por_saca, custo_terceiros_por_saca,
-          impureza_limite_pct, ardidos_limite_pct, queimados_limite_pct,
-          avariados_limite_pct, esverdiados_limite_pct, quebrados_limite_pct,
-          updated_at
-        ) VALUES (
-          @safra_id, @destino_id, @trava_sacas,
-          @custo_silo_por_saca, @custo_terceiros_por_saca,
-          @impureza_limite_pct, @ardidos_limite_pct, @queimados_limite_pct,
-          @avariados_limite_pct, @esverdiados_limite_pct, @quebrados_limite_pct,
-          datetime('now')
-        )
-        ON CONFLICT(safra_id, destino_id) DO UPDATE SET
-          trava_sacas=excluded.trava_sacas,
-          custo_silo_por_saca=excluded.custo_silo_por_saca,
-          custo_terceiros_por_saca=excluded.custo_terceiros_por_saca,
-          impureza_limite_pct=excluded.impureza_limite_pct,
-          ardidos_limite_pct=excluded.ardidos_limite_pct,
-          queimados_limite_pct=excluded.queimados_limite_pct,
-          avariados_limite_pct=excluded.avariados_limite_pct,
-          esverdiados_limite_pct=excluded.esverdiados_limite_pct,
-          quebrados_limite_pct=excluded.quebrados_limite_pct,
-          updated_at=datetime('now')`,
-    ).run(data)
+           safra_id, destino_id, trava_sacas,
+           custo_silo_por_saca, custo_terceiros_por_saca,
+           impureza_limite_pct, ardidos_limite_pct, queimados_limite_pct,
+           avariados_limite_pct, esverdiados_limite_pct, quebrados_limite_pct,
+           created_by_user_id, updated_by_user_id, updated_at
+         ) VALUES (
+           @safra_id, @destino_id, @trava_sacas,
+           @custo_silo_por_saca, @custo_terceiros_por_saca,
+           @impureza_limite_pct, @ardidos_limite_pct, @queimados_limite_pct,
+           @avariados_limite_pct, @esverdiados_limite_pct, @quebrados_limite_pct,
+           @created_by_user_id, @updated_by_user_id, datetime('now')
+         )
+         ON CONFLICT(safra_id, destino_id) DO UPDATE SET
+           trava_sacas=excluded.trava_sacas,
+           custo_silo_por_saca=excluded.custo_silo_por_saca,
+           custo_terceiros_por_saca=excluded.custo_terceiros_por_saca,
+           impureza_limite_pct=excluded.impureza_limite_pct,
+           ardidos_limite_pct=excluded.ardidos_limite_pct,
+           queimados_limite_pct=excluded.queimados_limite_pct,
+           avariados_limite_pct=excluded.avariados_limite_pct,
+           esverdiados_limite_pct=excluded.esverdiados_limite_pct,
+           quebrados_limite_pct=excluded.quebrados_limite_pct,
+           updated_by_user_id=@updated_by_user_id,
+           updated_at=datetime('now')`,
+    ).run({ ...data, created_by_user_id: user_id ?? null, updated_by_user_id: user_id ?? null })
 
     return this.getBySafraDestino({
       safra_id: data.safra_id,
@@ -53,20 +54,20 @@ export const destinoRegraRepo = {
     })
   },
 
-  upsertPlantio(data) {
+  upsertPlantio(data, { user_id } = {}) {
     db.prepare(
       `INSERT INTO destino_regra_plantio (
          safra_id, destino_id, tipo_plantio,
          custo_silo_por_saca, custo_terceiros_por_saca,
          impureza_limite_pct, ardidos_limite_pct, queimados_limite_pct,
          avariados_limite_pct, esverdiados_limite_pct, quebrados_limite_pct,
-         updated_at
+         created_by_user_id, updated_by_user_id, updated_at
        ) VALUES (
          @safra_id, @destino_id, @tipo_plantio,
          @custo_silo_por_saca, @custo_terceiros_por_saca,
          @impureza_limite_pct, @ardidos_limite_pct, @queimados_limite_pct,
          @avariados_limite_pct, @esverdiados_limite_pct, @quebrados_limite_pct,
-         datetime('now')
+         @created_by_user_id, @updated_by_user_id, datetime('now')
        )
        ON CONFLICT(safra_id, destino_id, tipo_plantio) DO UPDATE SET
          custo_silo_por_saca=excluded.custo_silo_por_saca,
@@ -77,8 +78,9 @@ export const destinoRegraRepo = {
          avariados_limite_pct=excluded.avariados_limite_pct,
          esverdiados_limite_pct=excluded.esverdiados_limite_pct,
          quebrados_limite_pct=excluded.quebrados_limite_pct,
+         updated_by_user_id=@updated_by_user_id,
          updated_at=datetime('now')`,
-    ).run(data)
+    ).run({ ...data, created_by_user_id: user_id ?? null, updated_by_user_id: user_id ?? null })
 
     return this.getBySafraDestinoPlantio({
       safra_id: data.safra_id,
@@ -87,7 +89,7 @@ export const destinoRegraRepo = {
     })
   },
 
-  updatePlantioById(id, data) {
+  updatePlantioById(id, data, { user_id } = {}) {
     db.prepare(
       `UPDATE destino_regra_plantio
        SET safra_id=@safra_id,
@@ -101,9 +103,10 @@ export const destinoRegraRepo = {
            avariados_limite_pct=@avariados_limite_pct,
            esverdiados_limite_pct=@esverdiados_limite_pct,
            quebrados_limite_pct=@quebrados_limite_pct,
+           updated_by_user_id=@updated_by_user_id,
            updated_at=datetime('now')
        WHERE id=@id`,
-    ).run({ ...data, id })
+    ).run({ ...data, id, updated_by_user_id: user_id ?? null })
 
     return this.getPlantioById(id)
   },
@@ -191,20 +194,22 @@ export const destinoRegraRepo = {
       .all(destino_regra_plantio_id)
   },
 
-  replaceUmidadeFaixas(destino_regra_id, faixas) {
+  replaceUmidadeFaixas(destino_regra_id, faixas, { user_id } = {}) {
     const tx = db.transaction(() => {
       db.prepare('DELETE FROM umidade_faixa WHERE destino_regra_id=?').run(
         destino_regra_id,
       )
       const stmt = db.prepare(
         `INSERT INTO umidade_faixa (
-           destino_regra_id, umid_gt, umid_lte, desconto_pct, custo_secagem_por_saca, updated_at
-         ) VALUES (
-           @destino_regra_id, @umid_gt, @umid_lte, @desconto_pct, @custo_secagem_por_saca, datetime('now')
-         )`,
+           destino_regra_id, umid_gt, umid_lte, desconto_pct, custo_secagem_por_saca,
+           created_by_user_id, updated_by_user_id, updated_at
+          ) VALUES (
+           @destino_regra_id, @umid_gt, @umid_lte, @desconto_pct, @custo_secagem_por_saca,
+           @created_by_user_id, @updated_by_user_id, datetime('now')
+          )`,
       )
       for (const f of faixas) {
-        stmt.run({ destino_regra_id, ...f })
+        stmt.run({ destino_regra_id, ...f, created_by_user_id: user_id ?? null, updated_by_user_id: user_id ?? null })
       }
     })
 
@@ -212,20 +217,22 @@ export const destinoRegraRepo = {
     return this.getUmidadeFaixas(destino_regra_id)
   },
 
-  replaceUmidadeFaixasPlantio(destino_regra_plantio_id, faixas) {
+  replaceUmidadeFaixasPlantio(destino_regra_plantio_id, faixas, { user_id } = {}) {
     const tx = db.transaction(() => {
       db.prepare(
         'DELETE FROM umidade_faixa_plantio WHERE destino_regra_plantio_id=?',
       ).run(destino_regra_plantio_id)
       const stmt = db.prepare(
         `INSERT INTO umidade_faixa_plantio (
-           destino_regra_plantio_id, umid_gt, umid_lte, desconto_pct, custo_secagem_por_saca, updated_at
-         ) VALUES (
-           @destino_regra_plantio_id, @umid_gt, @umid_lte, @desconto_pct, @custo_secagem_por_saca, datetime('now')
-         )`,
+           destino_regra_plantio_id, umid_gt, umid_lte, desconto_pct, custo_secagem_por_saca,
+           created_by_user_id, updated_by_user_id, updated_at
+          ) VALUES (
+           @destino_regra_plantio_id, @umid_gt, @umid_lte, @desconto_pct, @custo_secagem_por_saca,
+           @created_by_user_id, @updated_by_user_id, datetime('now')
+          )`,
       )
       for (const f of faixas) {
-        stmt.run({ destino_regra_plantio_id, ...f })
+        stmt.run({ destino_regra_plantio_id, ...f, created_by_user_id: user_id ?? null, updated_by_user_id: user_id ?? null })
       }
     })
 

@@ -33,6 +33,8 @@ export const viagemRepo = {
       .prepare(
         `SELECT v.*, s.safra as safra_nome, t.codigo as talhao_codigo, t.local as talhao_local, t.nome as talhao_nome,
                 d.codigo as destino_codigo, d.local as destino_local, m.nome as motorista_nome,
+                uc.username as created_by_username, uc.nome as created_by_nome,
+                uu.username as updated_by_username, uu.nome as updated_by_nome,
                 rp.trava_sacas as regra_trava_sacas,
                 rp.valor_compra_por_saca as regra_valor_compra_por_saca
          FROM viagem v
@@ -40,10 +42,12 @@ export const viagemRepo = {
          JOIN talhao t ON t.id = v.talhao_id
          JOIN destino d ON d.id = v.destino_id
          JOIN motorista m ON m.id = v.motorista_id
+         LEFT JOIN usuario uc ON uc.id = v.created_by_user_id
+         LEFT JOIN usuario uu ON uu.id = v.updated_by_user_id
          LEFT JOIN destino_regra_plantio rp
-           ON rp.safra_id = v.safra_id
-          AND rp.destino_id = v.destino_id
-          AND rp.tipo_plantio = UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, '')))
+            ON rp.safra_id = v.safra_id
+           AND rp.destino_id = v.destino_id
+           AND rp.tipo_plantio = UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, '')))
          WHERE v.id = ?`,
       )
       .get(id)
@@ -314,6 +318,31 @@ export const viagemRepo = {
           updated_at=datetime('now')
        WHERE id=@id`,
     ).run({ ...data, id, updated_by_user_id: user_id ?? null })
+
+    return this.get(id)
+  },
+
+  // Atualizacao limitada (portal motorista): nao mexe em calculos.
+  updateMotoristaFields(id, data, { user_id } = {}) {
+    db.prepare(
+      `UPDATE viagem SET
+          placa=@placa,
+          data_saida=@data_saida,
+          hora_saida=@hora_saida,
+          data_entrega=@data_entrega,
+          hora_entrega=@hora_entrega,
+          updated_by_user_id=@updated_by_user_id,
+          updated_at=datetime('now')
+       WHERE id=@id`,
+    ).run({
+      id,
+      placa: data.placa ?? null,
+      data_saida: data.data_saida ?? null,
+      hora_saida: data.hora_saida ?? null,
+      data_entrega: data.data_entrega ?? null,
+      hora_entrega: data.hora_entrega ?? null,
+      updated_by_user_id: user_id ?? null,
+    })
 
     return this.get(id)
   },

@@ -4,7 +4,7 @@ export const usuarioRepo = {
   list() {
     return db
       .prepare(
-        `SELECT id, username, nome, role, motorista_id, menus_json, active, created_at, updated_at,
+        `SELECT id, username, email, nome, role, motorista_id, menus_json, active, created_at, updated_at,
                 created_by_user_id, updated_by_user_id, deleted_at, deleted_by_user_id
          FROM usuario
          WHERE deleted_at IS NULL
@@ -16,7 +16,7 @@ export const usuarioRepo = {
   get(id) {
     return db
       .prepare(
-        `SELECT id, username, nome, role, motorista_id, menus_json, active, created_at, updated_at,
+        `SELECT id, username, email, nome, role, motorista_id, menus_json, active, created_at, updated_at,
                 created_by_user_id, updated_by_user_id, deleted_at, deleted_by_user_id
          FROM usuario WHERE id=?`,
       )
@@ -31,16 +31,38 @@ export const usuarioRepo = {
       .get(username)
   },
 
-  create({ username, nome, role, motorista_id, password_hash, password_salt }, { user_id } = {}) {
+  getAuthByEmail(email) {
+    const e = String(email || '').trim().toLowerCase()
+    if (!e) return null
+    return db
+      .prepare(
+        `SELECT * FROM usuario WHERE LOWER(email)=? AND deleted_at IS NULL LIMIT 1`,
+      )
+      .get(e)
+  },
+
+  // Accept login either by username or email.
+  getAuthByLogin(login) {
+    const l = String(login || '').trim()
+    if (!l) return null
+    // Fast path: if looks like email, try email first.
+    if (l.includes('@')) {
+      return this.getAuthByEmail(l) || this.getAuthByUsername(l)
+    }
+    return this.getAuthByUsername(l) || this.getAuthByEmail(l)
+  },
+
+  create({ username, email, nome, role, motorista_id, password_hash, password_salt }, { user_id } = {}) {
     const info = db
       .prepare(
-        `INSERT INTO usuario (username, nome, role, motorista_id, menus_json, password_hash, password_salt, active,
-                             created_by_user_id, updated_by_user_id, updated_at)
-         VALUES (@username, @nome, @role, @motorista_id, @menus_json, @password_hash, @password_salt, 1,
-                 @created_by_user_id, @updated_by_user_id, datetime('now'))`,
+        `INSERT INTO usuario (username, email, nome, role, motorista_id, menus_json, password_hash, password_salt, active,
+                              created_by_user_id, updated_by_user_id, updated_at)
+         VALUES (@username, @email, @nome, @role, @motorista_id, @menus_json, @password_hash, @password_salt, 1,
+                  @created_by_user_id, @updated_by_user_id, datetime('now'))`,
       )
       .run({
         username,
+        email: email || null,
         nome,
         role,
         motorista_id: motorista_id || null,
@@ -53,16 +75,17 @@ export const usuarioRepo = {
     return this.get(info.lastInsertRowid)
   },
 
-  update(id, { username, nome, role, motorista_id, active, menus_json }, { user_id } = {}) {
+  update(id, { username, email, nome, role, motorista_id, active, menus_json }, { user_id } = {}) {
     db.prepare(
       `UPDATE usuario
-       SET username=@username, nome=@nome, role=@role, motorista_id=@motorista_id, active=@active, menus_json=@menus_json,
+       SET username=@username, email=@email, nome=@nome, role=@role, motorista_id=@motorista_id, active=@active, menus_json=@menus_json,
            updated_by_user_id=@updated_by_user_id,
            updated_at=datetime('now')
        WHERE id=@id`,
     ).run({
       id,
       username,
+      email: email || null,
       nome,
       role,
       motorista_id: motorista_id || null,
