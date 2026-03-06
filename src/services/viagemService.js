@@ -955,12 +955,21 @@ export const viagemService = {
     const dentro_contrato = Math.max(0, Math.min(tentativa, restante_antes))
     const fora_contrato = Math.max(0, tentativa - dentro_contrato)
     const entrega_depois = round(entrega_atual + tentativa, 9)
-    const excedeu = entrega_depois > contrato_sacas
+    const eps = 1e-9
+    const atingiu = entrega_depois >= contrato_sacas - eps
+    const excedeu = entrega_depois > contrato_sacas + eps
+    const ratio = contrato_sacas > 0 ? entrega_depois / contrato_sacas : null
+    const proximo = typeof ratio === 'number' && ratio >= 0.85 && ratio < 1
+    const excedente_total = Math.max(0, entrega_depois - contrato_sacas)
 
     return {
       // compat: "atingida" era usado como alerta de trava
-      atingida: excedeu,
+      atingida: atingiu,
       excedeu,
+      proximo,
+      atingiu,
+      ultrapassou: excedeu,
+      status: excedeu ? 'ultrapassado' : atingiu ? 'atingido' : proximo ? 'proximo' : 'ok',
       destino_id,
       safra_id,
       tipo_plantio: tp,
@@ -975,6 +984,7 @@ export const viagemService = {
       dentro_contrato_sacas: round(dentro_contrato, 9),
       fora_contrato_sacas: round(fora_contrato, 9),
       entrega_depois_sacas: entrega_depois,
+      excedente_total_sacas: round(excedente_total, 9),
     }
   },
 
@@ -994,15 +1004,6 @@ export const viagemService = {
       tipo_plantio: payload.tipo_plantio,
       sacas: payload.sacas,
     })
-
-    if (trava && Number(trava.fora_contrato_sacas || 0) > 0) {
-      throw conflict('Entrega excede o contrato. Cadastre mais sacas no contrato antes de salvar.', {
-        fora_contrato_sacas: trava.fora_contrato_sacas,
-        dentro_contrato_sacas: trava.dentro_contrato_sacas,
-        contrato_sacas: trava.contrato_sacas,
-        entrega_atual_sacas: trava.entrega_atual_sacas,
-      })
-    }
     try {
       const tx = db.transaction(() => {
         const row = viagemRepo.create(payload, { user_id })
@@ -1045,15 +1046,6 @@ export const viagemService = {
       sacas: payload.sacas,
       exclude_id: id,
     })
-
-    if (trava && Number(trava.fora_contrato_sacas || 0) > 0) {
-      throw conflict('Entrega excede o contrato. Cadastre mais sacas no contrato antes de salvar.', {
-        fora_contrato_sacas: trava.fora_contrato_sacas,
-        dentro_contrato_sacas: trava.dentro_contrato_sacas,
-        contrato_sacas: trava.contrato_sacas,
-        entrega_atual_sacas: trava.entrega_atual_sacas,
-      })
-    }
 
     try {
       const tx = db.transaction(() => {

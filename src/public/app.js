@@ -1433,17 +1433,32 @@ async function renderPainel() {
 
         elBars.innerHTML = `<div class="bars">${all
           .map((d) => {
-            const pct100 = d.trava > 0 ? d.pct * 100 : 100
+            const exced = d.trava > 0 ? Math.max(0, d.entrega - d.trava) : 0
+            const ratio = d.trava > 0 ? d.entrega / Math.max(1, d.trava) : null
+            const pctMain = d.trava > 0 ? Math.min(100, (Number.isFinite(ratio) ? ratio : 0) * 100) : 100
+            // Excedente desenhado como "linha" por cima (cap em 100% para manter limpo)
+            const pctOver = d.trava > 0 && exced > 0 ? Math.min(100, (exced / Math.max(1, d.trava)) * 100) : 0
+            const state = d.trava > 0 ? (exced > 0 ? 'over' : ratio >= 1 ? 'hit' : ratio >= 0.85 ? 'near' : 'ok') : 'none'
             const val =
               d.trava > 0
                 ? `${fmtNum(d.entrega, 2)} / ${fmtNum(d.trava, 2)} sc` +
-                  (d.falta > 0 ? ` | falta ${fmtNum(d.falta, 2)} sc` : ' | OK')
+                  (exced > 0
+                    ? ` | excedente ${fmtNum(exced, 2)} sc`
+                    : d.falta > 0
+                      ? ` | saldo ${fmtNum(d.falta, 2)} sc`
+                      : ' | OK')
                 : `${fmtNum(d.entrega, 2)} sc | sem contrato`
+
+            const tip =
+              d.trava > 0
+                ? `Limite: ${fmtNum(d.trava, 2)} sc\nRealizado: ${fmtNum(d.entrega, 2)} sc\nSaldo: ${fmtNum(Math.max(0, d.trava - d.entrega), 2)} sc\nExcedente: ${fmtNum(exced, 2)} sc`
+                : `Realizado: ${fmtNum(d.entrega, 2)} sc`
             return `
               <div class="bar">
                 <div class="name">${escapeHtml(d.name)}</div>
-                <div class="track">
-                  <div class="fill" style="width:${pct100}%"></div>
+                <div class="track" data-state="${escapeHtml(state)}" title="${escapeHtml(tip)}">
+                  <div class="fill" style="width:${pctMain}%"></div>
+                  ${pctOver > 0 ? `<div class="over" style="width:${pctOver}%" aria-hidden="true"></div>` : ''}
                 </div>
                 <div class="val">${escapeHtml(val)}</div>
               </div>
@@ -4992,7 +5007,8 @@ async function renderColheitaBase(variant) {
                 <span class="pill"><span class="dot" id="travaDot"></span><span id="travaStatus">Carregando...</span></span>
                 <span class="pill"><span class="dot"></span><span>Entregue: <b id="travaEntregue">-</b> sc</span></span>
                 <span class="pill"><span class="dot"></span><span>Contrato: <b id="travaLimite">-</b> sc</span></span>
-                <span class="pill"><span class="dot"></span><span>Restante: <b id="travaRestante">-</b> sc</span></span>
+                <span class="pill"><span class="dot"></span><span>Saldo: <b id="travaRestante">-</b> sc</span></span>
+                <span class="pill" id="pillExced"><span class="dot bad"></span><span>Excedente: <b id="travaExcedente">-</b> sc</span></span>
                 <span class="pill"><span class="dot"></span><span>Na carga: <b id="travaDentro">-</b> sc dentro | <b id="travaFora">-</b> sc fora</span></span>
                 <span class="pill"><span class="dot" id="regraDot"></span><span id="regraInfo">Carregando regras...</span></span>
               </div>
@@ -5095,7 +5111,7 @@ async function renderColheitaBase(variant) {
           }
         }
 
-        // Regra de negocio: contrato de venda futura. Se exceder, bloquear.
+        // Contrato de sacas (acompanhamento): apenas ALERTA, nunca bloqueio.
         try {
           const prev = await api('/api/viagens/preview', {
             method: 'POST',
@@ -5104,13 +5120,18 @@ async function renderColheitaBase(variant) {
               ...body,
             },
           })
-          const fora = Number(prev?.trava?.fora_contrato_sacas || 0)
-          if (Number.isFinite(fora) && fora > 0) {
-            toast('Erro', `Esta carga excede o contrato em ${fmtNum(fora, 2)} sacas.`)
-            return
+          const t = prev?.trava
+          const status = String(t?.status || '')
+          const exced = Number(t?.fora_contrato_sacas || 0)
+          if (status === 'ultrapassado' && Number.isFinite(exced) && exced > 0) {
+            toast('Alerta', `Limite contratado ultrapassado nesta carga: +${fmtNum(exced, 2)} sc.`)
+          } else if (status === 'atingido') {
+            toast('Alerta', 'Limite contratado atingido com esta carga.')
+          } else if (status === 'proximo') {
+            toast('Aviso', 'Próximo do limite contratado.')
           }
         } catch {
-          // se o preview falhar, o backend provavelmente vai bloquear o salvar tambem.
+          // ignore
         }
 
         if (isEdit) {
@@ -5447,6 +5468,8 @@ async function renderColheitaBase(variant) {
       const travaEntregue = dlgForm.querySelector('#travaEntregue')
       const travaLimite = dlgForm.querySelector('#travaLimite')
       const travaRestante = dlgForm.querySelector('#travaRestante')
+      const travaExcedente = dlgForm.querySelector('#travaExcedente')
+      const pillExced = dlgForm.querySelector('#pillExced')
       const travaDentro = dlgForm.querySelector('#travaDentro')
       const travaFora = dlgForm.querySelector('#travaFora')
       const regraDot = dlgForm.querySelector('#regraDot')
@@ -5468,32 +5491,48 @@ async function renderColheitaBase(variant) {
           : Number.isFinite(Number(contrato?.sacas_contratadas))
             ? Number(contrato.sacas_contratadas)
             : null
-      const entregue =
+      const entregueAntes =
         trava && Number.isFinite(Number(trava.entrega_atual_sacas))
           ? Number(trava.entrega_atual_sacas)
           : null
+      const entregueDepois =
+        trava && Number.isFinite(Number(trava.entrega_depois_sacas))
+          ? Number(trava.entrega_depois_sacas)
+          : entregueAntes
 
-      const restante =
-        Number.isFinite(limite) && limite > 0 && Number.isFinite(entregue)
-          ? Math.max(0, limite - entregue)
-          : null
+      const saldoDepois =
+        trava && Number.isFinite(Number(trava.restante_depois_sacas))
+          ? Number(trava.restante_depois_sacas)
+          : Number.isFinite(limite) && limite > 0 && Number.isFinite(entregueDepois)
+            ? Math.max(0, limite - entregueDepois)
+            : null
+
+      const excedTotal =
+        trava && Number.isFinite(Number(trava.excedente_total_sacas))
+          ? Number(trava.excedente_total_sacas)
+          : Number.isFinite(limite) && limite > 0 && Number.isFinite(entregueDepois)
+            ? Math.max(0, entregueDepois - limite)
+            : null
 
       const ratio =
-        Number.isFinite(limite) && limite > 0 && Number.isFinite(entregue)
-          ? entregue / limite
+        Number.isFinite(limite) && limite > 0 && Number.isFinite(entregueDepois)
+          ? entregueDepois / limite
           : null
 
       let statusText = 'Sem contrato'
       let dotClass = ''
       if (Number.isFinite(limite) && limite > 0) {
-        if (!Number.isFinite(entregue)) {
+        if (!Number.isFinite(entregueDepois)) {
           statusText = 'Contrato definido'
           dotClass = 'warn'
-        } else if (ratio >= 1) {
-          statusText = 'Contrato excedido'
+        } else if (Number.isFinite(excedTotal) && excedTotal > 0) {
+          statusText = 'Limite contratado ultrapassado'
           dotClass = 'bad'
-        } else if (ratio >= 0.85) {
-          statusText = 'Perto de completar contrato'
+        } else if (ratio !== null && ratio >= 1) {
+          statusText = 'Limite contratado atingido'
+          dotClass = 'hot'
+        } else if (ratio !== null && ratio >= 0.85) {
+          statusText = 'Próximo do limite contratado'
           dotClass = 'warn'
         } else {
           statusText = 'Dentro do contrato'
@@ -5505,9 +5544,15 @@ async function renderColheitaBase(variant) {
       if (travaDot) travaDot.className = `dot ${dotClass}`.trim()
       if (travaLimite) travaLimite.textContent = Number.isFinite(limite) ? fmtSacas(limite) : '-'
       if (travaEntregue)
-        travaEntregue.textContent = Number.isFinite(entregue) ? fmtSacas(entregue) : '-'
+        travaEntregue.textContent = Number.isFinite(entregueDepois) ? fmtSacas(entregueDepois) : '-'
       if (travaRestante)
-        travaRestante.textContent = Number.isFinite(restante) ? fmtSacas(restante) : '-'
+        travaRestante.textContent = Number.isFinite(saldoDepois) ? fmtSacas(saldoDepois) : '-'
+
+      if (travaExcedente) {
+        const ex = Number.isFinite(excedTotal) ? Number(excedTotal) : null
+        travaExcedente.textContent = ex !== null ? fmtSacas(ex) : '-'
+        if (pillExced) pillExced.style.display = ex !== null && ex > 0 ? '' : 'none'
+      }
 
       const dentro = Number(trava?.dentro_contrato_sacas)
       const fora = Number(trava?.fora_contrato_sacas)
@@ -5856,11 +5901,8 @@ async function renderColheitaBase(variant) {
 
         // contrato (antiga "trava"): manter calculos, apenas sinalizar
         const trava = p.trava
-        if (trava?.excedeu || trava?.atingida) {
-          dlg.dataset.trava = '1'
-        } else {
-          dlg.dataset.trava = ''
-        }
+        const status = String(trava?.status || '')
+        dlg.dataset.trava = status && status !== 'ok' ? '1' : ''
 
         setSuggestedUmidFromPreview(p)
         updateUmidHighlight()
@@ -6371,8 +6413,9 @@ async function renderRelatorios() {
         let status = `<span class="pill"><span class="dot"></span><span>OK</span></span>`
         if (trava && trava > 0) {
           const ratio = entrega / trava
-          if (ratio >= 1) status = `<span class="pill"><span class="dot bad"></span><span>Contrato excedido</span></span>`
-          else if (ratio >= 0.85) status = `<span class="pill"><span class="dot warn"></span><span>Perto de completar contrato</span></span>`
+          if (entrega > trava) status = `<span class="pill"><span class="dot bad"></span><span>Limite contratado ultrapassado</span></span>`
+          else if (ratio >= 1) status = `<span class="pill"><span class="dot hot"></span><span>Limite contratado atingido</span></span>`
+          else if (ratio >= 0.85) status = `<span class="pill"><span class="dot warn"></span><span>Próximo do limite contratado</span></span>`
         }
         return `<tr>
           <td>${escapeHtml(d.destino_local)}</td>
@@ -6476,8 +6519,9 @@ async function renderRelatorios() {
         let status = 'OK'
         if (trava && trava > 0) {
           const ratio = entrega / trava
-          if (ratio >= 1) status = 'Contrato excedido'
-          else if (ratio >= 0.85) status = 'Perto de completar contrato'
+          if (entrega > trava) status = 'Limite contratado ultrapassado'
+          else if (ratio >= 1) status = 'Limite contratado atingido'
+          else if (ratio >= 0.85) status = 'Próximo do limite contratado'
         }
         return [
           d.destino_local,
