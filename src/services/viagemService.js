@@ -167,7 +167,7 @@ export const viagemService = {
   listView(filters = {}) {
     const view = String(filters.view || 'flat')
     if (view !== 'flat' && view !== 'grouped') {
-      throw unprocessable('view invalido (use legacy, flat, grouped)')
+      throw unprocessable('view invalido (use flat, grouped)')
     }
 
     const params = {
@@ -201,24 +201,23 @@ export const viagemService = {
            ON rp.safra_id = v.safra_id
           AND rp.destino_id = v.destino_id
           AND rp.tipo_plantio = UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, '')))
-         LEFT JOIN viagem_talhao vt ON vt.viagem_id = v.id
-         LEFT JOIN talhao t ON t.id = vt.talhao_id
-         WHERE (@safra_id IS NULL OR v.safra_id = @safra_id)
-           AND (@talhao_id IS NULL OR EXISTS (
-             SELECT 1 FROM viagem_talhao vt2
-             WHERE vt2.viagem_id = v.id AND vt2.talhao_id = @talhao_id
-           ))
-           AND (@destino_id IS NULL OR v.destino_id = @destino_id)
-           AND (@motorista_id IS NULL OR v.motorista_id = @motorista_id)
-           AND (@de IS NULL OR v.data_saida >= @de)
-           AND (@ate IS NULL OR v.data_saida <= @ate)
-         ORDER BY
-           v.safra_id ASC,
-           v.ficha ASC,
-           v.id ASC,
-           vt.id ASC`,
-      )
-      .all(params)
+          LEFT JOIN viagem_talhao vt ON vt.viagem_id = v.id
+          LEFT JOIN talhao t ON t.id = vt.talhao_id
+          WHERE (@safra_id IS NULL OR v.safra_id = @safra_id)
+            AND (@talhao_id IS NULL OR EXISTS (
+              SELECT 1 FROM viagem_talhao vt2
+              WHERE vt2.viagem_id = v.id AND vt2.talhao_id = @talhao_id
+            ))
+            AND (@destino_id IS NULL OR v.destino_id = @destino_id)
+            AND (@motorista_id IS NULL OR v.motorista_id = @motorista_id)
+            AND (@de IS NULL OR v.data_saida >= @de)
+            AND (@ate IS NULL OR v.data_saida <= @ate)
+            AND v.deleted_at IS NULL
+          ORDER BY
+            v.id DESC,
+            vt.id ASC`,
+       )
+       .all(params)
 
     const byId = new Map()
     for (const r of rows) {
@@ -362,11 +361,11 @@ export const viagemService = {
       return { ...v, ficha_original: v.ficha, is_rateado: isRateado, rateio_count: v.talhoes.length, children }
     })
 
-    // Ordenacao padrao: ficha_original asc, depois rateio_index asc
+    // Ordenacao padrao: mais recente primeiro (ultimo lancamento)
     groups.sort((a, b) => {
-      const c = coll.compare(String(a.ficha_original || ''), String(b.ficha_original || ''))
-      if (c !== 0) return c
-      return Number(a.id) - Number(b.id)
+      const byId = Number(b.id) - Number(a.id)
+      if (byId !== 0) return byId
+      return coll.compare(String(b.ficha_original || ''), String(a.ficha_original || ''))
     })
     for (const g of groups) {
       g.children.sort((a, b) => Number(a.rateio_index) - Number(b.rateio_index))
@@ -672,13 +671,14 @@ export const viagemService = {
         const row = db
           .prepare(
             `SELECT COALESCE(SUM(v.sacas), 0) as entrega
-             FROM viagem v
-             JOIN safra s ON s.id = v.safra_id
-             WHERE v.safra_id=@safra_id
-               AND v.destino_id=@destino_id
-               AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio
-               AND (@exclude_id IS NULL OR v.id <> @exclude_id)`,
-          )
+           FROM viagem v
+           JOIN safra s ON s.id = v.safra_id
+           WHERE v.safra_id=@safra_id
+             AND v.destino_id=@destino_id
+             AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio
+             AND (@exclude_id IS NULL OR v.id <> @exclude_id)
+             AND v.deleted_at IS NULL`,
+       )
           .get({
             safra_id: payload.safra_id,
             destino_id: payload.destino_id,
@@ -699,6 +699,7 @@ export const viagemService = {
              AND v.destino_id=@destino_id
              AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio
              AND (@exclude_id IS NULL OR v.id <> @exclude_id)
+             AND v.deleted_at IS NULL
              AND (
                (v.data_saida IS NOT NULL AND v.data_saida < @data_saida)
                OR (
@@ -939,6 +940,7 @@ export const viagemService = {
          WHERE v.destino_id=@destino_id
            AND v.safra_id=@safra_id
            AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio
+           AND v.deleted_at IS NULL
            ${whereExtra}`,
       )
       .get({ destino_id, safra_id, exclude_id, tipo_plantio: tp })
@@ -1097,11 +1099,12 @@ export const viagemService = {
          WHERE (@safra_id IS NULL OR v.safra_id = @safra_id)
            AND (@destino_id IS NULL OR v.destino_id = @destino_id)
            AND (@tipo_plantio IS NULL OR UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio)
-         ORDER BY
-           v.destino_id ASC,
-           UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) ASC,
-           CASE WHEN v.data_saida IS NULL OR v.data_saida='' THEN 1 ELSE 0 END,
-           v.data_saida ASC,
+           AND v.deleted_at IS NULL
+          ORDER BY
+            v.destino_id ASC,
+            UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) ASC,
+            CASE WHEN v.data_saida IS NULL OR v.data_saida='' THEN 1 ELSE 0 END,
+            v.data_saida ASC,
            COALESCE(v.hora_saida, '99:99') ASC,
            v.id ASC`,
       )
@@ -1275,9 +1278,10 @@ export const viagemService = {
              WHERE v.safra_id=@safra_id
                AND v.destino_id=@destino_id
                AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio
-               AND (@exclude_id IS NULL OR v.id <> @exclude_id)`,
-          )
-          .get({ safra_id, destino_id, tipo_plantio: tp, exclude_id })
+               AND (@exclude_id IS NULL OR v.id <> @exclude_id)
+               AND v.deleted_at IS NULL`,
+           )
+           .get({ safra_id, destino_id, tipo_plantio: tp, exclude_id })
         return Number(row?.entrega || 0)
       }
 
@@ -1290,6 +1294,7 @@ export const viagemService = {
              AND v.destino_id=@destino_id
              AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio
              AND (@exclude_id IS NULL OR v.id <> @exclude_id)
+             AND v.deleted_at IS NULL
              AND (
                (v.data_saida IS NOT NULL AND v.data_saida < @data_saida)
                OR (

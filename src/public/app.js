@@ -210,6 +210,63 @@ function auditTone({ module_name, action_type }) {
   return 'muted'
 }
 
+function auditActionBadge(actionType) {
+  const a = String(actionType || '').toLowerCase()
+  const cls =
+    a === 'create'
+      ? 'create'
+      : a === 'update'
+        ? 'update'
+        : a === 'delete'
+          ? 'delete'
+          : a === 'login' || a === 'logout' || a === 'login_failed'
+            ? 'login'
+            : a === 'password_reset'
+              ? 'reset'
+              : a === 'permission_change'
+                ? 'perm'
+                : ''
+  return `<span class="badge ${escapeHtml(cls)}">${escapeHtml(String(actionType || ''))}</span>`
+}
+
+function auditSeverity({ module_name, action_type, changed_fields_json }) {
+  const mod = String(module_name || '').toLowerCase()
+  const act = String(action_type || '').toLowerCase()
+  const fields = String(changed_fields_json || '')
+  if (act === 'permission_change' || act === 'password_reset' || act === 'delete') return 'high'
+  if (act === 'status_change') return 'med'
+  if (mod === 'colheita' && (fields.includes('destino') || fields.includes('valor_compra') || fields.includes('umidade_desc_pct_manual'))) {
+    return 'high'
+  }
+  return 'low'
+}
+
+function auditSeverityBadge(level) {
+  const l = String(level || 'low')
+  const label = l === 'high' ? 'Alta' : l === 'med' ? 'Média' : 'Baixa'
+  return `<span class="sev ${escapeHtml(l)}">${escapeHtml(label)}</span>`
+}
+
+function parseJsonSafe(s) {
+  try {
+    const v = typeof s === 'string' ? JSON.parse(s) : s
+    return v && typeof v === 'object' ? v : null
+  } catch {
+    return null
+  }
+}
+
+function fmtCellValue(v) {
+  if (v === null || v === undefined) return ''
+  if (typeof v === 'string') return v
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  try {
+    return JSON.stringify(v)
+  } catch {
+    return String(v)
+  }
+}
+
 async function openAuditDetail(id) {
   const r = await api(`/api/audit-logs/${Number(id)}`)
   const fields = (() => {
@@ -220,31 +277,82 @@ async function openAuditDetail(id) {
       return []
     }
   })()
-  const oldV = r.old_values_json ? String(r.old_values_json) : ''
-  const newV = r.new_values_json ? String(r.new_values_json) : ''
+  const oldObj = parseJsonSafe(r.old_values_json) || {}
+  const newObj = parseJsonSafe(r.new_values_json) || {}
+  const severity = auditSeverity(r)
+
+  const diffRows = (() => {
+    const keys = fields.length
+      ? fields
+      : Array.from(new Set([...Object.keys(oldObj || {}), ...Object.keys(newObj || {})]))
+    const shown = keys.filter((k) => k !== 'password_hash' && k !== 'password_salt')
+    if (!shown.length) {
+      return '<tr><td colspan="3">Sem campos detalhados.</td></tr>'
+    }
+    return shown
+      .map((k) => {
+        const before = fmtCellValue(oldObj?.[k])
+        const after = fmtCellValue(newObj?.[k])
+        return `<tr>
+          <td><code class="mono">${escapeHtml(String(k))}</code></td>
+          <td><pre class="mono" style="white-space:pre-wrap;margin:0">${escapeHtml(before)}</pre></td>
+          <td><pre class="mono" style="white-space:pre-wrap;margin:0">${escapeHtml(after)}</pre></td>
+        </tr>`
+      })
+      .join('')
+  })()
+
+  const who = String(r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-')
+  const mod = String(r.module_name || '')
+  const act = String(r.action_type || '')
+  const rid = r.record_id == null ? '' : String(r.record_id)
+  const ip = String(r.ip_address || '')
+  const ua = String(r.user_agent || '')
+
+  const qpUser = new URLSearchParams({ user_id: String(r.changed_by_user_id || ''), limit: '200' })
+  const qpRec = new URLSearchParams({ module_name: mod, record_id: String(r.record_id ?? ''), limit: '200' })
+
   openDialog({
     title: `Auditoria #${Number(id)}`,
     submitLabel: 'Fechar',
-    size: 'lg',
+    size: 'drawer',
     bodyHtml: `
-      <div class="hint">${escapeHtml(String(r.created_at || ''))} — <b>${escapeHtml(String(r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'))}</b></div>
-      <div class="hint">Módulo: <code class="mono">${escapeHtml(String(r.module_name || ''))}</code> | Registro: <b>${escapeHtml(r.record_id == null ? '-' : String(r.record_id))}</b> | Ação: <code class="mono">${escapeHtml(String(r.action_type || ''))}</code></div>
-      <div class="hint">IP: ${escapeHtml(String(r.ip_address || ''))}</div>
-      <div class="hint" style="margin-top:10px"><b>Campos</b>: ${escapeHtml(fields.join(', ') || '-')}</div>
-      <div class="table-wrap" style="margin-top:10px">
-        <table class="grid-table">
-          <thead><tr><th>Antes</th><th>Depois</th></tr></thead>
-          <tbody>
-            <tr>
-              <td><pre class="mono" style="white-space:pre-wrap;margin:0">${escapeHtml(oldV)}</pre></td>
-              <td><pre class="mono" style="white-space:pre-wrap;margin:0">${escapeHtml(newV)}</pre></td>
-            </tr>
-          </tbody>
+      <div class="pill-row">
+        ${auditActionBadge(act)}
+        ${auditSeverityBadge(severity)}
+        <span class="pill"><span class="dot muted"></span><span>${escapeHtml(mod)}${rid ? ` #${escapeHtml(rid)}` : ''}</span></span>
+      </div>
+      <div class="hint" style="margin-top:10px">${escapeHtml(String(r.created_at || ''))} — <b>${escapeHtml(who)}</b></div>
+      <div class="hint">IP: ${escapeHtml(ip || '-')}</div>
+      <div class="hint">User-Agent: ${escapeHtml(ua || '-')}</div>
+      <div class="pill-row" style="margin-top:12px">
+        <button class="btn ghost small" type="button" data-act="a-user">Eventos do usuário</button>
+        <button class="btn ghost small" type="button" data-act="a-rec" ${rid ? '' : 'disabled'}>Histórico do registro</button>
+      </div>
+
+      <div class="acl-help" style="margin-top:12px">
+        <div style="font-family:var(--serif);font-size:14px">Resumo</div>
+        <div class="hint" style="margin-top:6px">${escapeHtml(String(r.summary || r.notes || '-'))}</div>
+      </div>
+
+      <div class="table-wrap sticky" style="margin-top:12px">
+        <table class="grid-table zebra">
+          <thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead>
+          <tbody>${diffRows}</tbody>
         </table>
       </div>
-      <div class="hint" style="margin-top:10px">User-Agent: ${escapeHtml(String(r.user_agent || ''))}</div>
     `,
     onSubmit: async () => {},
+  })
+
+  dlgBody.querySelector('button[data-act="a-user"]')?.addEventListener('click', () => {
+    window.location.hash = `#/auditoria?${qpUser.toString()}`
+    dlg.close()
+  })
+  dlgBody.querySelector('button[data-act="a-rec"]')?.addEventListener('click', () => {
+    if (!rid) return
+    window.location.hash = `#/auditoria?${qpRec.toString()}`
+    dlg.close()
   })
 }
 
@@ -1495,6 +1603,27 @@ async function renderCrudPage({
       if (onAction) return onAction(act, item)
     }
   })
+
+  // Deep-link: #/route?edit_id=123
+  try {
+    const h = window.location.hash || ''
+    const base = `#/${route}`
+    if (h.startsWith(base) && h.includes('?')) {
+      const q = h.split('?')[1]
+      const p = new URLSearchParams(q)
+      const editId = Number(p.get('edit_id') || '')
+      if (Number.isFinite(editId) && editId > 0 && typeof onEdit === 'function') {
+        const it = items.find((x) => Number(x.id) === editId)
+        if (it) {
+          // remove query (keep route)
+          history.replaceState(null, '', `${window.location.pathname}${window.location.search}${base}`)
+          await onEdit(it)
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
 }
 
 async function renderSafras() {
@@ -4446,7 +4575,6 @@ async function renderColheitaBase(variant) {
       const parts = []
       for (const g of data.items || []) {
         const isRateado = Boolean(g.is_rateado)
-        if (isRateado) expanded.add(g.id)
         const kids = Array.isArray(g.children) ? g.children : []
         const shortTal = kids
           .slice(0, 3)
@@ -4460,7 +4588,7 @@ async function renderColheitaBase(variant) {
           talhao_local: isRateado ? `${shortTal}${more}` : (kids[0]?.talhao_local || ''),
           pct_rateio_100: null,
         }
-        parts.push(rowHtml(parent, { showToggle: isRateado, toggled: isRateado }))
+        parts.push(rowHtml(parent, { showToggle: isRateado, toggled: expanded.has(g.id) }))
         if (isRateado) {
           for (const c of kids) {
             parts.push(rowHtml({
@@ -7284,20 +7412,20 @@ async function renderAuditoria() {
     { value: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { value: 'usuarios', label: 'Usuários' },
     { value: 'permissoes', label: 'Permissões' },
-    { value: 'auditoria', label: 'Auditoria' },
     { value: 'auth', label: 'Auth' },
   ]
 
   const actionOptions = [
     { value: '', label: 'Todas' },
-    { value: 'create', label: 'Create' },
-    { value: 'update', label: 'Update' },
-    { value: 'delete', label: 'Delete' },
-    { value: 'login', label: 'Login' },
-    { value: 'logout', label: 'Logout' },
-    { value: 'password_reset', label: 'Password reset' },
-    { value: 'permission_change', label: 'Permissões' },
-    { value: 'status_change', label: 'Status' },
+    { value: 'create', label: 'CREATE' },
+    { value: 'update', label: 'UPDATE' },
+    { value: 'delete', label: 'DELETE' },
+    { value: 'login', label: 'LOGIN' },
+    { value: 'logout', label: 'LOGOUT' },
+    { value: 'password_reset', label: 'RESET SENHA' },
+    { value: 'permission_change', label: 'PERMISSÕES' },
+    { value: 'status_change', label: 'STATUS' },
+    { value: 'login_failed', label: 'LOGIN INVÁLIDO' },
   ]
 
   const now = new Date()
@@ -7309,86 +7437,124 @@ async function renderAuditoria() {
     return `${yyyy}-${mm}-${dd}`
   }
   const today = ymd(now)
+  const yesterday = ymd(new Date(now.getTime() - 1 * 86400 * 1000))
   const last7 = ymd(new Date(now.getTime() - 6 * 86400 * 1000))
   const last30 = ymd(new Date(now.getTime() - 29 * 86400 * 1000))
+
+  const hash = window.location.hash || ''
+  const qs = hash.includes('?') ? hash.split('?')[1] : ''
+  const params = new URLSearchParams(qs)
+
+  const initial = {
+    de: String(params.get('de') || last7),
+    ate: String(params.get('ate') || today),
+    user_id: String(params.get('user_id') || ''),
+    module_name: String(params.get('module_name') || ''),
+    action_type: String(params.get('action_type') || ''),
+    record_id: String(params.get('record_id') || ''),
+    q: String(params.get('q') || ''),
+    critical: String(params.get('critical') || ''),
+  }
 
   setView(`
     <section class="panel">
       <div class="panel-head">
-        <div>
-          <div class="panel-title">Auditoria</div>
-          <div class="panel-sub">Histórico de alterações e eventos de acesso.</div>
+        <div class="audit-head">
+          <div>
+            <div class="audit-title">Auditoria do Sistema</div>
+            <div class="audit-sub">Acompanhe alterações, acessos e ações críticas realizadas no sistema.</div>
+          </div>
+          <div class="audit-actions">
+            <button class="btn ghost" id="btnAClear" type="button">Limpar filtros</button>
+            <button class="btn ghost" id="btnARefresh" type="button">Atualizar</button>
+            <button class="btn ghost" id="btnAExcel" type="button" disabled title="Excel não disponível">Excel</button>
+            <button class="btn" id="btnACsv" type="button">Exportar CSV</button>
+          </div>
         </div>
       </div>
+
       <div class="panel-body">
-        <div class="toolbar">
-          <div class="filters">
-            <div class="field col3">
-              <div class="label">De</div>
-              <input type="date" id="aDe" value="${escapeHtml(last7)}" />
+        <div class="audit-cards" id="aCards">
+          <div class="a-card" data-card="total"><div class="k">Eventos hoje</div><div class="v">-</div><div class="h">Tudo que aconteceu hoje</div></div>
+          <div class="a-card" data-card="logins"><div class="k">Logins hoje</div><div class="v">-</div><div class="h">Acessos e saídas</div></div>
+          <div class="a-card" data-card="updates"><div class="k">Alterações hoje</div><div class="v">-</div><div class="h">Updates (cadastros/lançamentos)</div></div>
+          <div class="a-card danger" data-card="perms"><div class="k">Permissões</div><div class="v">-</div><div class="h">Mudanças de ACL</div></div>
+          <div class="a-card warn" data-card="reset"><div class="k">Reset de senha</div><div class="v">-</div><div class="h">Recuperação/admin</div></div>
+          <div class="a-card danger" data-card="deletes"><div class="k">Exclusões</div><div class="v">-</div><div class="h">Deletes e inativações</div></div>
+        </div>
+
+        <div class="audit-filters" style="margin-top:12px">
+          <div class="row">
+            <div class="field"><div class="label">Início</div><input type="date" id="aDe" value="${escapeHtml(initial.de)}" /></div>
+            <div class="field"><div class="label">Fim</div><input type="date" id="aAte" value="${escapeHtml(initial.ate)}" /></div>
+            <div class="field"><div class="label">Usuário</div><select id="aUser">${userOptions
+              .map((o) => `<option value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</option>`)
+              .join('')}</select></div>
+            <div class="field"><div class="label">Módulo</div><select id="aMod">${moduleOptions
+              .map((o) => `<option value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</option>`)
+              .join('')}</select></div>
+            <div class="field"><div class="label">Ação</div><select id="aAct">${actionOptions
+              .map((o) => `<option value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</option>`)
+              .join('')}</select></div>
+            <div class="field"><div class="label">Registro ID</div><input type="text" id="aRid" inputmode="numeric" pattern="[0-9]*" value="${escapeHtml(initial.record_id)}" placeholder="#" /></div>
+            <div class="field grow"><div class="label">Busca</div><input type="text" id="aQ" value="${escapeHtml(initial.q)}" placeholder="texto livre (resumo/notes/json)" /></div>
+            <div class="field"><div class="label">Críticos</div>
+              <select id="aCrit">
+                <option value="">Todos</option>
+                <option value="1">Somente críticos</option>
+              </select>
             </div>
-            <div class="field col3">
-              <div class="label">Até</div>
-              <input type="date" id="aAte" value="${escapeHtml(today)}" />
+            <div class="field" style="display:flex;gap:10px">
+              <button class="btn ghost" id="btnToday" type="button">Hoje</button>
+              <button class="btn ghost" id="btnYest" type="button">Ontem</button>
+              <button class="btn ghost" id="btn7" type="button">7d</button>
+              <button class="btn ghost" id="btn30" type="button">30d</button>
             </div>
-            <div class="field col3">
-              <div class="label">Usuário</div>
-              <select id="aUser">${userOptions
-                .map((o) => `<option value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</option>`)
-                .join('')}</select>
-            </div>
-            <div class="field col3">
-              <div class="label">Módulo</div>
-              <select id="aMod">${moduleOptions
-                .map((o) => `<option value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</option>`)
-                .join('')}</select>
-            </div>
-            <div class="field col3">
-              <div class="label">Ação</div>
-              <select id="aAct">${actionOptions
-                .map((o) => `<option value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</option>`)
-                .join('')}</select>
-            </div>
-            <div class="field col4">
-              <div class="label">Busca</div>
-              <input type="text" id="aQ" placeholder="texto livre" />
-            </div>
-            <div class="field col2">
-              <div class="label">ID</div>
-              <input type="text" id="aRid" inputmode="numeric" pattern="[0-9]*" placeholder="#" />
+            <div class="field" style="display:flex;gap:10px">
+              <button class="btn" id="btnFetch" type="button">Filtrar</button>
             </div>
           </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button class="btn ghost" id="btnToday">Hoje</button>
-            <button class="btn ghost" id="btn7">7d</button>
-            <button class="btn ghost" id="btn30">30d</button>
-            <button class="btn ghost" id="btnOnlyLogins">Logins</button>
-            <button class="btn ghost" id="btnOnlyPerms">Permissões</button>
-            <button class="btn ghost" id="btnOnlyColheita">Colheita</button>
-            <button class="btn ghost" id="btnOnlyUsers">Usuários</button>
-            <button class="btn ghost" id="btnExport">CSV</button>
-            <button class="btn" id="btnFetch">Filtrar</button>
+          <div class="smart">
+            <span class="chip" data-chip="logins">Apenas logins</span>
+            <span class="chip" data-chip="perms">Apenas permissões</span>
+            <span class="chip" data-chip="users">Apenas usuários</span>
+            <span class="chip" data-chip="colheita">Apenas colheitas</span>
+            <span class="chip" data-chip="deletes">Apenas exclusões</span>
+            <span class="chip" data-chip="critical">Apenas críticos</span>
           </div>
         </div>
 
-        <div class="table-wrap">
-          <table class="grid-table">
+        <div class="table-wrap sticky" style="margin-top:12px">
+          <table class="grid-table zebra" id="aTable">
             <thead>
               <tr>
-                <th class="actions">Ações</th>
-                <th>Data/Hora</th>
-                <th>Usuário</th>
-                <th>Módulo</th>
-                <th>Registro</th>
-                <th>Ação</th>
+                <th class="actions"></th>
+                <th class="sortable" data-sort="created_at">Data/Hora</th>
+                <th class="sortable" data-sort="changed_by_user_id">Usuário</th>
+                <th class="sortable" data-sort="module_name">Módulo</th>
+                <th class="sortable" data-sort="record_id">Registro</th>
+                <th class="sortable" data-sort="action_type">Ação</th>
                 <th>Resumo</th>
-                <th>IP</th>
+                <th>Criticidade</th>
+                <th class="actions">Ações</th>
               </tr>
             </thead>
-            <tbody id="aBody"><tr><td colspan="8">Carregando...</td></tr></tbody>
+            <tbody id="aBody"><tr><td colspan="9">Carregando...</td></tr></tbody>
           </table>
         </div>
-        <div class="hint" id="aCount" style="margin-top:10px"></div>
+
+        <div class="pager">
+          <div class="hint" id="aCount"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <select id="aLimit" class="btn ghost small" aria-label="Tamanho da página">
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200" selected>200</option>
+            </select>
+            <button class="btn ghost" id="btnPrev" type="button">Anterior</button>
+            <button class="btn ghost" id="btnNext" type="button">Próxima</button>
+          </div>
+        </div>
       </div>
     </section>
   `)
@@ -7398,28 +7564,39 @@ async function renderAuditoria() {
   const elUser = view.querySelector('#aUser')
   const elMod = view.querySelector('#aMod')
   const elAct = view.querySelector('#aAct')
-  const elQ = view.querySelector('#aQ')
   const elRid = view.querySelector('#aRid')
+  const elQ = view.querySelector('#aQ')
+  const elCrit = view.querySelector('#aCrit')
+  const elLimit = view.querySelector('#aLimit')
   const body = view.querySelector('#aBody')
-  const count = view.querySelector('#aCount')
+  const countEl = view.querySelector('#aCount')
+
+  if (elUser) elUser.value = initial.user_id
+  if (elMod) elMod.value = initial.module_name
+  if (elAct) elAct.value = initial.action_type
+  if (elCrit) elCrit.value = initial.critical === '1' ? '1' : ''
+
+  let offset = 0
+  let sort_key = 'id'
+  let sort_dir = 'desc'
 
   function setPeriod(from, to) {
     if (elDe) elDe.value = from
     if (elAte) elAte.value = to
   }
 
-  const btnToday = view.querySelector('#btnToday')
-  if (btnToday) btnToday.onclick = () => setPeriod(today, today)
-  const btn7 = view.querySelector('#btn7')
-  if (btn7) btn7.onclick = () => setPeriod(last7, today)
-  const btn30 = view.querySelector('#btn30')
-  if (btn30) btn30.onclick = () => setPeriod(last30, today)
+  function currentQueryParams({ forExport = false } = {}) {
+    const qp = new URLSearchParams()
+    const limit = Number(elLimit?.value || 200)
+    if (!forExport) {
+      qp.set('limit', String(limit))
+      qp.set('offset', String(offset))
+      qp.set('sort_key', sort_key)
+      qp.set('sort_dir', sort_dir)
+    } else {
+      qp.set('limit', '2000')
+    }
 
-  async function fetchLogs() {
-    if (!body) return
-    body.innerHTML = '<tr><td colspan="8">Carregando...</td></tr>'
-
-    const qp = new URLSearchParams({ limit: '200' })
     if (elDe?.value) qp.set('de', `${elDe.value} 00:00:00`)
     if (elAte?.value) qp.set('ate', `${elAte.value} 23:59:59`)
     if (elUser?.value) qp.set('user_id', String(elUser.value))
@@ -7427,29 +7604,99 @@ async function renderAuditoria() {
     if (elAct?.value) qp.set('action_type', String(elAct.value))
     if (elQ?.value) qp.set('q', String(elQ.value).trim())
     if (elRid?.value) qp.set('record_id', String(elRid.value).trim())
+    if (elCrit?.value === '1') qp.set('critical', '1')
+    return qp
+  }
 
-    const rows = await api(`/api/audit-logs?${qp.toString()}`)
-    if (count) count.innerHTML = `Registros: <b>${escapeHtml(String((rows || []).length))}</b>`
+  function pushHashFromFilters() {
+    const qp = currentQueryParams({ forExport: true })
+    // keep hash small (omit limit)
+    qp.delete('limit')
+    const h = `#/auditoria?${qp.toString()}`
+    if (window.location.hash !== h) {
+      history.replaceState(null, '', `${window.location.pathname}${window.location.search}${h}`)
+    }
+  }
 
-    if (!Array.isArray(rows) || !rows.length) {
-      body.innerHTML = '<tr><td colspan="8">Nenhum evento.</td></tr>'
+  function auditJumpHash(r) {
+    const mod = String(r?.module_name || '').toLowerCase()
+    const rid = r?.record_id == null ? null : Number(r.record_id)
+    if (!Number.isFinite(rid) || rid <= 0) return null
+    if (mod === 'colheita') return `#/colheita?edit_id=${rid}`
+    if (mod === 'safras') return `#/safras?edit_id=${rid}`
+    if (mod === 'destinos') return `#/destinos?edit_id=${rid}`
+    if (mod === 'talhoes') return `#/talhoes?edit_id=${rid}`
+    if (mod === 'motoristas') return `#/motoristas?edit_id=${rid}`
+    if (mod === 'tipos-plantio') return `#/tipos-plantio?edit_id=${rid}`
+    if (mod === 'usuarios') return `#/usuarios?edit_id=${rid}`
+    if (mod === 'regras-destino') return `#/regras-destino?edit_id=${rid}`
+    if (mod === 'area-colhida') return `#/area-colhida`
+    if (mod === 'quitacao-motoristas') return `#/quitacao-motoristas?edit_id=${rid}`
+    if (mod === 'permissoes') return `#/perfis`
+    return null
+  }
+
+  async function refreshCardsToday() {
+    const qp = new URLSearchParams({ de: `${today} 00:00:00`, ate: `${today} 23:59:59` })
+    const s = await api(`/api/audit-logs/stats?${qp.toString()}`).catch(() => null)
+    if (!s) return
+
+    const cards = view.querySelectorAll('#aCards .a-card')
+    cards.forEach((c) => {
+      const k = String(c.dataset.card || '')
+      const vEl = c.querySelector('.v')
+      if (!vEl) return
+      if (k === 'total') vEl.textContent = String(s.total)
+      if (k === 'logins') vEl.textContent = String(s.logins)
+      if (k === 'updates') vEl.textContent = String(s.cadastros)
+      if (k === 'perms') vEl.textContent = String(s.permissoes)
+      if (k === 'reset') vEl.textContent = String(s.password_reset)
+      if (k === 'deletes') vEl.textContent = String(s.deletes + Number(s?.status_change || 0))
+    })
+  }
+
+  async function fetchPage() {
+    if (!body) return
+    body.innerHTML = '<tr><td colspan="9">Carregando...</td></tr>'
+
+    const qp = currentQueryParams()
+    pushHashFromFilters()
+    const r = await api(`/api/audit-logs/page?${qp.toString()}`)
+    const items = r?.items || []
+    const total = Number(r?.total || 0)
+
+    if (countEl) {
+      const from = total ? offset + 1 : 0
+      const to = Math.min(total, offset + items.length)
+      countEl.innerHTML = `Resultados: <b>${escapeHtml(String(total))}</b> (${escapeHtml(String(from))}–${escapeHtml(String(to))})`
+    }
+
+    if (!Array.isArray(items) || !items.length) {
+      body.innerHTML = '<tr><td colspan="9">Nenhum evento.</td></tr>'
       return
     }
 
-    body.innerHTML = rows
-      .map((r) => {
-        const who = r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'
+    body.innerHTML = items
+      .map((r2) => {
+        const who = r2.changed_by_nome || r2.changed_by_username || r2.changed_by_name_snapshot || '-'
+        const sev = auditSeverity(r2)
+        const openHash = auditJumpHash(r2)
+        const recordTxt = r2.record_id == null ? '-' : String(r2.record_id)
         return `<tr>
           <td class="actions">
-            <button class="act-btn" data-act="adetail" data-id="${escapeHtml(String(r.id))}" title="Detalhes" aria-label="Detalhes">${iconSvg('view')}<span>Ver</span></button>
+            <button class="act-btn" data-act="adetail" data-id="${escapeHtml(String(r2.id))}" title="Detalhes" aria-label="Detalhes">${iconSvg('view')}<span>Ver</span></button>
           </td>
-          <td>${escapeHtml(String(r.created_at || ''))}</td>
+          <td>${escapeHtml(String(r2.created_at || ''))}</td>
           <td>${escapeHtml(String(who || '-'))}</td>
-          <td><code class="mono">${escapeHtml(String(r.module_name || ''))}</code></td>
-          <td>${escapeHtml(r.record_id == null ? '-' : String(r.record_id))}</td>
-          <td>${pillBadge({ label: String(r.action_type || ''), tone: auditTone(r) })}</td>
-          <td>${escapeHtml(String(r.summary || ''))}</td>
-          <td>${escapeHtml(String(r.ip_address || ''))}</td>
+          <td><code class="mono">${escapeHtml(String(r2.module_name || ''))}</code></td>
+          <td>${escapeHtml(recordTxt)}</td>
+          <td>${auditActionBadge(r2.action_type)}</td>
+          <td>${escapeHtml(String(r2.summary || r2.notes || ''))}</td>
+          <td>${auditSeverityBadge(sev)}</td>
+          <td class="actions">
+            <button class="btn ghost small" type="button" data-act="ahist" data-mod="${escapeHtml(String(r2.module_name || ''))}" data-rid="${escapeHtml(recordTxt)}" ${r2.record_id == null ? 'disabled' : ''}>Histórico</button>
+            <button class="btn ghost small" type="button" data-act="aopen" data-hash="${escapeHtml(openHash || '')}" ${openHash ? '' : 'disabled'}>Abrir</button>
+          </td>
         </tr>`
       })
       .join('')
@@ -7457,68 +7704,135 @@ async function renderAuditoria() {
     body.querySelectorAll('button[data-act="adetail"]').forEach((b) => {
       b.onclick = () => openAuditDetail(Number(b.dataset.id))
     })
+    body.querySelectorAll('button[data-act="ahist"]').forEach((b) => {
+      b.onclick = () => openAuditHistory({ module_name: String(b.dataset.mod || ''), record_id: Number(b.dataset.rid) })
+    })
+    body.querySelectorAll('button[data-act="aopen"]').forEach((b) => {
+      b.onclick = () => {
+        const h = String(b.dataset.hash || '')
+        if (!h) return
+        window.location.hash = h
+      }
+    })
   }
 
-  const btnFetch = view.querySelector('#btnFetch')
-  if (btnFetch) btnFetch.onclick = fetchLogs
+  // Header actions
+  view.querySelector('#btnACsv')?.addEventListener('click', () => {
+    const qp = currentQueryParams({ forExport: true })
+    window.open(`/api/audit-logs/export.csv?${qp.toString()}`, '_blank', 'noopener')
+  })
+  view.querySelector('#btnARefresh')?.addEventListener('click', () => {
+    fetchPage()
+    refreshCardsToday()
+  })
+  view.querySelector('#btnAClear')?.addEventListener('click', () => {
+    setPeriod(last7, today)
+    if (elUser) elUser.value = ''
+    if (elMod) elMod.value = ''
+    if (elAct) elAct.value = ''
+    if (elRid) elRid.value = ''
+    if (elQ) elQ.value = ''
+    if (elCrit) elCrit.value = ''
+    offset = 0
+    sort_key = 'id'
+    sort_dir = 'desc'
+    fetchPage()
+  })
 
-  const btnExport = view.querySelector('#btnExport')
-  if (btnExport) {
-    btnExport.onclick = () => {
-      const qp = new URLSearchParams({ limit: '2000' })
-      if (elDe?.value) qp.set('de', `${elDe.value} 00:00:00`)
-      if (elAte?.value) qp.set('ate', `${elAte.value} 23:59:59`)
-      if (elUser?.value) qp.set('user_id', String(elUser.value))
-      if (elMod?.value) qp.set('module_name', String(elMod.value))
-      if (elAct?.value) qp.set('action_type', String(elAct.value))
-      if (elQ?.value) qp.set('q', String(elQ.value).trim())
-      if (elRid?.value) qp.set('record_id', String(elRid.value).trim())
-      window.open(`/api/audit-logs/export.csv?${qp.toString()}`, '_blank', 'noopener')
-    }
-  }
-
-  const btnOnlyLogins = view.querySelector('#btnOnlyLogins')
-  if (btnOnlyLogins) {
-    btnOnlyLogins.onclick = () => {
-      if (elMod) elMod.value = 'auth'
+  // Cards
+  view.querySelectorAll('#aCards .a-card').forEach((c) => {
+    c.onclick = () => {
+      const k = String(c.dataset.card || '')
+      setPeriod(today, today)
+      if (elUser) elUser.value = ''
+      if (elMod) elMod.value = ''
       if (elAct) elAct.value = ''
-      fetchLogs()
+      if (elCrit) elCrit.value = ''
+      if (k === 'logins') elMod.value = 'auth'
+      if (k === 'updates') elAct.value = 'update'
+      if (k === 'perms') elAct.value = 'permission_change'
+      if (k === 'reset') elAct.value = 'password_reset'
+      if (k === 'deletes') elAct.value = 'delete'
+      offset = 0
+      fetchPage()
     }
-  }
-  const btnOnlyPerms = view.querySelector('#btnOnlyPerms')
-  if (btnOnlyPerms) {
-    btnOnlyPerms.onclick = () => {
-      if (elAct) elAct.value = 'permission_change'
-      fetchLogs()
-    }
-  }
-  const btnOnlyColheita = view.querySelector('#btnOnlyColheita')
-  if (btnOnlyColheita) {
-    btnOnlyColheita.onclick = () => {
-      if (elMod) elMod.value = 'colheita'
-      fetchLogs()
-    }
-  }
-  const btnOnlyUsers = view.querySelector('#btnOnlyUsers')
-  if (btnOnlyUsers) {
-    btnOnlyUsers.onclick = () => {
-      if (elMod) elMod.value = 'usuarios'
-      fetchLogs()
-    }
-  }
+  })
 
-  // Enter in search triggers
+  // Quick dates
+  view.querySelector('#btnToday')?.addEventListener('click', () => setPeriod(today, today))
+  view.querySelector('#btnYest')?.addEventListener('click', () => setPeriod(yesterday, yesterday))
+  view.querySelector('#btn7')?.addEventListener('click', () => setPeriod(last7, today))
+  view.querySelector('#btn30')?.addEventListener('click', () => setPeriod(last30, today))
+
+  // Smart chips
+  const chips = new Map([
+    ['logins', () => { if (elMod) elMod.value = 'auth'; if (elAct) elAct.value = ''; if (elCrit) elCrit.value = '' }],
+    ['perms', () => { if (elAct) elAct.value = 'permission_change'; if (elCrit) elCrit.value = '' }],
+    ['users', () => { if (elMod) elMod.value = 'usuarios'; if (elCrit) elCrit.value = '' }],
+    ['colheita', () => { if (elMod) elMod.value = 'colheita'; if (elCrit) elCrit.value = '' }],
+    ['deletes', () => { if (elAct) elAct.value = 'delete'; if (elCrit) elCrit.value = '' }],
+    ['critical', () => { if (elCrit) elCrit.value = '1' }],
+  ])
+
+  view.querySelectorAll('.chip[data-chip]').forEach((ch) => {
+    ch.onclick = () => {
+      const k = String(ch.dataset.chip || '')
+      chips.get(k)?.()
+      offset = 0
+      fetchPage()
+    }
+  })
+
+  // Sorting
+  view.querySelectorAll('#aTable thead th.sortable').forEach((th) => {
+    th.onclick = () => {
+      const k = String(th.dataset.sort || '')
+      if (!k) return
+      if (sort_key === k) sort_dir = sort_dir === 'desc' ? 'asc' : 'desc'
+      else {
+        sort_key = k
+        sort_dir = 'desc'
+      }
+      offset = 0
+      fetchPage()
+    }
+  })
+
+  // Pagination
+  view.querySelector('#btnPrev')?.addEventListener('click', () => {
+    const limit = Number(elLimit?.value || 200)
+    offset = Math.max(0, offset - limit)
+    fetchPage()
+  })
+  view.querySelector('#btnNext')?.addEventListener('click', () => {
+    const limit = Number(elLimit?.value || 200)
+    offset = offset + limit
+    fetchPage()
+  })
+  elLimit?.addEventListener('change', () => {
+    offset = 0
+    fetchPage()
+  })
+
+  // Enter triggers
   ;[elQ, elRid].forEach((el) => {
     if (!el) return
     el.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault()
-        fetchLogs()
+        offset = 0
+        fetchPage()
       }
     })
   })
 
-  fetchLogs()
+  view.querySelector('#btnFetch')?.addEventListener('click', () => {
+    offset = 0
+    fetchPage()
+  })
+
+  refreshCardsToday()
+  fetchPage()
 }
 
 async function applyMenuAccess() {
