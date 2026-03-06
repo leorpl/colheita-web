@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e6a4d" stop-opacity="0.34"/>
+      <stop offset="0.45" stop-color="#d19a2b" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#0b1512" stop-opacity="0.12"/>
+    </linearGradient>
+    <filter id="n">
+      <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .16 0"/>
+    </filter>
+  </defs>
+  <rect width="1400" height="900" fill="#0f221b"/>
+  <rect width="1400" height="900" fill="url(#g)"/>
+  <g opacity="0.32">
+    <circle cx="260" cy="220" r="180" fill="#d19a2b"/>
+    <circle cx="1080" cy="260" r="220" fill="#1e6a4d"/>
+  </g>
+  <g filter="url(#n)"/>
+  <text x="64" y="120" font-family="ui-sans-serif, system-ui" font-size="20" fill="#ffffff" opacity="0.78">Imagem (placeholder)</text>
+</svg>

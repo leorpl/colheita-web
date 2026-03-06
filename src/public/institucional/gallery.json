@@ -1,0 +1,15 @@
+{
+  "items": [
+    { "key": "gallery-01", "caption": "Paisagem e talhoes" },
+    { "key": "gallery-02", "caption": "Operacao e logistica" },
+    { "key": "gallery-03", "caption": "Tecnologia aplicada" },
+    { "key": "gallery-04", "caption": "Solo e sustentabilidade" },
+    { "key": "gallery-05", "caption": "Safra e cultura" },
+    { "key": "gallery-06", "caption": "Equipe e rotina" }
+  ],
+  "defaults": {
+    "ext": "webp",
+    "basePath": "/institucional/assets/photos/",
+    "placeholder": "/institucional/assets/placeholder-wide.svg"
+  }
+}

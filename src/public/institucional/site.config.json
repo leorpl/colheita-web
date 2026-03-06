@@ -1,0 +1,25 @@
+{
+  "name": "Fazenda Nazca",
+  "tagline": "Agro premium. Precisao no campo. Disciplina na entrega.",
+  "contact": {
+    "email": "contato@fazendanazca.com.br",
+    "phone": "+55 00 00000-0000",
+    "whatsapp": "https://wa.me/5500000000000",
+    "instagram": "https://instagram.com/fazendanazca",
+    "facebook": "https://facebook.com/fazendanazca"
+  },
+  "address": {
+    "line1": "Formiga/MG (ajustar)",
+    "mapsUrl": "https://www.google.com/maps/d/edit?mid=1I31t4h-O1Scw04_yJqcTAs8EqUid5IE&ll=-20.193727536387307%2C-45.874922749999996&z=17",
+    "mapsEmbedUrl": "https://www.google.com/maps/d/embed?mid=1I31t4h-O1Scw04_yJqcTAs8EqUid5IE&ehbc=2E312F"
+  },
+  "social": {
+    "instagramLabel": "@fazendanazca",
+    "facebookLabel": "/fazendanazca"
+  },
+  "photos": {
+    "hero": "/institucional/assets/photos/hero.webp",
+    "wide1": "/institucional/assets/photos/wide-1.webp",
+    "wide2": "/institucional/assets/photos/wide-2.webp"
+  }
+}

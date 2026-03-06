@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Contato e Localizacao | Fazenda Nazca</title>
+    <meta name="description" content="Fale com a Fazenda Nazca. Formulario, redes sociais e localizacao. Estrutura pronta para evoluir." />
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="stylesheet" href="/institucional/site.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450..700&family=Outfit:wght@350..750&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="siteHeader"></div>
+
+    <main class="page">
+      <div class="wrap">
+        <div class="kicker"><span class="dot" aria-hidden="true"></span><span>Contato</span></div>
+        <h1>Fale conosco</h1>
+        <div class="crumb"><a href="/institucional">Home</a> / Contato</div>
+
+        <section class="contact" aria-label="Formulario de contato">
+          <div class="inner">
+            <div class="col">
+              <h3>Mensagem</h3>
+              <p style="margin:10px 0 0;color:rgba(255,255,255,.76);line-height:1.55">Envie um contato institucional. Nesta primeira versao, o envio abre seu e-mail com a mensagem preenchida (sem backend).</p>
+
+              <form id="contactForm" style="margin-top:8px">
+                <div class="field">
+                  <label for="nome">Nome</label>
+                  <input id="nome" name="nome" autocomplete="name" placeholder="Seu nome" required />
+                </div>
+                <div class="field">
+                  <label for="email">E-mail</label>
+                  <input id="email" name="email" type="email" autocomplete="email" placeholder="voce@exemplo.com" required />
+                </div>
+                <div class="field">
+                  <label for="fone">Telefone</label>
+                  <input id="fone" name="fone" autocomplete="tel" placeholder="(00) 00000-0000" />
+                </div>
+                <div class="field">
+                  <label for="mensagem">Mensagem</label>
+                  <textarea id="mensagem" name="mensagem" placeholder="Como podemos ajudar?" required></textarea>
+                </div>
+                <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+                  <button class="btn primary" type="submit">Enviar</button>
+                  <a class="btn" href="/institucional/galeria">Ver fotos</a>
+                </div>
+                <div id="contactMsg" style="margin-top:10px;color:rgba(255,255,255,.76)"></div>
+              </form>
+            </div>
+
+            <aside class="col right" aria-label="Informacoes">
+              <h3>Localizacao</h3>
+              <p style="margin:10px 0 0;color:rgba(255,255,255,.76);line-height:1.55">Mapa pronto para receber o link real. O iframe so carrega quando voce rolar ate aqui (melhor performance).</p>
+
+              <div class="map" id="mapHolder">
+                <div class="ph">Mapa (placeholder)</div>
+                <iframe
+                  title="Mapa"
+                  loading="lazy"
+                  data-src=""
+                  referrerpolicy="no-referrer-when-downgrade"
+                ></iframe>
+              </div>
+
+              <div class="pillrow">
+                <span class="pill">Agro premium</span>
+                <span class="pill">Visitas por agenda</span>
+              </div>
+
+              <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+                <a class="btn" href="mailto:contato@fazendanazca.com.br">E-mail</a>
+                <a class="btn" href="https://wa.me/5500000000000" target="_blank" rel="noreferrer">WhatsApp</a>
+                <a class="btn ghost" href="/login">Area interna</a>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="siteFooter"></div>
+    <script src="/institucional/site.js" type="module"></script>
+  </body>
+</html>

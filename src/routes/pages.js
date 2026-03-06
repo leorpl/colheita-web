@@ -4,26 +4,44 @@ import { fileURLToPath } from 'node:url'
 
 export const pagesRouter = Router()
 
-pagesRouter.get('/', (_req, res) => {
+function publicFile(res, file) {
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = path.dirname(__filename)
-  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'))
+  res.sendFile(path.join(__dirname, '..', 'public', file))
+}
+
+pagesRouter.get('/', (_req, res) => {
+  publicFile(res, 'index.html')
 })
 
 pagesRouter.get('/login', (_req, res) => {
-  const __filename = fileURLToPath(import.meta.url)
-  const __dirname = path.dirname(__filename)
-  res.sendFile(path.join(__dirname, '..', 'public', 'login.html'))
+  publicFile(res, 'login.html')
 })
 
 pagesRouter.get('/forgot', (_req, res) => {
-  const __filename = fileURLToPath(import.meta.url)
-  const __dirname = path.dirname(__filename)
-  res.sendFile(path.join(__dirname, '..', 'public', 'forgot.html'))
+  publicFile(res, 'forgot.html')
 })
 
 pagesRouter.get('/reset', (_req, res) => {
-  const __filename = fileURLToPath(import.meta.url)
-  const __dirname = path.dirname(__filename)
-  res.sendFile(path.join(__dirname, '..', 'public', 'reset.html'))
+  publicFile(res, 'reset.html')
+})
+
+// Site institucional (publico)
+pagesRouter.get('/institucional', (_req, res) => {
+  publicFile(res, path.join('institucional', 'index.html'))
+})
+pagesRouter.get('/institucional/sobre', (_req, res) => {
+  publicFile(res, path.join('institucional', 'sobre.html'))
+})
+pagesRouter.get('/institucional/producao', (_req, res) => {
+  publicFile(res, path.join('institucional', 'producao.html'))
+})
+pagesRouter.get('/institucional/tecnologia', (_req, res) => {
+  publicFile(res, path.join('institucional', 'tecnologia.html'))
+})
+pagesRouter.get('/institucional/galeria', (_req, res) => {
+  publicFile(res, path.join('institucional', 'galeria.html'))
+})
+pagesRouter.get('/institucional/contato', (_req, res) => {
+  publicFile(res, path.join('institucional', 'contato.html'))
 })
