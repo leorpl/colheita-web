@@ -262,6 +262,7 @@ tbody td{padding:10px 10px;border-bottom:1px solid rgba(15,26,22,.08);vertical-a
 tbody tr:hover{background:rgba(209,154,43,.06)}
 tbody tr.hum-low{background:rgba(209,154,43,.10)}
 tbody tr.hum-high{background:rgba(180,35,24,.10)}
+tbody tr.incomplete{background:rgba(238,153,61,.16)}
 th.actions, td.actions{white-space:nowrap;width:1%}
 
 /* "Frame" visual para coluna de acoes (fixa na esquerda) */
@@ -284,6 +285,7 @@ td.actions{
 tbody tr:hover td.actions{background:rgba(255,255,255,.88)}
 tbody tr.hum-low td.actions{background:rgba(255,255,255,.86)}
 tbody tr.hum-high td.actions{background:rgba(255,255,255,.86)}
+tbody tr.incomplete td.actions{background:rgba(255,255,255,.86)}
 
 /* Compact inputs inside rule tables (umidade faixas) */
 .table-wrap table input[type="number"],
@@ -305,6 +307,15 @@ input[data-manual="1"],
 select[data-manual="1"],
 textarea[data-manual="1"]{
   background:#fff3c4 !important;
+}
+
+/* Campos obrigatorios faltando */
+input[data-missing="1"],
+select[data-missing="1"],
+textarea[data-missing="1"]{
+  background:rgba(238,153,61,.18) !important;
+  border-color:rgba(238,153,61,.58) !important;
+  box-shadow:0 0 0 3px rgba(238,153,61,.18) !important;
 }
 
 /* Grid tables: consistent alignment & density */

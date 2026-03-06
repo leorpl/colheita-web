@@ -237,6 +237,15 @@ export const viagemService = {
           hora_saida: r.hora_saida,
           tipo_plantio: r.tipo_plantio,
 
+          carga_total_kg: r.carga_total_kg,
+          tara_kg: r.tara_kg,
+          impureza_pct: r.impureza_pct,
+          ardidos_pct: r.ardidos_pct,
+          queimados_pct: r.queimados_pct,
+          avariados_pct: r.avariados_pct,
+          esverdiados_pct: r.esverdiados_pct,
+          quebrados_pct: r.quebrados_pct,
+
           umidade_pct: r.umidade_pct,
           peso_bruto_kg: r.peso_bruto_kg,
           peso_limpo_seco_kg: r.peso_limpo_seco_kg,
@@ -338,6 +347,15 @@ export const viagemService = {
         hora_saida: parent.hora_saida,
         tipo_plantio: parent.tipo_plantio,
 
+        carga_total_kg: parent.carga_total_kg,
+        tara_kg: parent.tara_kg,
+        impureza_pct: parent.impureza_pct,
+        ardidos_pct: parent.ardidos_pct,
+        queimados_pct: parent.queimados_pct,
+        avariados_pct: parent.avariados_pct,
+        esverdiados_pct: parent.esverdiados_pct,
+        quebrados_pct: parent.quebrados_pct,
+
         umidade_pct: parent.umidade_pct,
         peso_bruto_kg: totalPb > 0 ? round(portionKg, 6) : alloc(parent.peso_bruto_kg),
         peso_limpo_seco_kg: alloc(parent.peso_limpo_seco_kg),
@@ -384,6 +402,16 @@ export const viagemService = {
         data_saida: g.data_saida,
         hora_saida: g.hora_saida,
         tipo_plantio: g.tipo_plantio,
+
+        carga_total_kg: g.carga_total_kg,
+        tara_kg: g.tara_kg,
+        impureza_pct: g.impureza_pct,
+        ardidos_pct: g.ardidos_pct,
+        queimados_pct: g.queimados_pct,
+        avariados_pct: g.avariados_pct,
+        esverdiados_pct: g.esverdiados_pct,
+        quebrados_pct: g.quebrados_pct,
+
         umidade_pct: g.umidade_pct,
         peso_bruto_kg: g.peso_bruto_kg,
         peso_limpo_seco_kg: g.peso_limpo_seco_kg,

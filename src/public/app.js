@@ -693,6 +693,19 @@ function attachFormatOnBlur(inputEl, { digits } = {}) {
   })
 }
 
+function clearMissingMarks(rootEl) {
+  if (!rootEl) return
+  rootEl.querySelectorAll('[data-missing="1"]').forEach((el) => {
+    el.dataset.missing = '0'
+    el.removeAttribute('data-missing')
+  })
+}
+
+function markMissing(el) {
+  if (!el) return
+  el.dataset.missing = '1'
+}
+
 function parseNumberPt(v) {
   if (v === null || v === undefined) return NaN
   if (typeof v === 'number') return v
@@ -3607,7 +3620,7 @@ async function renderColheitaBase(variant) {
 
     const expanded = new Set()
 
-    const rowHtml = (v, opts = {}) => {
+      const rowHtml = (v, opts = {}) => {
       const isChild = Boolean(opts.isChild)
       const showToggle = Boolean(opts.showToggle)
       const toggled = Boolean(opts.toggled)
@@ -3628,7 +3641,26 @@ async function renderColheitaBase(variant) {
           ? clamp01(1 - pls / pb) * 100
           : 0
 
-      const saida = String(v.data_saida || '').trim()
+        const saida = String(v.data_saida || '').trim()
+        const horaSaida = String(v.hora_saida || '').trim()
+
+        const cargaTotal = Number(v.carga_total_kg)
+        const tara = Number(v.tara_kg)
+        const hasPeso = Number.isFinite(cargaTotal) && cargaTotal > 0 && Number.isFinite(tara) && tara > 0
+        const missingSaida = !saida || !horaSaida
+        const missingPeso = !hasPeso
+        const missingUmidade = !(Number.isFinite(umid) && umid > 0)
+        const q = [
+          Number(v.impureza_pct),
+          Number(v.ardidos_pct),
+          Number(v.queimados_pct),
+          Number(v.avariados_pct),
+          Number(v.esverdiados_pct),
+          Number(v.quebrados_pct),
+        ]
+        const hasAnyQual = q.some((x) => Number.isFinite(x) && x > 0)
+        const missingQual = hasPeso && !hasAnyQual
+        const incomplete = missingSaida || missingPeso || missingUmidade || missingQual
 
       const valorCompraApplied = Number(v.valor_compra_por_saca_aplicado)
       const valorCompraRule =
@@ -3679,8 +3711,8 @@ async function renderColheitaBase(variant) {
 
       const childAttrs = isChild ? ` data-parent="${v.id}" style="${expanded.has(v.id) ? '' : 'display:none'}"` : ''
 
-      return `<tr class="${humClass}${isChild ? ' rateio-child' : ''}"${childAttrs}>
-        ${actionCell}
+        return `<tr class="${humClass}${incomplete ? ' incomplete' : ''}${isChild ? ' rateio-child' : ''}"${childAttrs}>
+          ${actionCell}
         <td data-sort="${escapeHtml(String(v.ficha_original || v.ficha || ''))}"><code class="mono">${escapeHtml(fichaDisp)}</code>${badge}</td>
         <td>${escapeHtml(v.safra_nome || '')}</td>
         <td>${escapeHtml(v.talhao_nome || '')}</td>
@@ -4077,17 +4109,31 @@ async function renderColheitaBase(variant) {
         }
       `,
       onSubmit: async (obj) => {
+        clearMissingMarks(dlgForm)
+
+        const elDataSaida = dlgForm.querySelector('input[name="data_saida"]')
+        const elHoraSaida = dlgForm.querySelector('input[name="hora_saida"]')
+        const elDataEntrega = dlgForm.querySelector('input[name="data_entrega"]')
+
         if (!obj.data_saida || !obj.hora_saida) {
+          if (!obj.data_saida) markMissing(elDataSaida)
+          if (!obj.hora_saida) markMissing(elHoraSaida)
+          ;(elDataSaida?.dataset.missing === '1' ? elDataSaida : elHoraSaida)?.focus?.()
           throw new Error('Informe data e hora de saída.')
         }
 
         if (obj.hora_entrega && !obj.data_entrega) {
+          markMissing(elDataEntrega)
+          elDataEntrega?.focus?.()
           throw new Error('Informe a data de entrega quando houver hora de entrega.')
         }
 
         const talhoesRateio = collectRateioTalhoes()
         const primaryTalhaoId = Number(talhoesRateio?.[0]?.talhao_id)
         if (!Number.isInteger(primaryTalhaoId) || primaryTalhaoId <= 0) {
+          const sel = dlgForm.querySelector('#rateioTalhoes select[data-role="talhao"]')
+          markMissing(sel)
+          sel?.focus?.()
           throw new Error('Informe ao menos um talhão no rateio.')
         }
 
