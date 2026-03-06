@@ -678,6 +678,21 @@ function asNumberOrNull(v) {
   return Number.isFinite(n) ? n : null
 }
 
+function formatPtInputValue(raw, digits) {
+  const s = String(raw ?? '').trim()
+  if (!s) return ''
+  const n = parseNumberPt(s)
+  if (!Number.isFinite(n)) return s
+  return fmtNum(n, digits)
+}
+
+function attachFormatOnBlur(inputEl, { digits } = {}) {
+  if (!inputEl) return
+  inputEl.addEventListener('blur', () => {
+    inputEl.value = formatPtInputValue(inputEl.value, digits)
+  })
+}
+
 function parseNumberPt(v) {
   if (v === null || v === undefined) return NaN
   if (typeof v === 'number') return v
@@ -3810,24 +3825,26 @@ async function renderColheitaBase(variant) {
       ? {
           ...viagem,
           // converter fracao (API) -> % (UI)
-          umidade_pct: (Number(viagem.umidade_pct) * 100).toFixed(2),
-          impureza_pct: (Number(viagem.impureza_pct) * 100).toFixed(2),
-          ardidos_pct: (Number(viagem.ardidos_pct) * 100).toFixed(2),
-          queimados_pct: (Number(viagem.queimados_pct) * 100).toFixed(2),
-          avariados_pct: (Number(viagem.avariados_pct) * 100).toFixed(2),
-          esverdiados_pct: (Number(viagem.esverdiados_pct) * 100).toFixed(2),
-          quebrados_pct: (Number(viagem.quebrados_pct) * 100).toFixed(2),
-          impureza_limite_pct: (Number(viagem.impureza_limite_pct) * 100).toFixed(2),
-          ardidos_limite_pct: (Number(viagem.ardidos_limite_pct) * 100).toFixed(2),
-          queimados_limite_pct: (Number(viagem.queimados_limite_pct) * 100).toFixed(2),
-          avariados_limite_pct: (Number(viagem.avariados_limite_pct) * 100).toFixed(2),
-          esverdiados_limite_pct: (Number(viagem.esverdiados_limite_pct) * 100).toFixed(2),
-          quebrados_limite_pct: (Number(viagem.quebrados_limite_pct) * 100).toFixed(2),
+          carga_total_kg: formatPtInputValue(viagem.carga_total_kg, 0),
+          tara_kg: formatPtInputValue(viagem.tara_kg, 0),
+          umidade_pct: fmtNum(Number(viagem.umidade_pct) * 100, 2),
+          impureza_pct: fmtNum(Number(viagem.impureza_pct) * 100, 2),
+          ardidos_pct: fmtNum(Number(viagem.ardidos_pct) * 100, 2),
+          queimados_pct: fmtNum(Number(viagem.queimados_pct) * 100, 2),
+          avariados_pct: fmtNum(Number(viagem.avariados_pct) * 100, 2),
+          esverdiados_pct: fmtNum(Number(viagem.esverdiados_pct) * 100, 2),
+          quebrados_pct: fmtNum(Number(viagem.quebrados_pct) * 100, 2),
+          impureza_limite_pct: fmtNum(Number(viagem.impureza_limite_pct) * 100, 2),
+          ardidos_limite_pct: fmtNum(Number(viagem.ardidos_limite_pct) * 100, 2),
+          queimados_limite_pct: fmtNum(Number(viagem.queimados_limite_pct) * 100, 2),
+          avariados_limite_pct: fmtNum(Number(viagem.avariados_limite_pct) * 100, 2),
+          esverdiados_limite_pct: fmtNum(Number(viagem.esverdiados_limite_pct) * 100, 2),
+          quebrados_limite_pct: fmtNum(Number(viagem.quebrados_limite_pct) * 100, 2),
           umidade_desc_pct_manual:
             viagem.umidade_desc_pct_manual === null ||
             viagem.umidade_desc_pct_manual === undefined
               ? ''
-              : (Number(viagem.umidade_desc_pct_manual) * 100).toFixed(2),
+              : fmtNum(Number(viagem.umidade_desc_pct_manual) * 100, 2),
 
           // Campos calculados (somente visual - nao editar)
           calc_peso_bruto_kg: Number.isFinite(Number(viagem.peso_bruto_kg))
@@ -3884,12 +3901,12 @@ async function renderColheitaBase(variant) {
       avariados_pct: '',
       esverdiados_pct: '',
       quebrados_pct: '',
-      impureza_limite_pct: '0.00',
-      ardidos_limite_pct: '0.00',
-      queimados_limite_pct: '0.00',
-      avariados_limite_pct: '0.00',
-      esverdiados_limite_pct: '0.00',
-      quebrados_limite_pct: '0.00',
+      impureza_limite_pct: '0,00',
+      ardidos_limite_pct: '0,00',
+      queimados_limite_pct: '0,00',
+      avariados_limite_pct: '0,00',
+      esverdiados_limite_pct: '0,00',
+      quebrados_limite_pct: '0,00',
       umidade_desc_pct_manual: '',
 
       // Campos calculados (somente visual - nao editar)
@@ -4032,12 +4049,12 @@ async function renderColheitaBase(variant) {
               </div>
               <div class="hint">Regras e limites sao carregados por destino + safra. Se voce alterar algum limite, o campo fica amarelo.</div>
               <div class="form-grid" style="margin-top:12px">
-                ${formField({ label: 'Impureza limite %', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.impureza_limite_pct ?? '0.00', span: 'col2' })}
-                ${formField({ label: 'Ardidos limite %', name: 'ardidos_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.ardidos_limite_pct ?? '0.00', span: 'col2' })}
-                ${formField({ label: 'Queimados limite %', name: 'queimados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.queimados_limite_pct ?? '0.00', span: 'col2' })}
-                ${formField({ label: 'Avariados limite %', name: 'avariados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.avariados_limite_pct ?? '0.00', span: 'col2' })}
-                ${formField({ label: 'Esverdiados limite %', name: 'esverdiados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.esverdiados_limite_pct ?? '0.00', span: 'col2' })}
-                ${formField({ label: 'Quebrados limite %', name: 'quebrados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.quebrados_limite_pct ?? '0.00', span: 'col2' })}
+                ${formField({ label: 'Impureza limite %', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.impureza_limite_pct ?? '0,00', span: 'col2' })}
+                ${formField({ label: 'Ardidos limite %', name: 'ardidos_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.ardidos_limite_pct ?? '0,00', span: 'col2' })}
+                ${formField({ label: 'Queimados limite %', name: 'queimados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.queimados_limite_pct ?? '0,00', span: 'col2' })}
+                ${formField({ label: 'Avariados limite %', name: 'avariados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.avariados_limite_pct ?? '0,00', span: 'col2' })}
+                ${formField({ label: 'Esverdiados limite %', name: 'esverdiados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.esverdiados_limite_pct ?? '0,00', span: 'col2' })}
+                ${formField({ label: 'Quebrados limite %', name: 'quebrados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.quebrados_limite_pct ?? '0,00', span: 'col2' })}
               </div>
             </div>
           </div>
@@ -4162,6 +4179,8 @@ async function renderColheitaBase(variant) {
     const selPlantio = dlgForm.querySelector('select[name="tipo_plantio"]')
     const inputPlaca = dlgForm.querySelector('input[name="placa"]')
     const inputLocal = dlgForm.querySelector('input[name="local"]')
+    const inputCarga = dlgForm.querySelector('input[name="carga_total_kg"]')
+    const inputTara = dlgForm.querySelector('input[name="tara_kg"]')
     const selMotorista = dlgForm.querySelector('select[name="motorista_id"]')
     const rateioWrap = dlgForm.querySelector('#rateioTalhoes')
     const rateioInfo = dlgForm.querySelector('#rateioInfo')
@@ -4173,6 +4192,32 @@ async function renderColheitaBase(variant) {
     const inputUmidDesc = dlgForm.querySelector(
       'input[name="umidade_desc_pct_manual"]',
     )
+
+    // Formatar inputs numericos (pt-BR) para facilitar leitura.
+    // Faz no blur para nao atrapalhar a digitacao.
+    attachFormatOnBlur(inputCarga, { digits: 0 })
+    attachFormatOnBlur(inputTara, { digits: 0 })
+
+    const pctFields = [
+      'umidade_pct',
+      'umidade_desc_pct_manual',
+      'impureza_pct',
+      'ardidos_pct',
+      'queimados_pct',
+      'avariados_pct',
+      'esverdiados_pct',
+      'quebrados_pct',
+
+      'impureza_limite_pct',
+      'ardidos_limite_pct',
+      'queimados_limite_pct',
+      'avariados_limite_pct',
+      'esverdiados_limite_pct',
+      'quebrados_limite_pct',
+    ]
+    for (const n of pctFields) {
+      attachFormatOnBlur(dlgForm.querySelector(`input[name="${n}"]`), { digits: 2 })
+    }
 
     function getPesoBaseKg() {
       const carga = asNumberOrNull(dlgForm.querySelector('input[name="carga_total_kg"]')?.value)
@@ -4351,7 +4396,7 @@ async function renderColheitaBase(variant) {
 
       // se usuario nao mexeu, auto-preenche com o sugerido
       if (inputUmidDesc.dataset.userEdited !== '1') {
-        inputUmidDesc.value = (suggestedHundredths / 100).toFixed(2)
+        inputUmidDesc.value = fmtNum(suggestedHundredths / 100, 2)
       }
     }
 
@@ -4421,7 +4466,7 @@ async function renderColheitaBase(variant) {
       if (raw) return
       const suggested = Number(el.dataset.suggestedHundredths ?? '')
       if (!Number.isFinite(suggested)) return
-      el.value = (suggested / 100).toFixed(2)
+      el.value = fmtNum(suggested / 100, 2)
       el.dataset.userEdited = '0'
       el.dataset.manual = '0'
     }
@@ -4576,7 +4621,7 @@ async function renderColheitaBase(variant) {
           // Ao trocar destino/safra/plantio: atualizar apenas campos automaticos.
           // Se o usuario ajustou manualmente (romaneio), preservar.
           if (el.dataset.userEdited !== '1') {
-            el.value = ((v ?? 0) * 100).toFixed(2)
+            el.value = fmtNum((v ?? 0) * 100, 2)
           }
         }
 
@@ -4957,7 +5002,7 @@ async function renderColheitaBase(variant) {
       const pct = asNumberOrNull(inPct?.value)
       if (pct === null) return
       const kg = (baseKg * pct) / 100
-      if (inKg) inKg.value = String(Math.round(kg))
+      if (inKg) inKg.value = fmtNum(Math.round(kg), 0)
     }
 
     function syncRowFromKg(row) {
@@ -4968,7 +5013,7 @@ async function renderColheitaBase(variant) {
       const kg = asNumberOrNull(inKg?.value)
       if (kg === null) return
       const pct = (kg / baseKg) * 100
-      if (inPct) inPct.value = pct.toFixed(2)
+      if (inPct) inPct.value = fmtNum(pct, 2)
     }
 
     function addRateioRow({ talhao_id, pct_rateio, kg_rateio, index } = {}) {
@@ -5003,13 +5048,16 @@ async function renderColheitaBase(variant) {
       const inPct = row.querySelector('input[data-role="pct"]')
       const inKg = row.querySelector('input[data-role="kg"]')
 
+      attachFormatOnBlur(inPct, { digits: 2 })
+      attachFormatOnBlur(inKg, { digits: 0 })
+
       if (inPct && pct_rateio !== null && pct_rateio !== undefined) {
         const n = Number(pct_rateio)
-        if (Number.isFinite(n)) inPct.value = n.toFixed(2)
+        if (Number.isFinite(n)) inPct.value = fmtNum(n, 2)
       }
       if (inKg && kg_rateio !== null && kg_rateio !== undefined) {
         const n = Number(kg_rateio)
-        if (Number.isFinite(n)) inKg.value = String(Math.round(n))
+        if (Number.isFinite(n)) inKg.value = fmtNum(Math.round(n), 0)
       }
 
       if (inPct) {
@@ -5060,7 +5108,7 @@ async function renderColheitaBase(variant) {
         }
         const restKg = Math.max(0, baseKg - usedKg)
         const inKgLast = last.querySelector('input[data-role="kg"]')
-        if (inKgLast) inKgLast.value = String(Math.round(restKg))
+        if (inKgLast) inKgLast.value = fmtNum(Math.round(restKg), 0)
         syncRowFromKg(last)
       } else {
         let usedPct = 0
@@ -5070,7 +5118,7 @@ async function renderColheitaBase(variant) {
         }
         const restPct = Math.max(0, 100 - usedPct)
         const inPctLast = last.querySelector('input[data-role="pct"]')
-        if (inPctLast) inPctLast.value = restPct.toFixed(2)
+        if (inPctLast) inPctLast.value = fmtNum(restPct, 2)
       }
       updateRateioInfo()
       setLocalFromTalhao()
