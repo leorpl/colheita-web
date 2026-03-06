@@ -212,11 +212,9 @@ export const viagemService = {
            AND (@motorista_id IS NULL OR v.motorista_id = @motorista_id)
            AND (@de IS NULL OR v.data_saida >= @de)
            AND (@ate IS NULL OR v.data_saida <= @ate)
-         ORDER BY
-           v.safra_id ASC,
-           v.ficha ASC,
-           v.id ASC,
-           vt.id ASC`,
+          ORDER BY
+            v.id DESC,
+            vt.id ASC`,
       )
       .all(params)
 
@@ -362,12 +360,9 @@ export const viagemService = {
       return { ...v, ficha_original: v.ficha, is_rateado: isRateado, rateio_count: v.talhoes.length, children }
     })
 
-    // Ordenacao padrao: ficha_original asc, depois rateio_index asc
-    groups.sort((a, b) => {
-      const c = coll.compare(String(a.ficha_original || ''), String(b.ficha_original || ''))
-      if (c !== 0) return c
-      return Number(a.id) - Number(b.id)
-    })
+    // Ordenacao padrao (grid): ultimos lancamentos primeiro.
+    // Usa id (autoincrement) para refletir ordem de insercao.
+    groups.sort((a, b) => Number(b.id) - Number(a.id) || coll.compare(String(b.ficha_original || ''), String(a.ficha_original || '')))
     for (const g of groups) {
       g.children.sort((a, b) => Number(a.rateio_index) - Number(b.rateio_index))
     }
