@@ -11,6 +11,7 @@ export const Menus = {
   colheita: 'colheita',
   'area-colhida': 'area-colhida',
   relatorios: 'relatorios',
+  producao: 'producao',
   'quitacao-motoristas': 'quitacao-motoristas',
   safras: 'safras',
   talhoes: 'talhoes',
@@ -78,9 +79,10 @@ const RoleMenus = {
     Menus.colheita,
     Menus['area-colhida'],
     Menus.relatorios,
+    Menus.producao,
     Menus.fazenda,
   ],
-  [Roles.LEITURA]: [Menus.painel, Menus.relatorios, Menus.fazenda],
+  [Roles.LEITURA]: [Menus.painel, Menus.relatorios, Menus.producao, Menus.fazenda],
   [Roles.MOTORISTA]: [Menus.colheita],
 }
 

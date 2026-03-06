@@ -12,6 +12,7 @@ export const Modules = {
   PAINEL: 'painel',
   COLHEITA: 'colheita',
   RELATORIOS: 'relatorios',
+  PRODUCAO: 'producao',
   QUITACOES: 'quitacao-motoristas',
   SAFRAS: 'safras',
   TALHOES: 'talhoes',
@@ -46,6 +47,10 @@ function legacyRoleAllow(roleName, moduleKey, action) {
   }
   if (moduleKey === Modules.RELATORIOS || moduleKey === Modules.AREA_COLHIDA) {
     return action === Actions.VIEW && has(Permissions.RELATORIOS_READ)
+  }
+  if (moduleKey === Modules.PRODUCAO) {
+    if (action === Actions.VIEW) return has(Permissions.RELATORIOS_READ)
+    return has(Permissions.CONFIG_WRITE)
   }
   if (moduleKey === Modules.QUITACOES) {
     if (action === Actions.VIEW) return has(Permissions.RELATORIOS_READ) || has(Permissions.QUITACOES_WRITE)

@@ -382,6 +382,159 @@ export function migrate() {
       FOREIGN KEY (changed_by_user_id) REFERENCES usuario(id) ON DELETE SET NULL
     );
 
+    -- Producao / Divisao de sacas (participantes, acordos, vendas, apuracao)
+    CREATE TABLE IF NOT EXISTS participante (
+      id INTEGER PRIMARY KEY,
+      nome TEXT NOT NULL,
+      tipo TEXT NOT NULL DEFAULT 'outro',
+      documento TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      created_by_user_id INTEGER,
+      updated_by_user_id INTEGER,
+      deleted_at TEXT,
+      deleted_by_user_id INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS politica_custos (
+      id INTEGER PRIMARY KEY,
+      nome TEXT NOT NULL UNIQUE,
+      descricao TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      created_by_user_id INTEGER,
+      updated_by_user_id INTEGER,
+      deleted_at TEXT,
+      deleted_by_user_id INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS politica_custos_regra (
+      id INTEGER PRIMARY KEY,
+      politica_custos_id INTEGER NOT NULL,
+      custo_tipo TEXT NOT NULL,
+      modo_rateio TEXT NOT NULL,
+      momento TEXT NOT NULL,
+      custom_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      created_by_user_id INTEGER,
+      updated_by_user_id INTEGER,
+      deleted_at TEXT,
+      deleted_by_user_id INTEGER,
+      UNIQUE (politica_custos_id, custo_tipo),
+      FOREIGN KEY (politica_custos_id) REFERENCES politica_custos(id) ON DELETE CASCADE
+    );
+
+    -- Acordo por talhao e safra (tipo_plantio vazio significa "qualquer")
+    CREATE TABLE IF NOT EXISTS talhao_acordo (
+      id INTEGER PRIMARY KEY,
+      talhao_id INTEGER NOT NULL,
+      safra_id INTEGER NOT NULL,
+      tipo_plantio TEXT NOT NULL DEFAULT '',
+      vigencia_de TEXT,
+      vigencia_ate TEXT,
+      politica_custos_id INTEGER,
+      observacoes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      created_by_user_id INTEGER,
+      updated_by_user_id INTEGER,
+      deleted_at TEXT,
+      deleted_by_user_id INTEGER,
+      UNIQUE (talhao_id, safra_id, tipo_plantio),
+      FOREIGN KEY (talhao_id) REFERENCES talhao(id) ON DELETE RESTRICT,
+      FOREIGN KEY (safra_id) REFERENCES safra(id) ON DELETE RESTRICT,
+      FOREIGN KEY (politica_custos_id) REFERENCES politica_custos(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS talhao_acordo_participante (
+      id INTEGER PRIMARY KEY,
+      talhao_acordo_id INTEGER NOT NULL,
+      participante_id INTEGER NOT NULL,
+      papel TEXT NOT NULL DEFAULT 'parceiro',
+      percentual_producao REAL NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      created_by_user_id INTEGER,
+      updated_by_user_id INTEGER,
+      deleted_at TEXT,
+      deleted_by_user_id INTEGER,
+      UNIQUE (talhao_acordo_id, participante_id),
+      FOREIGN KEY (talhao_acordo_id) REFERENCES talhao_acordo(id) ON DELETE CASCADE,
+      FOREIGN KEY (participante_id) REFERENCES participante(id) ON DELETE RESTRICT
+    );
+
+    CREATE TABLE IF NOT EXISTS venda_saca (
+      id INTEGER PRIMARY KEY,
+      safra_id INTEGER NOT NULL,
+      data_venda TEXT NOT NULL,
+      participante_id INTEGER NOT NULL,
+      comprador_tipo TEXT NOT NULL,
+      destino_id INTEGER,
+      terceiro_nome TEXT,
+      tipo_plantio TEXT,
+      talhao_id INTEGER,
+      sacas REAL NOT NULL,
+      preco_por_saca REAL NOT NULL,
+      valor_total REAL,
+      observacoes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      created_by_user_id INTEGER,
+      updated_by_user_id INTEGER,
+      deleted_at TEXT,
+      deleted_by_user_id INTEGER,
+      FOREIGN KEY (safra_id) REFERENCES safra(id) ON DELETE RESTRICT,
+      FOREIGN KEY (participante_id) REFERENCES participante(id) ON DELETE RESTRICT,
+      FOREIGN KEY (destino_id) REFERENCES destino(id) ON DELETE SET NULL,
+      FOREIGN KEY (talhao_id) REFERENCES talhao(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS custo_lancamento (
+      id INTEGER PRIMARY KEY,
+      safra_id INTEGER NOT NULL,
+      talhao_id INTEGER NOT NULL,
+      data_ref TEXT,
+      custo_tipo TEXT NOT NULL,
+      valor_rs REAL,
+      valor_sacas REAL,
+      observacoes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      created_by_user_id INTEGER,
+      updated_by_user_id INTEGER,
+      deleted_at TEXT,
+      deleted_by_user_id INTEGER,
+      FOREIGN KEY (safra_id) REFERENCES safra(id) ON DELETE RESTRICT,
+      FOREIGN KEY (talhao_id) REFERENCES talhao(id) ON DELETE RESTRICT
+    );
+
+    CREATE TABLE IF NOT EXISTS participante_sacas_mov (
+      id INTEGER PRIMARY KEY,
+      safra_id INTEGER NOT NULL,
+      participante_id INTEGER NOT NULL,
+      talhao_id INTEGER,
+      data_ref TEXT,
+      mov_tipo TEXT NOT NULL,
+      origem_tipo TEXT,
+      origem_id INTEGER,
+      custo_tipo TEXT,
+      sacas_credito REAL NOT NULL DEFAULT 0,
+      sacas_debito REAL NOT NULL DEFAULT 0,
+      valor_rs REAL,
+      preco_ref_rs_sc REAL,
+      pendente_preco INTEGER NOT NULL DEFAULT 0,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      created_by_user_id INTEGER,
+      updated_by_user_id INTEGER,
+      FOREIGN KEY (safra_id) REFERENCES safra(id) ON DELETE RESTRICT,
+      FOREIGN KEY (participante_id) REFERENCES participante(id) ON DELETE RESTRICT,
+      FOREIGN KEY (talhao_id) REFERENCES talhao(id) ON DELETE SET NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_usuario_sessao_user ON usuario_sessao(usuario_id);
     CREATE INDEX IF NOT EXISTS idx_usuario_sessao_exp ON usuario_sessao(expires_at);
     CREATE INDEX IF NOT EXISTS idx_role_permission_module ON role_permission(module);
@@ -394,6 +547,21 @@ export function migrate() {
     CREATE INDEX IF NOT EXISTS idx_audit_module ON audit_log(module_name);
     CREATE INDEX IF NOT EXISTS idx_audit_record ON audit_log(module_name, record_id);
     CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action_type);
+
+    CREATE INDEX IF NOT EXISTS idx_participante_active ON participante(active);
+    CREATE INDEX IF NOT EXISTS idx_participante_deleted ON participante(deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_politica_deleted ON politica_custos(deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_politica_regra_fk ON politica_custos_regra(politica_custos_id);
+    CREATE INDEX IF NOT EXISTS idx_acordo_talhao_safra ON talhao_acordo(talhao_id, safra_id);
+    CREATE INDEX IF NOT EXISTS idx_acordo_deleted ON talhao_acordo(deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_acordo_part_fk ON talhao_acordo_participante(talhao_acordo_id);
+    CREATE INDEX IF NOT EXISTS idx_venda_safra_data ON venda_saca(safra_id, data_venda);
+    CREATE INDEX IF NOT EXISTS idx_venda_part ON venda_saca(participante_id);
+    CREATE INDEX IF NOT EXISTS idx_venda_deleted ON venda_saca(deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_custo_safra_talhao ON custo_lancamento(safra_id, talhao_id);
+    CREATE INDEX IF NOT EXISTS idx_mov_safra_part ON participante_sacas_mov(safra_id, participante_id);
+    CREATE INDEX IF NOT EXISTS idx_mov_safra_talhao ON participante_sacas_mov(safra_id, talhao_id);
+    CREATE INDEX IF NOT EXISTS idx_mov_origem ON participante_sacas_mov(origem_tipo, origem_id);
   `)
 
   // backfill de rateio: viagens antigas (1 talhao -> 100%)
@@ -454,6 +622,16 @@ export function migrate() {
     'role',
     'role_permission',
     'user_permission',
+
+    // producao/divisao
+    'participante',
+    'politica_custos',
+    'politica_custos_regra',
+    'talhao_acordo',
+    'talhao_acordo_participante',
+    'venda_saca',
+    'custo_lancamento',
+    'participante_sacas_mov',
   ]
 
   for (const t of traceTables) {
@@ -486,6 +664,15 @@ export function migrate() {
     'viagem',
     'plantio_tipo',
     'motorista_quitacao',
+
+    // producao/divisao
+    'participante',
+    'politica_custos',
+    'politica_custos_regra',
+    'talhao_acordo',
+    'talhao_acordo_participante',
+    'venda_saca',
+    'custo_lancamento',
   ]
   for (const t of softDeleteTables) {
     if (!hasColumn(t, 'deleted_at')) {
@@ -519,16 +706,17 @@ export function migrate() {
         db.prepare('SELECT id, name FROM role').all().map((r) => [String(r.name), Number(r.id)]),
       )
 
-      const modules = [
-        'painel',
-        'colheita',
-        'relatorios',
-        'quitacao-motoristas',
-        'safras',
-        'talhoes',
-        'destinos',
-        'motoristas',
-        'fretes',
+       const modules = [
+         'painel',
+         'colheita',
+         'relatorios',
+         'producao',
+         'quitacao-motoristas',
+         'safras',
+         'talhoes',
+         'destinos',
+         'motoristas',
+         'fretes',
         'regras-destino',
         'tipos-plantio',
         'area-colhida',
@@ -556,6 +744,10 @@ export function migrate() {
         }
         if (moduleKey === 'relatorios' || moduleKey === 'area-colhida') {
           return action === 'view' && has(Permissions.RELATORIOS_READ)
+        }
+        if (moduleKey === 'producao') {
+          if (action === 'view') return has(Permissions.RELATORIOS_READ)
+          return has(Permissions.CONFIG_WRITE)
         }
         if (moduleKey === 'quitacao-motoristas') {
           if (action === 'view') return has(Permissions.RELATORIOS_READ) || has(Permissions.QUITACOES_WRITE)

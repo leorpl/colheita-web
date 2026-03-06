@@ -16,6 +16,12 @@ import { usersRouter } from './users.js'
 import { contratosSiloRouter } from './contratosSilo.js'
 import { auditLogsRouter } from './auditLogs.js'
 import { aclRouter } from './acl.js'
+import { participantesRouter } from './participantes.js'
+import { politicasCustosRouter } from './politicasCustos.js'
+import { talhaoAcordosRouter } from './talhaoAcordos.js'
+import { vendasSacasRouter } from './vendasSacas.js'
+import { custosLancamentosRouter } from './custosLancamentos.js'
+import { apuracaoRouter } from './apuracao.js'
 import { requireAuth } from '../../middleware/auth.js'
 
 export const apiRouter = Router()
@@ -34,7 +40,15 @@ apiRouter.use(requireAuth)
 // Admin/management
 apiRouter.use('/users', usersRouter)
 apiRouter.use('/acl', aclRouter)
-apiRouter.use('/audit-logs', auditLogsRouter)
+  apiRouter.use('/audit-logs', auditLogsRouter)
+
+  // Producao/divisao
+  apiRouter.use('/participantes', participantesRouter)
+  apiRouter.use('/politicas-custos', politicasCustosRouter)
+  apiRouter.use('/talhao-acordos', talhaoAcordosRouter)
+  apiRouter.use('/vendas-sacas', vendasSacasRouter)
+  apiRouter.use('/custos-lancamentos', custosLancamentosRouter)
+  apiRouter.use('/apuracao', apuracaoRouter)
 
 apiRouter.use('/safras', safrasRouter)
 apiRouter.use('/talhoes', talhoesRouter)
@@ -47,4 +61,4 @@ apiRouter.use('/contratos-silo', contratosSiloRouter)
 apiRouter.use('/talhao-safra', talhaoSafraRouter)
 apiRouter.use('/viagens', viagensRouter)
 apiRouter.use('/relatorios', relatoriosRouter)
-apiRouter.use('/quitacoes-motoristas', quitacoesMotoristasRouter)
+  apiRouter.use('/quitacoes-motoristas', quitacoesMotoristasRouter)

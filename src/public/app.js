@@ -757,13 +757,18 @@ function setupPwdToggles(rootEl) {
   })
 }
 
-function openDialog({ title, bodyHtml, onSubmit, submitLabel = 'Salvar', size } = {}) {
+function openDialog({ title, bodyHtml, onSubmit, onReady, submitLabel = 'Salvar', size } = {}) {
   dlg.dataset.size = size ? String(size) : ''
   dlgTitle.textContent = title
   dlgBody.innerHTML = bodyHtml
   setupPwdToggles(dlgBody)
   bindAuditButtons(dlgBody)
   hydrateTraceMeta(dlgBody)
+  try {
+    if (typeof onReady === 'function') onReady()
+  } catch {
+    // ignore
+  }
   dlgSubmit.textContent = submitLabel
   dlgForm.onsubmit = async (e) => {
     const submitterValue = String(e.submitter?.value || '')
@@ -778,7 +783,7 @@ function openDialog({ title, bodyHtml, onSubmit, submitLabel = 'Salvar', size } 
     const fd = new FormData(dlgForm)
     const obj = Object.fromEntries(fd.entries())
     try {
-      if (onSubmit) await onSubmit(obj)
+      if (onSubmit) await onSubmit(obj, dlgForm)
       dlg.close('default')
     } catch (err) {
       const msg = String(err?.message || err)
@@ -2276,6 +2281,7 @@ async function renderUsuarios() {
     { key: 'colheita', label: 'Colheita' },
     { key: 'area-colhida', label: 'Área colhida' },
     { key: 'relatorios', label: 'Relatórios' },
+    { key: 'producao', label: 'Producao e divisao' },
     { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { key: 'safras', label: 'Safras' },
     { key: 'talhoes', label: 'Talhões' },
@@ -2343,6 +2349,7 @@ async function renderUsuarios() {
     { key: 'colheita', label: 'Colheita' },
     { key: 'area-colhida', label: 'Área colhida' },
     { key: 'relatorios', label: 'Relatórios' },
+    { key: 'producao', label: 'Producao e divisao' },
     { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { key: 'safras', label: 'Safras' },
     { key: 'talhoes', label: 'Talhões' },
@@ -2741,6 +2748,7 @@ async function renderPerfis() {
     { key: 'colheita', label: 'Colheita' },
     { key: 'area-colhida', label: 'Área colhida' },
     { key: 'relatorios', label: 'Relatórios' },
+    { key: 'producao', label: 'Producao e divisao' },
     { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { key: 'safras', label: 'Safras' },
     { key: 'talhoes', label: 'Talhões' },
@@ -7429,6 +7437,977 @@ async function renderFazenda() {
   `)
 }
 
+async function renderProducao() {
+  activeNav('producao')
+  await loadLookups()
+
+  const hash = window.location.hash || '#/producao'
+  let tab = 'apuracao'
+  try {
+    const q = hash.includes('?') ? hash.split('?')[1] : ''
+    const p = new URLSearchParams(q)
+    tab = String(p.get('tab') || 'apuracao')
+  } catch {
+    // ignore
+  }
+
+  const tabs = [
+    { key: 'apuracao', label: 'Apuracao' },
+    { key: 'acordos', label: 'Acordos' },
+    { key: 'participantes', label: 'Participantes' },
+    { key: 'vendas', label: 'Vendas' },
+    { key: 'politicas', label: 'Politicas de custos' },
+    { key: 'custos', label: 'Custos manuais' },
+  ]
+
+  const safraOptions = (cache.safras || []).map((s) => ({ value: s.id, label: s.safra }))
+  const talhaoOptions = (cache.talhoes || []).map((t) => ({
+    value: t.id,
+    label: `${t.local || ''} ${t.nome || t.codigo || ''}`.trim(),
+  }))
+  const destinoOptions = [{ value: '', label: '-' }].concat(
+    (cache.destinos || []).map((d) => ({ value: d.id, label: d.local })),
+  )
+  const plantioOptions = [{ value: '', label: 'Qualquer' }].concat(
+    (cache.tiposPlantio || []).map((p) => ({ value: p.nome, label: p.nome })),
+  )
+
+  let safra_id = null
+  try {
+    safra_id = Number(localStorage.getItem('producao_safra_id') || '')
+  } catch {
+    // ignore
+  }
+  if (!safra_id && safraOptions.length) safra_id = Number(safraOptions[0].value)
+
+  function setTab(next) {
+    const p = new URLSearchParams({ tab: next })
+    window.location.hash = `#/producao?${p.toString()}`
+  }
+
+  function headerHtml(sub) {
+    return `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Controle de producao e divisao de sacas</div>
+            <div class="panel-sub">Por talhao e por participante (dono/meeiro/parceiro). Custos em sacas equivalentes via vendas registradas.</div>
+          </div>
+          <div class="panel-actions">
+            ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safra_id, span: 'col6' })}
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="tabs" role="tablist" aria-label="Producao tabs">
+            ${tabs
+              .map(
+                (t) =>
+                  `<button class="tab ${t.key === tab ? 'active' : ''}" type="button" data-tab="${escapeHtml(t.key)}">${escapeHtml(t.label)}</button>`,
+              )
+              .join('')}
+          </div>
+          <div style="margin-top:12px">${sub}</div>
+        </div>
+      </section>
+    `.trim()
+  }
+
+  function bindHeaderControls() {
+    const sel = view.querySelector('select[name="safra_id"]')
+    if (sel) {
+      sel.onchange = () => {
+        const v = Number(sel.value)
+        if (Number.isFinite(v) && v > 0) {
+          safra_id = v
+          try {
+            localStorage.setItem('producao_safra_id', String(v))
+          } catch {
+            // ignore
+          }
+        }
+        renderProducao()
+      }
+    }
+    view.querySelectorAll('button[data-tab]').forEach((b) => {
+      b.onclick = () => setTab(String(b.dataset.tab || 'apuracao'))
+    })
+  }
+
+  async function loadParticipantes({ include_inactive = true } = {}) {
+    const qp = include_inactive ? '?include_inactive=1' : ''
+    const list = await api(`/api/participantes${qp}`).catch(() => [])
+    return list || []
+  }
+
+  async function loadPoliticas() {
+    const list = await api('/api/politicas-custos').catch(() => [])
+    return list || []
+  }
+
+  function numInputBlur(el, digits, onAfter) {
+    if (!el) return
+    el.addEventListener('blur', () => {
+      const raw = String(el.value ?? '').trim()
+      if (!raw) return
+      const n = parseNumberPt(raw)
+      if (!Number.isFinite(n)) return
+      el.value = fmtNumInput(n, digits)
+      if (typeof onAfter === 'function') onAfter(n)
+    })
+  }
+
+  async function tabParticipantes() {
+    const items = await loadParticipantes({ include_inactive: true })
+    setView(
+      headerHtml(
+        `
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+          <div class="hint">Cadastre donos, parceiros e meeiros. Use "Ativo" para exibir em seletores.</div>
+          <button class="btn" type="button" id="btnNew">Novo participante</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Nome</th><th>Tipo</th><th>Documento</th><th>Ativo</th><th class="actions"></th></tr></thead>
+            <tbody>
+              ${items
+                .map(
+                  (p) => `
+                  <tr>
+                    <td>${escapeHtml(p.nome || '')}</td>
+                    <td>${escapeHtml(p.tipo || '')}</td>
+                    <td>${escapeHtml(p.documento || '')}</td>
+                    <td>${Number(p.active) === 1 ? 'SIM' : ''}</td>
+                    <td class="actions">
+                      <button class="btn ghost small" type="button" data-act="edit" data-id="${escapeHtml(String(p.id))}">Editar</button>
+                      <button class="btn ghost small" type="button" data-act="del" data-id="${escapeHtml(String(p.id))}">Excluir</button>
+                    </td>
+                  </tr>`
+                )
+                .join('')}
+            </tbody>
+          </table>
+        </div>
+      `,
+      ),
+    )
+    bindHeaderControls()
+
+    view.querySelector('#btnNew').onclick = () => openEdit(null)
+    view.querySelectorAll('button[data-act]').forEach((b) => {
+      b.onclick = async () => {
+        const id = Number(b.dataset.id)
+        const it = items.find((x) => Number(x.id) === id)
+        if (!it) return
+        if (b.dataset.act === 'edit') return openEdit(it)
+        if (b.dataset.act === 'del') {
+          if (!(await confirmDanger(`Excluir participante "${it.nome}"?`))) return
+          await api(`/api/participantes/${it.id}`, { method: 'DELETE' })
+          toast('Excluido', 'Participante removido.')
+          renderProducao()
+        }
+      }
+    })
+
+    function openEdit(it) {
+      const isEdit = Boolean(it)
+      openDialog({
+        title: isEdit ? `Editar participante #${it.id}` : 'Novo participante',
+        bodyHtml: `
+          <div class="form-grid">
+            ${formField({ label: 'Nome', name: 'nome', value: it?.nome || '', span: 'col6' })}
+            ${selectField({
+              label: 'Tipo',
+              name: 'tipo',
+              options: [
+                { value: 'proprietario', label: 'Proprietario' },
+                { value: 'parceiro', label: 'Parceiro' },
+                { value: 'meeiro', label: 'Meeiro' },
+                { value: 'empresa', label: 'Empresa' },
+                { value: 'outro', label: 'Outro' },
+              ],
+              value: it?.tipo || 'outro',
+              span: 'col6',
+            })}
+            ${formField({ label: 'Documento', name: 'documento', value: it?.documento || '', span: 'col6' })}
+            <label class="field col6"><div class="label">Ativo</div><input type="checkbox" name="active" ${it && Number(it.active) !== 1 ? '' : 'checked'} /></label>
+          </div>
+        `,
+        onSubmit: async (obj) => {
+          const body = {
+            nome: obj.nome,
+            tipo: obj.tipo,
+            documento: obj.documento || null,
+            active: Boolean(obj.active),
+          }
+          if (isEdit) await api(`/api/participantes/${it.id}`, { method: 'PUT', body })
+          else await api('/api/participantes', { method: 'POST', body })
+          toast('Salvo', 'Participante atualizado.')
+          renderProducao()
+        },
+      })
+    }
+  }
+
+  async function tabPoliticas() {
+    const items = await loadPoliticas()
+    setView(
+      headerHtml(
+        `
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+          <div class="hint">Defina como cada custo e rateado (frete/secagem/silo/terceiros/outros).</div>
+          <button class="btn" type="button" id="btnNew">Nova politica</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Nome</th><th>Descricao</th><th class="actions"></th></tr></thead>
+            <tbody>
+              ${items
+                .map(
+                  (p) => `
+                  <tr>
+                    <td>${escapeHtml(p.nome || '')}</td>
+                    <td>${escapeHtml(String(p.descricao || ''))}</td>
+                    <td class="actions">
+                      <button class="btn ghost small" type="button" data-act="edit" data-id="${escapeHtml(String(p.id))}">Editar</button>
+                      <button class="btn ghost small" type="button" data-act="del" data-id="${escapeHtml(String(p.id))}">Excluir</button>
+                    </td>
+                  </tr>`
+                )
+                .join('')}
+            </tbody>
+          </table>
+        </div>
+      `,
+      ),
+    )
+    bindHeaderControls()
+
+    view.querySelector('#btnNew').onclick = () => openEdit(null)
+    view.querySelectorAll('button[data-act]').forEach((b) => {
+      b.onclick = async () => {
+        const id = Number(b.dataset.id)
+        const it = items.find((x) => Number(x.id) === id)
+        if (!it) return
+        if (b.dataset.act === 'edit') return openEdit(it)
+        if (b.dataset.act === 'del') {
+          if (!(await confirmDanger(`Excluir politica "${it.nome}"?`))) return
+          await api(`/api/politicas-custos/${it.id}`, { method: 'DELETE' })
+          toast('Excluida', 'Politica removida.')
+          renderProducao()
+        }
+      }
+    })
+
+    async function openEdit(it) {
+      const isEdit = Boolean(it)
+      const full = isEdit ? await api(`/api/politicas-custos/${it.id}`) : { nome: '', descricao: '', regras: [] }
+      const regras = Array.isArray(full.regras) ? full.regras : []
+
+      const ruleRow = (r, i) => `
+        <tr data-idx="${i}">
+          <td>
+            <select name="custo_tipo_${i}">
+              ${['frete', 'secagem', 'silo', 'terceiros', 'outros']
+                .map((k) => `<option value="${k}" ${String(r.custo_tipo) === k ? 'selected' : ''}>${k}</option>`)
+                .join('')}
+            </select>
+          </td>
+          <td>
+            <select name="modo_${i}">
+              ${[
+                ['proporcional_participacao', 'Proporcional'],
+                ['somente_produtor', 'Somente produtor'],
+                ['somente_dono', 'Somente dono'],
+              ]
+                .map(([k, label]) => `<option value="${k}" ${String(r.modo_rateio) === k ? 'selected' : ''}>${label}</option>`)
+                .join('')}
+            </select>
+          </td>
+          <td>
+            <select name="momento_${i}">
+              ${[
+                ['depois_divisao', 'Depois'],
+                ['antes_divisao', 'Antes'],
+              ]
+                .map(([k, label]) => `<option value="${k}" ${String(r.momento) === k ? 'selected' : ''}>${label}</option>`)
+                .join('')}
+            </select>
+          </td>
+          <td class="actions"><button class="btn ghost small" type="button" data-act="rm" data-idx="${i}">Remover</button></td>
+        </tr>
+      `.trim()
+
+      openDialog({
+        title: isEdit ? `Editar politica #${it.id}` : 'Nova politica',
+        bodyHtml: `
+          <div class="form-grid">
+            ${formField({ label: 'Nome', name: 'nome', value: full.nome || '', span: 'col6' })}
+            ${formField({ label: 'Descricao', name: 'descricao', value: full.descricao || '', span: 'col6' })}
+            <div class="field col12">
+              <div class="label">Regras</div>
+              <div class="table-wrap rule-wrap" style="margin-top:6px">
+                <table>
+                  <thead><tr><th>Custo</th><th>Rateio</th><th>Momento</th><th class="actions"></th></tr></thead>
+                  <tbody id="rulesBody">${regras.map(ruleRow).join('')}</tbody>
+                </table>
+              </div>
+              <div style="margin-top:10px">
+                <button class="btn ghost" type="button" id="btnAddRule">Adicionar regra</button>
+              </div>
+            </div>
+          </div>
+        `,
+        onReady: () => {
+          const rulesBody = document.querySelector('#rulesBody')
+          const add = document.querySelector('#btnAddRule')
+          if (add && rulesBody) {
+            add.onclick = () => {
+              const idx = rulesBody.querySelectorAll('tr').length
+              const r = { custo_tipo: 'frete', modo_rateio: 'proporcional_participacao', momento: 'depois_divisao' }
+              rulesBody.insertAdjacentHTML('beforeend', ruleRow(r, idx))
+              bindRm()
+            }
+          }
+          function bindRm() {
+            document.querySelectorAll('button[data-act="rm"]').forEach((b) => {
+              b.onclick = () => {
+                const tr = b.closest('tr')
+                if (tr) tr.remove()
+              }
+            })
+          }
+          bindRm()
+        },
+        onSubmit: async (obj, formEl) => {
+          const rows = Array.from(formEl.querySelectorAll('#rulesBody tr'))
+          const regrasOut = rows.map((tr, i) => {
+            const idx = tr.dataset.idx || String(i)
+            return {
+              custo_tipo: formEl.querySelector(`select[name="custo_tipo_${idx}"]`)?.value,
+              modo_rateio: formEl.querySelector(`select[name="modo_${idx}"]`)?.value,
+              momento: formEl.querySelector(`select[name="momento_${idx}"]`)?.value,
+            }
+          })
+          const body = { nome: obj.nome, descricao: obj.descricao || null, regras: regrasOut }
+          if (isEdit) await api(`/api/politicas-custos/${it.id}`, { method: 'PUT', body })
+          else await api('/api/politicas-custos', { method: 'POST', body })
+          toast('Salvo', 'Politica atualizada.')
+          renderProducao()
+        },
+      })
+    }
+  }
+
+  async function tabAcordos() {
+    const participantes = await loadParticipantes({ include_inactive: false })
+    const politicas = await loadPoliticas()
+    const itens = await api(`/api/talhao-acordos?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
+
+    const partOptions = participantes.map((p) => ({ value: p.id, label: p.nome }))
+    const polOptions = [{ value: '', label: '-' }].concat(
+      politicas.map((p) => ({ value: p.id, label: p.nome })),
+    )
+
+    setView(
+      headerHtml(
+        `
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+          <div class="hint">Defina participacao por talhao (soma 100%). Reapure para refletir nos saldos.</div>
+          <button class="btn" type="button" id="btnNew">Novo acordo</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Talhao</th><th>Plantio</th><th>Politica</th><th class="actions"></th></tr></thead>
+            <tbody>
+              ${(itens || [])
+                .map(
+                  (a) => `
+                  <tr>
+                    <td>${escapeHtml(`${a.talhao_local || ''} ${a.talhao_nome || a.talhao_codigo || ''}`.trim())}</td>
+                    <td>${escapeHtml(String(a.tipo_plantio || '') || 'Qualquer')}</td>
+                    <td>${escapeHtml(String(a.politica_nome || ''))}</td>
+                    <td class="actions">
+                      <button class="btn ghost small" type="button" data-act="edit" data-id="${escapeHtml(String(a.id))}">Editar</button>
+                      <button class="btn ghost small" type="button" data-act="del" data-id="${escapeHtml(String(a.id))}">Excluir</button>
+                    </td>
+                  </tr>`
+                )
+                .join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="hint" style="margin-top:10px">Dica: se nao existir acordo para um talhao, a producao desse talhao nao entra na apuracao.</div>
+      `,
+      ),
+    )
+    bindHeaderControls()
+
+    view.querySelector('#btnNew').onclick = () => openEdit(null)
+    view.querySelectorAll('button[data-act]').forEach((b) => {
+      b.onclick = async () => {
+        const id = Number(b.dataset.id)
+        const it = (itens || []).find((x) => Number(x.id) === id)
+        if (!it) return
+        if (b.dataset.act === 'edit') return openEdit(it)
+        if (b.dataset.act === 'del') {
+          if (!(await confirmDanger('Excluir este acordo?'))) return
+          await api(`/api/talhao-acordos/${it.id}`, { method: 'DELETE' })
+          toast('Excluido', 'Acordo removido.')
+          renderProducao()
+        }
+      }
+    })
+
+    async function openEdit(it) {
+      const isEdit = Boolean(it)
+      const full = isEdit ? await api(`/api/talhao-acordos/${it.id}`) : null
+      const parts = (full?.participantes || []).map((p) => ({
+        participante_id: p.participante_id,
+        papel: p.papel,
+        percentual: Number(p.percentual_producao || 0) * 100,
+      }))
+
+      const rowHtml = (r, i) => `
+        <tr data-idx="${i}">
+          <td>
+            <select name="part_${i}">
+              ${partOptions
+                .map(
+                  (o) =>
+                    `<option value="${o.value}" ${Number(r.participante_id) === Number(o.value) ? 'selected' : ''}>${escapeHtml(o.label)}</option>`,
+                )
+                .join('')}
+            </select>
+          </td>
+          <td>
+            <select name="papel_${i}">
+              ${[
+                ['dono_terra', 'Dono da terra'],
+                ['produtor', 'Produtor'],
+                ['meeiro', 'Meeiro'],
+                ['parceiro', 'Parceiro'],
+              ]
+                .map(([k, label]) => `<option value="${k}" ${String(r.papel) === k ? 'selected' : ''}>${label}</option>`)
+                .join('')}
+            </select>
+          </td>
+          <td style="width:140px" class="t-right"><input type="text" inputmode="decimal" pattern="[0-9.,]*" name="pct_${i}" value="${escapeHtml(fmtNumInput(Number(r.percentual || 0), 2))}" style="text-align:right"/></td>
+          <td class="actions"><button class="btn ghost small" type="button" data-act="rm" data-idx="${i}">Remover</button></td>
+        </tr>
+      `.trim()
+
+      openDialog({
+        title: isEdit ? `Editar acordo #${it.id}` : 'Novo acordo',
+        bodyHtml: `
+          <div class="form-grid">
+            ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safra_id, span: 'col4' })}
+            ${selectField({ label: 'Talhao', name: 'talhao_id', options: talhaoOptions, value: full?.talhao_id || talhaoOptions[0]?.value, span: 'col8' })}
+            ${selectField({ label: 'Tipo de plantio', name: 'tipo_plantio', options: plantioOptions, value: full?.tipo_plantio || '', span: 'col6' })}
+            ${selectField({ label: 'Politica de custos', name: 'politica_custos_id', options: polOptions, value: full?.politica_custos_id || '', span: 'col6' })}
+            <div class="field col12">
+              <div class="label">Participantes</div>
+              <div class="table-wrap rule-wrap" style="margin-top:6px">
+                <table>
+                  <thead><tr><th>Participante</th><th>Papel</th><th class="t-right">%</th><th class="actions"></th></tr></thead>
+                  <tbody id="partsBody">${(parts.length ? parts : [{ participante_id: partOptions[0]?.value, papel: 'parceiro', percentual: 100 }]).map(rowHtml).join('')}</tbody>
+                </table>
+              </div>
+              <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn ghost" type="button" id="btnAddPart">Adicionar</button>
+                <button class="btn ghost" type="button" id="btnFill100">Fechar 100%</button>
+              </div>
+              <div class="hint" id="sumHint" style="margin-top:8px"></div>
+            </div>
+          </div>
+        `,
+        onReady: () => {
+          const body = document.querySelector('#partsBody')
+          const btnAdd = document.querySelector('#btnAddPart')
+          const btnFill = document.querySelector('#btnFill100')
+          const hint = document.querySelector('#sumHint')
+
+          function readSum() {
+            const rows = Array.from(body.querySelectorAll('tr'))
+            let sum = 0
+            for (const tr of rows) {
+              const idx = tr.dataset.idx
+              const el = document.querySelector(`input[name="pct_${idx}"]`)
+              const n = parseNumberPt(String(el?.value || '0'))
+              sum += Number.isFinite(n) ? n : 0
+            }
+            if (hint) hint.textContent = `Soma: ${fmtNum(sum, 2)}%`
+          }
+
+          function bindRm() {
+            document.querySelectorAll('button[data-act="rm"]').forEach((b) => {
+              b.onclick = () => {
+                const tr = b.closest('tr')
+                if (tr) tr.remove()
+                readSum()
+              }
+            })
+            document.querySelectorAll('#partsBody input[name^="pct_"]').forEach((inp) => {
+              numInputBlur(inp, 2, readSum)
+              inp.addEventListener('input', readSum)
+            })
+          }
+
+          if (btnAdd) {
+            btnAdd.onclick = () => {
+              const idx = body.querySelectorAll('tr').length
+              const r = { participante_id: partOptions[0]?.value, papel: 'parceiro', percentual: 0 }
+              body.insertAdjacentHTML('beforeend', rowHtml(r, idx))
+              bindRm()
+              readSum()
+            }
+          }
+          if (btnFill) {
+            btnFill.onclick = () => {
+              const rows = Array.from(body.querySelectorAll('tr'))
+              if (!rows.length) return
+              let sum = 0
+              for (let i = 0; i < rows.length - 1; i++) {
+                const idx = rows[i].dataset.idx
+                const el = document.querySelector(`input[name="pct_${idx}"]`)
+                const n = parseNumberPt(String(el?.value || '0'))
+                sum += Number.isFinite(n) ? n : 0
+              }
+              const lastIdx = rows[rows.length - 1].dataset.idx
+              const last = document.querySelector(`input[name="pct_${lastIdx}"]`)
+              const rest = Math.max(0, 100 - sum)
+              if (last) last.value = fmtNumInput(rest, 2)
+              readSum()
+            }
+          }
+
+          bindRm()
+          readSum()
+        },
+        onSubmit: async (obj, formEl) => {
+          const rows = Array.from(formEl.querySelectorAll('#partsBody tr'))
+          const participantsOut = rows.map((tr, i) => {
+            const idx = tr.dataset.idx || String(i)
+            return {
+              participante_id: Number(formEl.querySelector(`select[name="part_${idx}"]`)?.value),
+              papel: String(formEl.querySelector(`select[name="papel_${idx}"]`)?.value),
+              percentual_producao: parseNumberPt(String(formEl.querySelector(`input[name="pct_${idx}"]`)?.value || '0')),
+            }
+          })
+          const sum = participantsOut.reduce((acc, p) => acc + (Number(p.percentual_producao) || 0), 0)
+          if (Math.abs(sum - 100) > 0.01) {
+            toast('Erro', 'A soma dos percentuais deve ser 100%.')
+            throw new Error('percent sum invalid')
+          }
+          const body = {
+            safra_id: Number(obj.safra_id),
+            talhao_id: Number(obj.talhao_id),
+            tipo_plantio: obj.tipo_plantio || '',
+            politica_custos_id: obj.politica_custos_id ? Number(obj.politica_custos_id) : null,
+            observacoes: null,
+            participantes: participantsOut,
+          }
+          if (isEdit) await api(`/api/talhao-acordos/${it.id}`, { method: 'PUT', body })
+          else await api('/api/talhao-acordos', { method: 'POST', body })
+          toast('Salvo', 'Acordo atualizado.')
+          renderProducao()
+        },
+      })
+    }
+  }
+
+  async function tabVendas() {
+    const participantes = await loadParticipantes({ include_inactive: false })
+    const itens = await api(`/api/vendas-sacas?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
+    const partOptions = participantes.map((p) => ({ value: p.id, label: p.nome }))
+
+    setView(
+      headerHtml(
+        `
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+          <div class="hint">Registre vendas por participante (preco variavel). Alimenta conversao de custos em sacas equivalentes.</div>
+          <button class="btn" type="button" id="btnNew">Nova venda</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Data</th><th>Participante</th><th>Comprador</th><th class="t-right">Sacas</th><th class="t-right">R$/sc</th><th class="t-right">Total</th><th class="actions"></th></tr></thead>
+            <tbody>
+              ${(itens || [])
+                .map(
+                  (v) => `
+                  <tr>
+                    <td>${escapeHtml(v.data_venda || '')}</td>
+                    <td>${escapeHtml(v.participante_nome || '')}</td>
+                    <td>${escapeHtml(v.comprador_tipo === 'destino' ? (v.destino_local || '-') : (v.terceiro_nome || '-'))}</td>
+                    <td class="t-right">${fmtNum(v.sacas, 2)}</td>
+                    <td class="t-right">${fmtNum(v.preco_por_saca, 2)}</td>
+                    <td class="t-right">${fmtNum(v.valor_total || (Number(v.sacas || 0) * Number(v.preco_por_saca || 0)), 2)}</td>
+                    <td class="actions">
+                      <button class="btn ghost small" type="button" data-act="edit" data-id="${escapeHtml(String(v.id))}">Editar</button>
+                      <button class="btn ghost small" type="button" data-act="del" data-id="${escapeHtml(String(v.id))}">Excluir</button>
+                    </td>
+                  </tr>`
+                )
+                .join('')}
+            </tbody>
+          </table>
+        </div>
+      `,
+      ),
+    )
+    bindHeaderControls()
+
+    view.querySelector('#btnNew').onclick = () => openEdit(null)
+    view.querySelectorAll('button[data-act]').forEach((b) => {
+      b.onclick = async () => {
+        const id = Number(b.dataset.id)
+        const it = (itens || []).find((x) => Number(x.id) === id)
+        if (!it) return
+        if (b.dataset.act === 'edit') return openEdit(it)
+        if (b.dataset.act === 'del') {
+          if (!(await confirmDanger('Excluir esta venda?'))) return
+          await api(`/api/vendas-sacas/${it.id}`, { method: 'DELETE' })
+          toast('Excluida', 'Venda removida.')
+          renderProducao()
+        }
+      }
+    })
+
+    async function openEdit(it) {
+      const isEdit = Boolean(it)
+      const full = isEdit ? await api(`/api/vendas-sacas/${it.id}`) : null
+      const now = new Date()
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      openDialog({
+        title: isEdit ? `Editar venda #${it.id}` : 'Nova venda',
+        bodyHtml: `
+          <div class="form-grid">
+            ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: full?.safra_id || safra_id, span: 'col4' })}
+            ${formField({ label: 'Data', name: 'data_venda', type: 'date', value: full?.data_venda || today, span: 'col4' })}
+            ${selectField({ label: 'Participante', name: 'participante_id', options: partOptions, value: full?.participante_id || partOptions[0]?.value, span: 'col4' })}
+            ${selectField({
+              label: 'Comprador',
+              name: 'comprador_tipo',
+              options: [
+                { value: 'destino', label: 'Silo/Destino' },
+                { value: 'terceiro', label: 'Terceiro' },
+              ],
+              value: full?.comprador_tipo || 'destino',
+              span: 'col4',
+            })}
+            ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: full?.destino_id || '', span: 'col4' })}
+            ${formField({ label: 'Terceiro', name: 'terceiro_nome', value: full?.terceiro_nome || '', span: 'col4' })}
+            ${selectField({ label: 'Tipo plantio', name: 'tipo_plantio', options: plantioOptions, value: full?.tipo_plantio || '', span: 'col4' })}
+            ${selectField({ label: 'Talhao (opcional)', name: 'talhao_id', options: [{ value: '', label: '-' }].concat(talhaoOptions), value: full?.talhao_id || '', span: 'col8' })}
+            ${formField({ label: 'Sacas', name: 'sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full ? fmtNumInput(full.sacas, 2) : '', span: 'col4' })}
+            ${formField({ label: 'Preco por saca (R$)', name: 'preco_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full ? fmtNumInput(full.preco_por_saca, 2) : '', span: 'col4' })}
+            <div class="field col4"><div class="label">Total</div><div class="hint" id="vTotal">-</div></div>
+          </div>
+        `,
+        onReady: () => {
+          const f = document.querySelector('#dlgForm')
+          const inS = f.querySelector('input[name="sacas"]')
+          const inP = f.querySelector('input[name="preco_por_saca"]')
+          const total = document.querySelector('#vTotal')
+          function recalc() {
+            const s = parseNumberPt(String(inS?.value || '0'))
+            const p = parseNumberPt(String(inP?.value || '0'))
+            const t = (Number.isFinite(s) ? s : 0) * (Number.isFinite(p) ? p : 0)
+            if (total) total.textContent = fmtNum(t, 2)
+          }
+          if (inS) {
+            numInputBlur(inS, 2, recalc)
+            inS.oninput = recalc
+          }
+          if (inP) {
+            numInputBlur(inP, 2, recalc)
+            inP.oninput = recalc
+          }
+          recalc()
+
+          const selTipo = f.querySelector('select[name="comprador_tipo"]')
+          const selDest = f.querySelector('select[name="destino_id"]')
+          const inTer = f.querySelector('input[name="terceiro_nome"]')
+          function toggleComprador() {
+            const isDest = String(selTipo?.value) === 'destino'
+            if (selDest) selDest.closest('.field').style.display = isDest ? '' : 'none'
+            if (inTer) inTer.closest('.field').style.display = isDest ? 'none' : ''
+          }
+          if (selTipo) selTipo.onchange = toggleComprador
+          toggleComprador()
+        },
+        onSubmit: async (obj) => {
+          const body = {
+            safra_id: Number(obj.safra_id),
+            data_venda: obj.data_venda,
+            participante_id: Number(obj.participante_id),
+            comprador_tipo: obj.comprador_tipo,
+            destino_id: obj.destino_id ? Number(obj.destino_id) : null,
+            terceiro_nome: obj.terceiro_nome || null,
+            tipo_plantio: obj.tipo_plantio || null,
+            talhao_id: obj.talhao_id ? Number(obj.talhao_id) : null,
+            sacas: parseNumberPt(String(obj.sacas || '0')),
+            preco_por_saca: parseNumberPt(String(obj.preco_por_saca || '0')),
+            observacoes: null,
+          }
+          if (isEdit) await api(`/api/vendas-sacas/${it.id}`, { method: 'PUT', body })
+          else await api('/api/vendas-sacas', { method: 'POST', body })
+          toast('Salvo', 'Venda registrada.')
+          renderProducao()
+        },
+      })
+    }
+  }
+
+  async function tabCustos() {
+    const itens = await api(`/api/custos-lancamentos?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
+    setView(
+      headerHtml(
+        `
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+          <div class="hint">Custos extras por talhao (R$ ou sacas). Para refletir na apuracao, use "Reapurar".</div>
+          <button class="btn" type="button" id="btnNew">Novo custo</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Data</th><th>Talhao</th><th>Tipo</th><th class="t-right">R$</th><th class="t-right">Sacas</th><th class="actions"></th></tr></thead>
+            <tbody>
+              ${(itens || [])
+                .map(
+                  (c) => `
+                  <tr>
+                    <td>${escapeHtml(c.data_ref || String(c.created_at || '').slice(0, 10))}</td>
+                    <td>${escapeHtml(`${c.talhao_local || ''} ${c.talhao_nome || ''}`.trim())}</td>
+                    <td>${escapeHtml(c.custo_tipo || '')}</td>
+                    <td class="t-right">${c.valor_rs == null ? '' : fmtNum(c.valor_rs, 2)}</td>
+                    <td class="t-right">${c.valor_sacas == null ? '' : fmtNum(c.valor_sacas, 2)}</td>
+                    <td class="actions">
+                      <button class="btn ghost small" type="button" data-act="edit" data-id="${escapeHtml(String(c.id))}">Editar</button>
+                      <button class="btn ghost small" type="button" data-act="del" data-id="${escapeHtml(String(c.id))}">Excluir</button>
+                    </td>
+                  </tr>`
+                )
+                .join('')}
+            </tbody>
+          </table>
+        </div>
+      `,
+      ),
+    )
+    bindHeaderControls()
+
+    view.querySelector('#btnNew').onclick = () => openEdit(null)
+    view.querySelectorAll('button[data-act]').forEach((b) => {
+      b.onclick = async () => {
+        const id = Number(b.dataset.id)
+        const it = (itens || []).find((x) => Number(x.id) === id)
+        if (!it) return
+        if (b.dataset.act === 'edit') return openEdit(it)
+        if (b.dataset.act === 'del') {
+          if (!(await confirmDanger('Excluir este custo?'))) return
+          await api(`/api/custos-lancamentos/${it.id}`, { method: 'DELETE' })
+          toast('Excluido', 'Custo removido.')
+          renderProducao()
+        }
+      }
+    })
+
+    async function openEdit(it) {
+      const isEdit = Boolean(it)
+      const full = isEdit ? await api(`/api/custos-lancamentos/${it.id}`) : null
+      const now = new Date()
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      openDialog({
+        title: isEdit ? `Editar custo #${it.id}` : 'Novo custo',
+        bodyHtml: `
+          <div class="form-grid">
+            ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: full?.safra_id || safra_id, span: 'col4' })}
+            ${selectField({ label: 'Talhao', name: 'talhao_id', options: talhaoOptions, value: full?.talhao_id || talhaoOptions[0]?.value, span: 'col8' })}
+            ${formField({ label: 'Data', name: 'data_ref', type: 'date', value: full?.data_ref || today, span: 'col4' })}
+            ${formField({ label: 'Tipo', name: 'custo_tipo', value: full?.custo_tipo || 'outros', span: 'col4' })}
+            ${formField({ label: 'Valor (R$)', name: 'valor_rs', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full?.valor_rs != null ? fmtNumInput(full.valor_rs, 2) : '', span: 'col4' })}
+            ${formField({ label: 'Valor (sacas)', name: 'valor_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full?.valor_sacas != null ? fmtNumInput(full.valor_sacas, 2) : '', span: 'col4' })}
+            <div class="field col8"><div class="label">Obs</div><div class="hint">Informe R$ (vai virar sacas equiv via vendas) ou sacas direto.</div></div>
+          </div>
+        `,
+        onReady: () => {
+          const f = document.querySelector('#dlgForm')
+          numInputBlur(f.querySelector('input[name="valor_rs"]'), 2)
+          numInputBlur(f.querySelector('input[name="valor_sacas"]'), 2)
+        },
+        onSubmit: async (obj) => {
+          const body = {
+            safra_id: Number(obj.safra_id),
+            talhao_id: Number(obj.talhao_id),
+            data_ref: obj.data_ref || null,
+            custo_tipo: obj.custo_tipo,
+            valor_rs: obj.valor_rs ? parseNumberPt(String(obj.valor_rs)) : null,
+            valor_sacas: obj.valor_sacas ? parseNumberPt(String(obj.valor_sacas)) : null,
+            observacoes: null,
+          }
+          if (isEdit) await api(`/api/custos-lancamentos/${it.id}`, { method: 'PUT', body })
+          else await api('/api/custos-lancamentos', { method: 'POST', body })
+          toast('Salvo', 'Custo registrado.')
+          renderProducao()
+        },
+      })
+    }
+  }
+
+  async function tabApuracao() {
+    const rowsP = await api(`/api/apuracao/saldo/participantes?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
+    const rowsT = await api(`/api/apuracao/saldo/talhoes?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
+    const pend = await api(`/api/apuracao/pendencias?safra_id=${encodeURIComponent(String(safra_id))}`).catch(() => [])
+
+    setView(
+      headerHtml(
+        `
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+          <div class="hint">Saldos em sacas. Custos convertidos via vendas (preco medio por mes). Custos pendentes nao foram abatidos.</div>
+          <button class="btn" type="button" id="btnReap">Reapurar safra</button>
+        </div>
+
+        ${pend && pend.length ? `
+          <div class="pill" style="margin-top:10px"><span class="dot warn"></span><span>Custos pendentes de preco: ${pend.map((p) => `${escapeHtml(p.custo_tipo || '')} R$ ${fmtNum(p.valor_rs, 2)}`).join(' | ')}</span></div>
+        ` : ''}
+
+        <div class="grid" style="margin-top:12px">
+          <div class="span6">
+            <div class="stat">
+              <div class="stat-k">Saldo por participante</div>
+              <div class="table-wrap" style="margin-top:10px">
+                <table>
+                  <thead><tr><th>Participante</th><th class="t-right">Credito</th><th class="t-right">Debito</th><th class="t-right">Saldo</th><th class="actions"></th></tr></thead>
+                  <tbody>
+                    ${rowsP
+                      .map(
+                        (r) => `
+                        <tr>
+                          <td>${escapeHtml(r.participante_nome || '')}</td>
+                          <td class="t-right">${fmtNum(r.sacas_credito, 2)}</td>
+                          <td class="t-right">${fmtNum(r.sacas_debito, 2)}</td>
+                          <td class="t-right"><b>${fmtNum(r.saldo_sacas, 2)}</b></td>
+                          <td class="actions"><button class="btn ghost small" type="button" data-act="extr" data-part="${escapeHtml(String(r.participante_id))}">Extrato</button></td>
+                        </tr>`
+                      )
+                      .join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="span6">
+            <div class="stat">
+              <div class="stat-k">Saldo por talhao</div>
+              <div class="table-wrap" style="margin-top:10px">
+                <table>
+                  <thead><tr><th>Talhao</th><th class="t-right">Credito</th><th class="t-right">Debito</th><th class="t-right">Saldo</th><th class="actions"></th></tr></thead>
+                  <tbody>
+                    ${rowsT
+                      .map(
+                        (r) => `
+                        <tr>
+                          <td>${escapeHtml(`${r.talhao_local || ''} ${r.talhao_nome || ''}`.trim())}</td>
+                          <td class="t-right">${fmtNum(r.sacas_credito, 2)}</td>
+                          <td class="t-right">${fmtNum(r.sacas_debito, 2)}</td>
+                          <td class="t-right"><b>${fmtNum(r.saldo_sacas, 2)}</b></td>
+                          <td class="actions"><button class="btn ghost small" type="button" data-act="extr-t" data-talhao="${escapeHtml(String(r.talhao_id))}">Detalhar</button></td>
+                        </tr>`
+                      )
+                      .join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      ),
+    )
+    bindHeaderControls()
+
+    view.querySelector('#btnReap').onclick = async () => {
+      await api('/api/apuracao/reapurar', { method: 'POST', body: { safra_id } })
+      toast('OK', 'Apuracao atualizada.')
+      renderProducao()
+    }
+
+    view.querySelectorAll('button[data-act="extr"]').forEach((b) => {
+      b.onclick = async () => {
+        const pid = Number(b.dataset.part)
+        const extr = await api(`/api/apuracao/extrato?safra_id=${encodeURIComponent(String(safra_id))}&participante_id=${encodeURIComponent(String(pid))}`)
+        openDialog({
+          title: 'Extrato (participante)',
+          bodyHtml: `
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Data</th><th>Talhao</th><th>Tipo</th><th>Custo</th><th class="t-right">Credito</th><th class="t-right">Debito</th><th class="t-right">R$</th></tr></thead>
+                <tbody>
+                  ${extr
+                    .map(
+                      (m) => `
+                      <tr>
+                        <td>${escapeHtml(String(m.data_ref || '').slice(0, 10))}</td>
+                        <td>${escapeHtml(`${m.talhao_local || ''} ${m.talhao_nome || ''}`.trim())}</td>
+                        <td>${escapeHtml(m.mov_tipo || '')}</td>
+                        <td>${escapeHtml(m.custo_tipo || '')}${Number(m.pendente_preco) === 1 ? ' (pendente)' : ''}</td>
+                        <td class="t-right">${fmtNum(m.sacas_credito, 2)}</td>
+                        <td class="t-right">${fmtNum(m.sacas_debito, 2)}</td>
+                        <td class="t-right">${m.valor_rs == null ? '' : fmtNum(m.valor_rs, 2)}</td>
+                      </tr>`
+                    )
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          `,
+          onSubmit: null,
+        })
+      }
+    })
+    view.querySelectorAll('button[data-act="extr-t"]').forEach((b) => {
+      b.onclick = async () => {
+        const tid = Number(b.dataset.talhao)
+        const extr = await api(`/api/apuracao/extrato?safra_id=${encodeURIComponent(String(safra_id))}&talhao_id=${encodeURIComponent(String(tid))}`)
+        openDialog({
+          title: 'Detalhe (talhao)',
+          bodyHtml: `
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Data</th><th>Participante</th><th>Tipo</th><th>Custo</th><th class="t-right">Credito</th><th class="t-right">Debito</th><th class="t-right">R$</th></tr></thead>
+                <tbody>
+                  ${extr
+                    .map(
+                      (m) => `
+                      <tr>
+                        <td>${escapeHtml(String(m.data_ref || '').slice(0, 10))}</td>
+                        <td>${escapeHtml(m.participante_nome || '')}</td>
+                        <td>${escapeHtml(m.mov_tipo || '')}</td>
+                        <td>${escapeHtml(m.custo_tipo || '')}${Number(m.pendente_preco) === 1 ? ' (pendente)' : ''}</td>
+                        <td class="t-right">${fmtNum(m.sacas_credito, 2)}</td>
+                        <td class="t-right">${fmtNum(m.sacas_debito, 2)}</td>
+                        <td class="t-right">${m.valor_rs == null ? '' : fmtNum(m.valor_rs, 2)}</td>
+                      </tr>`
+                    )
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          `,
+          onSubmit: null,
+        })
+      }
+    })
+  }
+
+  if (tab === 'participantes') return await tabParticipantes()
+  if (tab === 'politicas') return await tabPoliticas()
+  if (tab === 'acordos') return await tabAcordos()
+  if (tab === 'vendas') return await tabVendas()
+  if (tab === 'custos') return await tabCustos()
+  return await tabApuracao()
+}
+
 const routes = {
   painel: renderPainel,
   fazenda: renderFazenda,
@@ -7445,6 +8424,7 @@ const routes = {
   'quitacao-motoristas': renderQuitacaoMotoristas,
   viagens: renderColheita,
   relatorios: renderRelatorios,
+  producao: renderProducao,
   usuarios: renderUsuarios,
   perfis: renderPerfis,
   auditoria: renderAuditoria,

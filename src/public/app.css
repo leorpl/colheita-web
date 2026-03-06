@@ -713,6 +713,28 @@ code.mono{font-family:var(--mono);font-size:12px}
 .rateio-table tr.rateio-focus td{
   background:#fff3c4;
 }
+
+/* Producao tabs */
+.tabs{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.tab{
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.06);
+  color:#f1f5f9;
+  padding:8px 10px;
+  border-radius:12px;
+  cursor:pointer;
+  font-size:13px;
+}
+.tab:hover{background:rgba(255,255,255,.10)}
+.tab.active{
+  background:rgba(209,154,43,.18);
+  border-color:rgba(209,154,43,.45);
+  color:#fff;
+}
 .rateio-cell{min-width:0}
 .rateio-cell select,.rateio-cell input{width:100%}
 .rateio-cell[data-cell="rm"]{display:flex;justify-content:flex-end}
