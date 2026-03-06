@@ -1,124 +1,267 @@
 # Architecture (NazcaTraker)
 
-## 1) Visao geral
-- Aplicacao web unica em `colheita-web/`.
-- Backend: Express (API + paginas) e calculos no servidor.
-- Frontend: SPA simples (JS puro) servida como arquivos estaticos.
-- Persistencia: SQLite local via `better-sqlite3`.
+Este documento e gerado automaticamente a partir do codigo atual. Fonte: `scripts/self-heal-context.js` (self-heal-context/v3).
 
-## 2) Componentes e camadas (codigo real)
-- HTTP server: `colheita-web/src/server.js` (inicia, roda migrations e faz listen).
-- Express app: `colheita-web/src/app.js`
-  - middlewares: request id, logging, helmet (CSP), compression, cors, json parser, static.
-  - routers: paginas (`/`, `/login`) e API (`/api/*`).
-- Rotas API: `colheita-web/src/routes/api/*.js`
-  - validacao: Zod via `colheita-web/src/middleware/validate.js`
-  - auth/perms: `colheita-web/src/middleware/auth.js` + `colheita-web/src/auth/permissions.js`
-- Services (regras de negocio): `colheita-web/src/services/*.js`
-  - calculo e validacoes de colheita: `colheita-web/src/services/viagemService.js`
-  - relatorios: `colheita-web/src/services/relatoriosService.js`
-  - quitacoes: `colheita-web/src/services/quitacaoMotoristasService.js`
-- Repositories (SQL): `colheita-web/src/repositories/*.js`
-- Dominio/calculos: `colheita-web/src/domain/calculations.js` + normalizacao `colheita-web/src/domain/normalize.js`
+## System Architecture
 
-## 3) Banco de dados
-- Engine: SQLite.
-- Driver: `better-sqlite3` (sincrono).
-- Arquivo: `DB_PATH` (default `./data/app.db`).
-- Migrations: `colheita-web/src/db/migrate.js` (cria tabelas e faz alteracoes incrementais em runtime).
-- Pragmas: WAL + `foreign_keys=ON` (`colheita-web/src/db/db.js`).
+- Monolito: Express serve API e paginas estaticas no mesmo processo
+- Persistencia: SQLite (better-sqlite3, sincrono)
+- UI: SPA (hash routing) + paginas HTML avulsas (login/reset/institucional)
 
-### 3.1 Tabelas principais (schema atual)
-- `plantio_tipo` (tipos de plantio)
-- `safra`
-- `talhao`
-- `destino`
-- `motorista`
-- `frete` (UNIQUE safra_id+motorista_id+destino_id)
-- `destino_regra_plantio` (regras por safra+destino+tipo_plantio)
-- `umidade_faixa_plantio` (faixas de umidade/desc + custo de secagem por saca)
-- `contrato_silo` (cabecalho do contrato por safra+destino+tipo_plantio)
-- `contrato_silo_faixa` (faixas do contrato: sacas + preco travado)
-- `talhao_safra` (% area colhida por talhao na safra)
-- `viagem` (lancamentos + campos calculados e custos)
-- `viagem_talhao` (rateio de uma viagem em multiplos talhoes)
-- `motorista_quitacao` (pagamentos por periodo)
-- `usuario` e `usuario_sessao` (auth por cookie)
+## Directory Structure
 
-### 3.2 Tabelas legadas ainda presentes
-- `destino_regra` e `umidade_faixa` existem no schema e em alguns scripts, mas o fluxo principal do calculo usa `*_plantio`.
+- `src/`
+- `src/routes/`
+- `src/routes/api/`
+- `src/middleware/`
+- `src/services/`
+- `src/repositories/`
+- `src/db/`
+- `src/public/`
+- `docs/`
+- `scripts/`
 
-## 4) Fluxos principais (request -> resposta)
+## Application Entry Point
 
-### 4.1 UI (SPA)
-- Arquivos: `colheita-web/src/public/index.html`, `colheita-web/src/public/app.js`, `colheita-web/src/public/app.css`.
-- Navegacao por hash (ex: `#/painel`, `#/colheita`).
-- Consome API via `fetch('/api/...')`.
+- `src/server.js`: chama `migrate()` e inicia `createApp()`
+- `src/app.js`: configura middlewares, static, routers e error handler
 
-### 4.2 Autenticacao
-- Login: `POST /api/auth/login` cria sessao em `usuario_sessao` e seta cookie `SESSION_COOKIE_NAME`.
-- Guard: `authGate` em `colheita-web/src/middleware/auth.js` protege `/api/*` exceto `/api/health`, `/api/public/*` e `/api/auth/*`.
-- Autorizacao: `requirePerm(Permissions.*)` aplicado por rota.
-- Feature flag: `AUTH_ENABLED` desabilita o gate e as checagens de permissao.
+## Routing Layer
 
-### 4.3 Lancamento/preview de colheita (viagem)
-- Preview: `POST /api/viagens/preview`
-  - valida body (Zod) -> `viagemService.buildPayload()` -> calcula descontos/sacas/frete/custos -> devolve payload calculado + status de trava.
-- Criacao: `POST /api/viagens`
-  - reusa `buildPayload()` -> valida unicidade (safra,ficha) -> grava em `viagem`.
-- Edicao: `PUT /api/viagens/:id` idem, com exclusao do proprio id no acumulado.
+- Paginas: `src/routes/pages.js`
+- API: `src/routes/api/index.js` (mounts) + routers por dominio
 
-### 4.4 Regras do destino (safra+destino+tipo_plantio)
-- Upsert: `POST /api/destino-regras` grava em `destino_regra_plantio` e substitui faixas de umidade (`umidade_faixa_plantio`).
-- Contratos (travas/preco travado): `POST /api/contratos-silo` grava em `contrato_silo` e substitui `contrato_silo_faixa`.
-- Get one: `GET /api/destino-regras/one?safra_id=..&destino_id=..&tipo_plantio=..`.
-- List: `GET /api/destino-regras/plantio`.
+### API Endpoints (detected)
 
-### 4.5 Relatorios
-- Painel: `GET /api/relatorios/painel` (totais gerais e por safra atual/painel, perdas, umidade media ponderada, areas).
-- Resumo por talhao: `GET /api/relatorios/resumo-talhao?safra_id=..`.
-- Entregas por destino: `GET /api/relatorios/entregas-por-destino?safra_id=..[&tipo_plantio=..]`.
-- Pagamento motoristas: `GET /api/relatorios/pagamento-motoristas?[de=..&ate=..]`.
+- DELETE /api/acl/users/:id/overrides/:module
+- DELETE /api/contratos-silo/arquivos/:id
+- DELETE /api/custos-lancamentos/:id
+- DELETE /api/destino-regras/plantio/:id
+- DELETE /api/destinos/:id
+- DELETE /api/fretes/:id
+- DELETE /api/motoristas/:id
+- DELETE /api/participantes/:id
+- DELETE /api/politicas-custos/:id
+- DELETE /api/quitacoes-motoristas/:id
+- DELETE /api/safras/:id
+- DELETE /api/talhao-acordos/:id
+- DELETE /api/talhoes/:id
+- DELETE /api/tipos-plantio/:id
+- DELETE /api/users/:id
+- DELETE /api/vendas-sacas/:id
+- DELETE /api/viagens/:id
+- GET /api/acl/roles
+- GET /api/acl/roles/:role/permissions
+- GET /api/acl/users/:id/overrides
+- GET /api/apuracao/custos-por-viagem
+- GET /api/apuracao/extrato
+- GET /api/apuracao/pendencias
+- GET /api/apuracao/saldo/destinos
+- GET /api/apuracao/saldo/participantes
+- GET /api/apuracao/saldo/talhoes
+- GET /api/audit-logs
+- GET /api/audit-logs/:id
+- GET /api/audit-logs/export.csv
+- GET /api/audit-logs/page
+- GET /api/audit-logs/stats
+- GET /api/auth/can
+- GET /api/auth/me
+- GET /api/comunicacao/webmail
+- GET /api/contratos-silo
+- GET /api/contratos-silo/:id/arquivos
+- GET /api/contratos-silo/arquivos/:id/download
+- GET /api/contratos-silo/one
+- GET /api/custos-lancamentos
+- GET /api/custos-lancamentos/:id
+- GET /api/destino-regras
+- GET /api/destino-regras/one
+- GET /api/destino-regras/plantio
+- GET /api/destino-regras/plantio/:id
+- GET /api/destinos
+- GET /api/destinos/:id
+- GET /api/fretes
+- GET /api/health
+- GET /api/motoristas
+- GET /api/motoristas/:id
+- GET /api/notifications/preferences
+- GET /api/participantes
+- GET /api/participantes/:id
+- GET /api/politicas-custos
+- GET /api/politicas-custos/:id
+- GET /api/public/talhoes/:id
+- GET /api/public/talhoes/:id/resumo
+- GET /api/quitacoes-motoristas/:id
+- GET /api/quitacoes-motoristas/resumo
+- GET /api/relatorios/colheita
+- GET /api/relatorios/colheitas-completo.xlsx
+- GET /api/relatorios/entregas-por-destino
+- GET /api/relatorios/pagamento-motoristas
+- GET /api/relatorios/painel
+- GET /api/relatorios/resumo-talhao
+- GET /api/relatorios/viagens-bruto.xlsx
+- GET /api/safras
+- GET /api/safras/:id
+- GET /api/talhao-acordos
+- GET /api/talhao-acordos/:id
+- GET /api/talhao-safra
+- GET /api/talhao-safra/one
+- GET /api/talhoes
+- GET /api/talhoes/:id
+- GET /api/tipos-plantio
+- GET /api/tipos-plantio/:id
+- GET /api/users
+- GET /api/vendas-sacas
+- GET /api/vendas-sacas/:id
+- GET /api/viagens
+- GET /api/viagens/:id
+- GET /api/viagens/next-ficha
+- POST /api/acl/roles
+- POST /api/acl/roles/:role/clone
+- POST /api/apuracao/reapurar
+- POST /api/auth/forgot
+- POST /api/auth/login
+- POST /api/auth/logout
+- POST /api/auth/reset
+- POST /api/contratos-silo
+- POST /api/contratos-silo/:id/arquivos
+- POST /api/custos-lancamentos
+- POST /api/destino-regras
+- POST /api/destinos
+- POST /api/fretes
+- POST /api/fretes/bulk-upsert
+- POST /api/fretes/copiar-safra
+- POST /api/motoristas
+- POST /api/participantes
+- POST /api/politicas-custos
+- POST /api/quitacoes-motoristas
+- POST /api/safras
+- POST /api/talhao-acordos
+- POST /api/talhao-safra
+- POST /api/talhoes
+- POST /api/tipos-plantio
+- POST /api/users
+- POST /api/vendas-sacas
+- POST /api/viagens
+- POST /api/viagens/comparar-destinos
+- POST /api/viagens/preview
+- POST /api/viagens/recalcular-todas
+- PUT /api/acl/roles/:role/permissions/:module
+- PUT /api/acl/users/:id/overrides/:module
+- PUT /api/custos-lancamentos/:id
+- PUT /api/destino-regras/plantio/:id
+- PUT /api/destinos/:id
+- PUT /api/motoristas/:id
+- PUT /api/notifications/preferences
+- PUT /api/participantes/:id
+- PUT /api/politicas-custos/:id
+- PUT /api/quitacoes-motoristas/:id
+- PUT /api/safras/:id
+- PUT /api/safras/:id/painel
+- PUT /api/talhao-acordos/:id
+- PUT /api/talhoes/:id
+- PUT /api/tipos-plantio/:id
+- PUT /api/users/:id
+- PUT /api/users/:id/password
+- PUT /api/vendas-sacas/:id
+- PUT /api/viagens/:id
+- PUT /api/viagens/:id/motorista
 
-### 4.6 Quitacoes
-- Resumo (saldo): `GET /api/quitacoes-motoristas/resumo?de=YYYY-MM-DD&ate=YYYY-MM-DD`.
-- CRUD: `POST/PUT/DELETE /api/quitacoes-motoristas`.
+## Middleware Layer
 
-### 4.7 Usuarios (admin)
-- CRUD: `GET/POST/PUT/DELETE /api/users`.
-- Troca de senha: `PUT /api/users/:id/password`.
+- `requestId` + `pino-http`
+- `helmet` CSP (img-src https/data, frame-src Google Maps)
+- `cors` allowlist via `CORS_ORIGIN`
+- `express.json` (1mb)
+- `enforceSameOrigin` para metodos mutantes em /api quando header Origin existe
+- `rateLimit` (memoria) quando habilitado
+- `authenticate` (anexa req.user via cookie) + `requireAuth` dentro do api router
 
-## 5) Regras de calculo (pontos tecnicos)
-- Normalizacao de percentuais: entrada 0..100 (max 2 casas) -> fracao 0..1 (`normalizePercent100`).
-- Peso bruto: `carga_total_kg - tara_kg`.
-- Descontos de qualidade: `max(0, pct - limite) * peso_bruto_kg`.
-- Umidade:
-  - desconto vem da tabela de faixas por destino_regra_plantio (se nao encontrar faixa, desconto = 0).
-  - pode haver override manual (`umidade_desc_pct_manual`).
-  - aplicado APOS descontos de qualidade (base = peso_bruto - descontos_sem_umidade).
-- Sacas: `peso_limpo_seco_kg / 60`.
-- Frete: base em sacas de frete (`peso_bruto_kg/60`) * `frete.valor_por_saca`.
-- Custos adicionais:
-  - secagem: `sacas (limpa/seca) * custo_secagem_por_saca` (vem da faixa de umidade).
-  - custo silo / terceiros: por saca limpa/seca (vem da regra).
- - Compra no silo: preco vem do contrato (`contrato_silo_faixa`) abatendo faixas em ordem; se exceder o total contratado, o backend bloqueia o salvamento do lancamento.
- - Trava (limite de entrega): compara soma de `viagem.sacas` (por safra+destino+tipo_plantio) com a soma de sacas do contrato.
+## Controllers
 
-## 6) Observabilidade e erros
-- Logger: Pino (`colheita-web/src/logger.js`) + `pino-http`.
-- `x-request-id` gerado em `colheita-web/src/middleware/requestId.js`.
-- Erros:
-  - `AppError` com status/.details (422/409/401/403/404).
-  - ZodError vira 422.
+- Controllers sao os handlers em `src/routes/api/*.js` (Express Router)
 
-## 7) Middlewares de seguranca e rede
-- Helmet CSP: libera `img-src` com `https:` e `data:` e permite `frame-src` Google Maps (para embed em pagina publica do talhao).
-- CORS: `CORS_ORIGIN` (string com lista separada por virgula) vira allowlist no backend.
+## Services
 
-## 7) Scripts
-- Import/seed (podem ser usados em ambiente local): `colheita-web/scripts/*`.
-- Observacao: ha scripts que usam tabelas/colunas legadas (ex: `destino.trava_sacas`, `destino_regra`, `umidade_faixa`).
+- `src/services/auditService.js`
+- `src/services/auditService.test.js`
+- `src/services/emailNotificationService.js`
+- `src/services/mailer.js`
+- `src/services/producaoService.js`
+- `src/services/quitacaoMotoristasService.js`
+- `src/services/relatoriosService.js`
+- `src/services/roleSyncService.js`
+- `src/services/viagemService.js`
+- `src/services/xlsxExportService.js`
+- `src/services/xlsxExportService.test.js`
 
-## 8) Deploy
-- Design atual e orientado a uso local (SQLite em arquivo).
-- Para produzir ambiente remoto, seria necessario definir estrategia de persistencia (volume) e revisar seeds de usuario/senhas em `migrate()`.
+## Repositories
+
+- `src/repositories/aclRepo.js`
+- `src/repositories/auditLogRepo.js`
+- `src/repositories/contratoSiloArquivoRepo.js`
+- `src/repositories/contratoSiloRepo.js`
+- `src/repositories/custoLancamentoRepo.js`
+- `src/repositories/destinoRegraRepo.js`
+- `src/repositories/destinoRepo.js`
+- `src/repositories/emailNotificationSentRepo.js`
+- `src/repositories/freteRepo.js`
+- `src/repositories/motoristaQuitacaoRepo.js`
+- `src/repositories/motoristaRepo.js`
+- `src/repositories/participanteRepo.js`
+- `src/repositories/participanteSacasMovRepo.js`
+- `src/repositories/passwordResetRepo.js`
+- `src/repositories/plantioTipoRepo.js`
+- `src/repositories/politicaCustosRepo.js`
+- `src/repositories/safraRepo.js`
+- `src/repositories/talhaoAcordoRepo.js`
+- `src/repositories/talhaoRepo.js`
+- `src/repositories/talhaoSafraRepo.js`
+- `src/repositories/userNotificationPrefRepo.js`
+- `src/repositories/usuarioRepo.js`
+- `src/repositories/usuarioSessaoRepo.js`
+- `src/repositories/vendaSacaRepo.js`
+- `src/repositories/viagemRepo.js`
+- `src/repositories/viagemTalhaoRepo.js`
+
+## Database Layer
+
+- Schema: `src/db/migrate.js` (tabelas detectadas: 34)
+- Principais tabelas: audit_log, contrato_silo, contrato_silo_arquivo, contrato_silo_faixa, custo_lancamento, destino, destino_regra, destino_regra_plantio, email_notification_sent, frete, motorista, motorista_quitacao, participante, participante_sacas_mov, password_reset_token, plantio_tipo, politica_custos, politica_custos_regra, role, role_permission, ...
+
+## Authentication Flow
+
+- Login: `POST /api/auth/login` cria sessao e seta cookie HttpOnly
+- Logout: `POST /api/auth/logout` invalida token
+- Reset: `POST /api/auth/forgot` e `POST /api/auth/reset`
+
+## Permission System
+
+- ACL: `src/auth/acl.js` (Modules/Actions) consultando DB via `aclRepo`
+- Fallback: `src/auth/permissions.js` (role -> lista de perms)
+
+## Validation Layer
+
+- Zod: schemas em `src/validation/apiSchemas.js`
+- Middleware: `src/middleware/validate.js` (body/query/params)
+
+## Error Handling
+
+- `src/middleware/errorHandler.js`: AppError (status) + ZodError (400) + fallback 500
+
+## Logging
+
+- Pino + pino-http (`src/logger.js`) com `x-request-id`
+
+## Export System
+
+- XLSX: endpoints em `src/routes/api/relatorios.js` + `src/services/xlsxExportService.js`
+- CSV: auditoria em `GET /api/audit-logs/export.csv`
+
+## Notification System
+
+- Preferencias: `GET|PUT /api/notifications/preferences`
+- Email: `nodemailer` (opcional via SMTP)
+
+## Audit System
+
+- `src/services/auditService.js` escreve em `audit_log`

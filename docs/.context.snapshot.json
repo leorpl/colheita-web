@@ -1,0 +1,1040 @@
+{
+  "signature": "bafd4b94aff9086a7245bd44bcc4103aabd34f55d8a005ac5e9bdc8ea3458de3",
+  "generated_at": "2026-03-06T23:43:13.780Z",
+  "runtime": {
+    "node": "v24.14.0",
+    "platform": "win32"
+  },
+  "payload": {
+    "script": "self-heal-context/v3",
+    "pkg": {
+      "name": "colheita-web",
+      "version": "1.1.0",
+      "dependencies": {
+        "better-sqlite3": "^12.6.2",
+        "compression": "^1.8.1",
+        "cors": "^2.8.6",
+        "dotenv": "^17.3.1",
+        "express": "^5.2.1",
+        "helmet": "^8.1.0",
+        "nodemailer": "^6.10.1",
+        "pino": "^10.3.1",
+        "pino-http": "^11.0.0",
+        "sharp": "^0.33.5",
+        "xlsx": "^0.18.5",
+        "zod": "^4.3.6"
+      }
+    },
+    "envKeys": [
+      "PORT",
+      "HOST",
+      "DB_PATH",
+      "UMIDADE_BASE",
+      "CORS_ORIGIN",
+      "TRUST_PROXY",
+      "AUTH_ENABLED",
+      "SESSION_TTL_DAYS",
+      "SESSION_COOKIE_NAME",
+      "COOKIE_SECURE",
+      "COOKIE_SAMESITE",
+      "RATE_LIMIT_ENABLED",
+      "RATE_LIMIT_API_WINDOW_MS",
+      "RATE_LIMIT_API_MAX",
+      "RATE_LIMIT_LOGIN_WINDOW_MS",
+      "RATE_LIMIT_LOGIN_MAX",
+      "PUBLIC_BASE_URL",
+      "SMTP_HOST",
+      "SMTP_PORT",
+      "SMTP_USER",
+      "SMTP_PASS",
+      "SMTP_FROM"
+    ],
+    "apiRoutes": [
+      {
+        "method": "DELETE",
+        "path": "/api/acl/users/:id/overrides/:module"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/contratos-silo/arquivos/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/custos-lancamentos/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/destino-regras/plantio/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/destinos/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/fretes/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/motoristas/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/participantes/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/politicas-custos/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/quitacoes-motoristas/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/safras/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/talhao-acordos/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/talhoes/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/tipos-plantio/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/users/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/vendas-sacas/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/viagens/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/acl/roles"
+      },
+      {
+        "method": "GET",
+        "path": "/api/acl/roles/:role/permissions"
+      },
+      {
+        "method": "GET",
+        "path": "/api/acl/users/:id/overrides"
+      },
+      {
+        "method": "GET",
+        "path": "/api/apuracao/custos-por-viagem"
+      },
+      {
+        "method": "GET",
+        "path": "/api/apuracao/extrato"
+      },
+      {
+        "method": "GET",
+        "path": "/api/apuracao/pendencias"
+      },
+      {
+        "method": "GET",
+        "path": "/api/apuracao/saldo/destinos"
+      },
+      {
+        "method": "GET",
+        "path": "/api/apuracao/saldo/participantes"
+      },
+      {
+        "method": "GET",
+        "path": "/api/apuracao/saldo/talhoes"
+      },
+      {
+        "method": "GET",
+        "path": "/api/audit-logs"
+      },
+      {
+        "method": "GET",
+        "path": "/api/audit-logs/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/audit-logs/export.csv"
+      },
+      {
+        "method": "GET",
+        "path": "/api/audit-logs/page"
+      },
+      {
+        "method": "GET",
+        "path": "/api/audit-logs/stats"
+      },
+      {
+        "method": "GET",
+        "path": "/api/auth/can"
+      },
+      {
+        "method": "GET",
+        "path": "/api/auth/me"
+      },
+      {
+        "method": "GET",
+        "path": "/api/comunicacao/webmail"
+      },
+      {
+        "method": "GET",
+        "path": "/api/contratos-silo"
+      },
+      {
+        "method": "GET",
+        "path": "/api/contratos-silo/:id/arquivos"
+      },
+      {
+        "method": "GET",
+        "path": "/api/contratos-silo/arquivos/:id/download"
+      },
+      {
+        "method": "GET",
+        "path": "/api/contratos-silo/one"
+      },
+      {
+        "method": "GET",
+        "path": "/api/custos-lancamentos"
+      },
+      {
+        "method": "GET",
+        "path": "/api/custos-lancamentos/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/destino-regras"
+      },
+      {
+        "method": "GET",
+        "path": "/api/destino-regras/one"
+      },
+      {
+        "method": "GET",
+        "path": "/api/destino-regras/plantio"
+      },
+      {
+        "method": "GET",
+        "path": "/api/destino-regras/plantio/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/destinos"
+      },
+      {
+        "method": "GET",
+        "path": "/api/destinos/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/fretes"
+      },
+      {
+        "method": "GET",
+        "path": "/api/health"
+      },
+      {
+        "method": "GET",
+        "path": "/api/motoristas"
+      },
+      {
+        "method": "GET",
+        "path": "/api/motoristas/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/notifications/preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/api/participantes"
+      },
+      {
+        "method": "GET",
+        "path": "/api/participantes/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/politicas-custos"
+      },
+      {
+        "method": "GET",
+        "path": "/api/politicas-custos/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/public/talhoes/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/public/talhoes/:id/resumo"
+      },
+      {
+        "method": "GET",
+        "path": "/api/quitacoes-motoristas/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/quitacoes-motoristas/resumo"
+      },
+      {
+        "method": "GET",
+        "path": "/api/relatorios/colheita"
+      },
+      {
+        "method": "GET",
+        "path": "/api/relatorios/colheitas-completo.xlsx"
+      },
+      {
+        "method": "GET",
+        "path": "/api/relatorios/entregas-por-destino"
+      },
+      {
+        "method": "GET",
+        "path": "/api/relatorios/pagamento-motoristas"
+      },
+      {
+        "method": "GET",
+        "path": "/api/relatorios/painel"
+      },
+      {
+        "method": "GET",
+        "path": "/api/relatorios/resumo-talhao"
+      },
+      {
+        "method": "GET",
+        "path": "/api/relatorios/viagens-bruto.xlsx"
+      },
+      {
+        "method": "GET",
+        "path": "/api/safras"
+      },
+      {
+        "method": "GET",
+        "path": "/api/safras/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/talhao-acordos"
+      },
+      {
+        "method": "GET",
+        "path": "/api/talhao-acordos/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/talhao-safra"
+      },
+      {
+        "method": "GET",
+        "path": "/api/talhao-safra/one"
+      },
+      {
+        "method": "GET",
+        "path": "/api/talhoes"
+      },
+      {
+        "method": "GET",
+        "path": "/api/talhoes/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/tipos-plantio"
+      },
+      {
+        "method": "GET",
+        "path": "/api/tipos-plantio/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/users"
+      },
+      {
+        "method": "GET",
+        "path": "/api/vendas-sacas"
+      },
+      {
+        "method": "GET",
+        "path": "/api/vendas-sacas/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/viagens"
+      },
+      {
+        "method": "GET",
+        "path": "/api/viagens/:id"
+      },
+      {
+        "method": "GET",
+        "path": "/api/viagens/next-ficha"
+      },
+      {
+        "method": "POST",
+        "path": "/api/acl/roles"
+      },
+      {
+        "method": "POST",
+        "path": "/api/acl/roles/:role/clone"
+      },
+      {
+        "method": "POST",
+        "path": "/api/apuracao/reapurar"
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/forgot"
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/login"
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/logout"
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/reset"
+      },
+      {
+        "method": "POST",
+        "path": "/api/contratos-silo"
+      },
+      {
+        "method": "POST",
+        "path": "/api/contratos-silo/:id/arquivos"
+      },
+      {
+        "method": "POST",
+        "path": "/api/custos-lancamentos"
+      },
+      {
+        "method": "POST",
+        "path": "/api/destino-regras"
+      },
+      {
+        "method": "POST",
+        "path": "/api/destinos"
+      },
+      {
+        "method": "POST",
+        "path": "/api/fretes"
+      },
+      {
+        "method": "POST",
+        "path": "/api/fretes/bulk-upsert"
+      },
+      {
+        "method": "POST",
+        "path": "/api/fretes/copiar-safra"
+      },
+      {
+        "method": "POST",
+        "path": "/api/motoristas"
+      },
+      {
+        "method": "POST",
+        "path": "/api/participantes"
+      },
+      {
+        "method": "POST",
+        "path": "/api/politicas-custos"
+      },
+      {
+        "method": "POST",
+        "path": "/api/quitacoes-motoristas"
+      },
+      {
+        "method": "POST",
+        "path": "/api/safras"
+      },
+      {
+        "method": "POST",
+        "path": "/api/talhao-acordos"
+      },
+      {
+        "method": "POST",
+        "path": "/api/talhao-safra"
+      },
+      {
+        "method": "POST",
+        "path": "/api/talhoes"
+      },
+      {
+        "method": "POST",
+        "path": "/api/tipos-plantio"
+      },
+      {
+        "method": "POST",
+        "path": "/api/users"
+      },
+      {
+        "method": "POST",
+        "path": "/api/vendas-sacas"
+      },
+      {
+        "method": "POST",
+        "path": "/api/viagens"
+      },
+      {
+        "method": "POST",
+        "path": "/api/viagens/comparar-destinos"
+      },
+      {
+        "method": "POST",
+        "path": "/api/viagens/preview"
+      },
+      {
+        "method": "POST",
+        "path": "/api/viagens/recalcular-todas"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/acl/roles/:role/permissions/:module"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/acl/users/:id/overrides/:module"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/custos-lancamentos/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/destino-regras/plantio/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/destinos/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/motoristas/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/notifications/preferences"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/participantes/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/politicas-custos/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/quitacoes-motoristas/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/safras/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/safras/:id/painel"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/talhao-acordos/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/talhoes/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/tipos-plantio/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/users/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/users/:id/password"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/vendas-sacas/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/viagens/:id"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/viagens/:id/motorista"
+      }
+    ],
+    "pageRoutes": [
+      {
+        "method": "GET",
+        "path": "/"
+      },
+      {
+        "method": "GET",
+        "path": "/forgot"
+      },
+      {
+        "method": "GET",
+        "path": "/institucional"
+      },
+      {
+        "method": "GET",
+        "path": "/institucional/contato"
+      },
+      {
+        "method": "GET",
+        "path": "/institucional/galeria"
+      },
+      {
+        "method": "GET",
+        "path": "/institucional/producao"
+      },
+      {
+        "method": "GET",
+        "path": "/institucional/sobre"
+      },
+      {
+        "method": "GET",
+        "path": "/institucional/tecnologia"
+      },
+      {
+        "method": "GET",
+        "path": "/login"
+      },
+      {
+        "method": "GET",
+        "path": "/reset"
+      }
+    ],
+    "db": {
+      "tables": [
+        "audit_log",
+        "contrato_silo",
+        "contrato_silo_arquivo",
+        "contrato_silo_faixa",
+        "custo_lancamento",
+        "destino",
+        "destino_regra",
+        "destino_regra_plantio",
+        "email_notification_sent",
+        "frete",
+        "motorista",
+        "motorista_quitacao",
+        "participante",
+        "participante_sacas_mov",
+        "password_reset_token",
+        "plantio_tipo",
+        "politica_custos",
+        "politica_custos_regra",
+        "role",
+        "role_permission",
+        "safra",
+        "talhao",
+        "talhao_acordo",
+        "talhao_acordo_participante",
+        "talhao_safra",
+        "umidade_faixa",
+        "umidade_faixa_plantio",
+        "user_notification_preferences",
+        "user_permission",
+        "usuario",
+        "usuario_sessao",
+        "venda_saca",
+        "viagem",
+        "viagem_talhao"
+      ],
+      "indexes": [
+        {
+          "name": "idx_audit_action",
+          "table": "audit_log"
+        },
+        {
+          "name": "idx_audit_actor",
+          "table": "audit_log"
+        },
+        {
+          "name": "idx_audit_created_at",
+          "table": "audit_log"
+        },
+        {
+          "name": "idx_audit_module",
+          "table": "audit_log"
+        },
+        {
+          "name": "idx_audit_record",
+          "table": "audit_log"
+        },
+        {
+          "name": "idx_contrato_silo_arquivo_contrato",
+          "table": "contrato_silo_arquivo"
+        },
+        {
+          "name": "idx_contrato_silo_faixa_contrato",
+          "table": "contrato_silo_faixa"
+        },
+        {
+          "name": "idx_contrato_silo_key",
+          "table": "contrato_silo"
+        },
+        {
+          "name": "idx_custo_safra_talhao",
+          "table": "custo_lancamento"
+        },
+        {
+          "name": "idx_destino_regra_plantio_safra_destino",
+          "table": "destino_regra_plantio"
+        },
+        {
+          "name": "idx_email_notif_audit",
+          "table": "email_notification_sent"
+        },
+        {
+          "name": "idx_quitacao_data_pagamento",
+          "table": "motorista_quitacao"
+        },
+        {
+          "name": "idx_quitacao_motorista",
+          "table": "motorista_quitacao"
+        },
+        {
+          "name": "idx_quitacao_periodo",
+          "table": "motorista_quitacao"
+        },
+        {
+          "name": "idx_mov_origem",
+          "table": "participante_sacas_mov"
+        },
+        {
+          "name": "idx_mov_safra_destino",
+          "table": "participante_sacas_mov"
+        },
+        {
+          "name": "idx_mov_safra_part",
+          "table": "participante_sacas_mov"
+        },
+        {
+          "name": "idx_mov_safra_talhao",
+          "table": "participante_sacas_mov"
+        },
+        {
+          "name": "idx_participante_active",
+          "table": "participante"
+        },
+        {
+          "name": "idx_participante_deleted",
+          "table": "participante"
+        },
+        {
+          "name": "idx_password_reset_exp",
+          "table": "password_reset_token"
+        },
+        {
+          "name": "idx_password_reset_user",
+          "table": "password_reset_token"
+        },
+        {
+          "name": "idx_politica_regra_fk",
+          "table": "politica_custos_regra"
+        },
+        {
+          "name": "idx_politica_deleted",
+          "table": "politica_custos"
+        },
+        {
+          "name": "idx_role_permission_module",
+          "table": "role_permission"
+        },
+        {
+          "name": "idx_acordo_part_fk",
+          "table": "talhao_acordo_participante"
+        },
+        {
+          "name": "idx_acordo_deleted",
+          "table": "talhao_acordo"
+        },
+        {
+          "name": "idx_acordo_talhao_safra",
+          "table": "talhao_acordo"
+        },
+        {
+          "name": "idx_umidade_faixa_plantio_regra",
+          "table": "umidade_faixa_plantio"
+        },
+        {
+          "name": "idx_user_notif_pref_user",
+          "table": "user_notification_preferences"
+        },
+        {
+          "name": "idx_user_permission_module",
+          "table": "user_permission"
+        },
+        {
+          "name": "idx_usuario_sessao_exp",
+          "table": "usuario_sessao"
+        },
+        {
+          "name": "idx_usuario_sessao_user",
+          "table": "usuario_sessao"
+        },
+        {
+          "name": "idx_venda_deleted",
+          "table": "venda_saca"
+        },
+        {
+          "name": "idx_venda_part",
+          "table": "venda_saca"
+        },
+        {
+          "name": "idx_venda_safra_data",
+          "table": "venda_saca"
+        },
+        {
+          "name": "idx_viagem_talhao_talhao",
+          "table": "viagem_talhao"
+        },
+        {
+          "name": "idx_viagem_talhao_viagem",
+          "table": "viagem_talhao"
+        },
+        {
+          "name": "idx_viagem_data_saida",
+          "table": "viagem"
+        },
+        {
+          "name": "idx_viagem_destino",
+          "table": "viagem"
+        },
+        {
+          "name": "idx_viagem_motorista",
+          "table": "viagem"
+        },
+        {
+          "name": "idx_viagem_safra",
+          "table": "viagem"
+        },
+        {
+          "name": "idx_viagem_talhao",
+          "table": "viagem"
+        }
+      ]
+    },
+    "aclModules": [
+      "area-colhida",
+      "auditoria",
+      "colheita",
+      "comunicacao",
+      "destinos",
+      "fazenda",
+      "fretes",
+      "motoristas",
+      "painel",
+      "producao",
+      "quitacao-motoristas",
+      "regras-destino",
+      "relatorios",
+      "safras",
+      "talhoes",
+      "tipos-plantio",
+      "usuarios"
+    ],
+    "repos": [
+      "src/repositories/aclRepo.js",
+      "src/repositories/auditLogRepo.js",
+      "src/repositories/contratoSiloArquivoRepo.js",
+      "src/repositories/contratoSiloRepo.js",
+      "src/repositories/custoLancamentoRepo.js",
+      "src/repositories/destinoRegraRepo.js",
+      "src/repositories/destinoRepo.js",
+      "src/repositories/emailNotificationSentRepo.js",
+      "src/repositories/freteRepo.js",
+      "src/repositories/motoristaQuitacaoRepo.js",
+      "src/repositories/motoristaRepo.js",
+      "src/repositories/participanteRepo.js",
+      "src/repositories/participanteSacasMovRepo.js",
+      "src/repositories/passwordResetRepo.js",
+      "src/repositories/plantioTipoRepo.js",
+      "src/repositories/politicaCustosRepo.js",
+      "src/repositories/safraRepo.js",
+      "src/repositories/talhaoAcordoRepo.js",
+      "src/repositories/talhaoRepo.js",
+      "src/repositories/talhaoSafraRepo.js",
+      "src/repositories/userNotificationPrefRepo.js",
+      "src/repositories/usuarioRepo.js",
+      "src/repositories/usuarioSessaoRepo.js",
+      "src/repositories/vendaSacaRepo.js",
+      "src/repositories/viagemRepo.js",
+      "src/repositories/viagemTalhaoRepo.js"
+    ],
+    "services": [
+      "src/services/auditService.js",
+      "src/services/auditService.test.js",
+      "src/services/emailNotificationService.js",
+      "src/services/mailer.js",
+      "src/services/producaoService.js",
+      "src/services/quitacaoMotoristasService.js",
+      "src/services/relatoriosService.js",
+      "src/services/roleSyncService.js",
+      "src/services/viagemService.js",
+      "src/services/xlsxExportService.js",
+      "src/services/xlsxExportService.test.js"
+    ],
+    "middlewareFiles": [
+      "src/middleware/auth.js",
+      "src/middleware/errorHandler.js",
+      "src/middleware/rateLimit.js",
+      "src/middleware/requestId.js",
+      "src/middleware/sameOrigin.js",
+      "src/middleware/validate.js"
+    ],
+    "mountMeta": [
+      {
+        "prefix": "/",
+        "varName": "contratosSiloArquivosRouter",
+        "file": "src/routes/api/contratosSiloArquivos.js"
+      },
+      {
+        "prefix": "/acl",
+        "varName": "aclRouter",
+        "file": "src/routes/api/acl.js"
+      },
+      {
+        "prefix": "/apuracao",
+        "varName": "apuracaoRouter",
+        "file": "src/routes/api/apuracao.js"
+      },
+      {
+        "prefix": "/audit-logs",
+        "varName": "auditLogsRouter",
+        "file": "src/routes/api/auditLogs.js"
+      },
+      {
+        "prefix": "/auth",
+        "varName": "authRouter",
+        "file": "src/routes/api/auth.js"
+      },
+      {
+        "prefix": "/comunicacao",
+        "varName": "comunicacaoRouter",
+        "file": "src/routes/api/comunicacao.js"
+      },
+      {
+        "prefix": "/contratos-silo",
+        "varName": "contratosSiloRouter",
+        "file": "src/routes/api/contratosSilo.js"
+      },
+      {
+        "prefix": "/custos-lancamentos",
+        "varName": "custosLancamentosRouter",
+        "file": "src/routes/api/custosLancamentos.js"
+      },
+      {
+        "prefix": "/destino-regras",
+        "varName": "destinoRegrasRouter",
+        "file": "src/routes/api/destinoRegras.js"
+      },
+      {
+        "prefix": "/destinos",
+        "varName": "destinosRouter",
+        "file": "src/routes/api/destinos.js"
+      },
+      {
+        "prefix": "/fretes",
+        "varName": "fretesRouter",
+        "file": "src/routes/api/fretes.js"
+      },
+      {
+        "prefix": "/motoristas",
+        "varName": "motoristasRouter",
+        "file": "src/routes/api/motoristas.js"
+      },
+      {
+        "prefix": "/notifications",
+        "varName": "notificationsRouter",
+        "file": "src/routes/api/notifications.js"
+      },
+      {
+        "prefix": "/participantes",
+        "varName": "participantesRouter",
+        "file": "src/routes/api/participantes.js"
+      },
+      {
+        "prefix": "/politicas-custos",
+        "varName": "politicasCustosRouter",
+        "file": "src/routes/api/politicasCustos.js"
+      },
+      {
+        "prefix": "/public",
+        "varName": "publicRouter",
+        "file": "src/routes/api/public.js"
+      },
+      {
+        "prefix": "/quitacoes-motoristas",
+        "varName": "quitacoesMotoristasRouter",
+        "file": "src/routes/api/quitacoesMotoristas.js"
+      },
+      {
+        "prefix": "/relatorios",
+        "varName": "relatoriosRouter",
+        "file": "src/routes/api/relatorios.js"
+      },
+      {
+        "prefix": "/safras",
+        "varName": "safrasRouter",
+        "file": "src/routes/api/safras.js"
+      },
+      {
+        "prefix": "/talhao-acordos",
+        "varName": "talhaoAcordosRouter",
+        "file": "src/routes/api/talhaoAcordos.js"
+      },
+      {
+        "prefix": "/talhao-safra",
+        "varName": "talhaoSafraRouter",
+        "file": "src/routes/api/talhaoSafra.js"
+      },
+      {
+        "prefix": "/talhoes",
+        "varName": "talhoesRouter",
+        "file": "src/routes/api/talhoes.js"
+      },
+      {
+        "prefix": "/tipos-plantio",
+        "varName": "tiposPlantioRouter",
+        "file": "src/routes/api/tiposPlantio.js"
+      },
+      {
+        "prefix": "/users",
+        "varName": "usersRouter",
+        "file": "src/routes/api/users.js"
+      },
+      {
+        "prefix": "/vendas-sacas",
+        "varName": "vendasSacasRouter",
+        "file": "src/routes/api/vendasSacas.js"
+      },
+      {
+        "prefix": "/viagens",
+        "varName": "viagensRouter",
+        "file": "src/routes/api/viagens.js"
+      }
+    ],
+    "apiSchemasHash": "d9a27d2fe8d70ed685e82858292b6773c70aa337dd78279eed540e1052b635b0",
+    "migrateHash": "7f54d1b482d7c7f33b6c526f9d1401d4bde31d913b73f49b44f0fe681961938f",
+    "apiIndexHash": "f46ee9f41724d6b724400185377c1516951fae7cbfa3273acc589b273b441ebe"
+  }
+}

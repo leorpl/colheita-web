@@ -4,6 +4,11 @@
   "description": "NazcaTraker: controle interno de colheita (viagens, descontos, sacas, fretes e relatorios).",
   "main": "index.js",
   "scripts": {
+    "context:selfheal": "node scripts/self-heal-context.js",
+    "context:check": "node scripts/self-heal-context.js --check",
+    "context:watch": "nodemon --watch src --watch scripts --watch docs --watch package.json --watch .env.example --ext js,json,md --signal SIGINT --exec \"node scripts/self-heal-context.js\"",
+    "predev": "node scripts/self-heal-context.js",
+    "pretest": "node scripts/self-heal-context.js",
     "test": "node --test",
     "start": "node src/server.js",
     "dev": "nodemon --watch src --ext js,json --signal SIGINT src/server.js",
