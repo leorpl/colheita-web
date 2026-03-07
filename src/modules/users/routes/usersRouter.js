@@ -21,6 +21,8 @@ usersRouter.get('/', requireCan(Modules.USUARIOS, Actions.VIEW), (_req, res) => 
 usersRouter.post('/', requireCan(Modules.USUARIOS, Actions.CREATE), validateBody(CreateBody), (req, res) => {
   // create
   const { salt, hash } = hashPassword(req.body.password)
+  const must_change_password =
+    req.body.must_change_password === undefined ? 1 : req.body.must_change_password ? 1 : 0
   const row = usuarioRepo.create(
     {
       username: req.body.username,
@@ -30,7 +32,7 @@ usersRouter.post('/', requireCan(Modules.USUARIOS, Actions.CREATE), validateBody
       motorista_id: req.body.motorista_id || null,
       password_hash: hash,
       password_salt: salt,
-      must_change_password: 1,
+      must_change_password,
     },
     { user_id: req.user?.id },
   )
@@ -128,13 +130,20 @@ usersRouter.put(
     const exists = usuarioRepo.get(id)
     if (!exists) throw notFound('Usuario nao encontrado')
     const { salt, hash } = hashPassword(req.body.password)
+    const must_change_password =
+      req.body.must_change_password === undefined ? 1 : req.body.must_change_password ? 1 : 0
     const row = usuarioRepo.setPassword(
       id,
-      { password_hash: hash, password_salt: salt, must_change_password: 1 },
+      { password_hash: hash, password_salt: salt, must_change_password },
       { user_id: req.user?.id },
     )
     usuarioSessaoRepo.deleteByUserId(Number(id))
-    auditService.log(req, { module_name: 'usuarios', record_id: id, action_type: 'password_reset', notes: 'senha alterada via admin' })
+    auditService.log(req, {
+      module_name: 'usuarios',
+      record_id: id,
+      action_type: 'password_reset',
+      notes: must_change_password ? 'senha temporaria definida via admin (exige troca no login)' : 'senha definida via admin (nao exige troca)',
+    })
     res.json(row)
   },
 )

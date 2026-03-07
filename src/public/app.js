@@ -2357,31 +2357,38 @@ async function renderUsuarios() {
       title: 'Novo usuário',
       submitLabel: 'Criar',
       bodyHtml: `
-        <div class="form-grid">
-          ${formField({ label: 'Login (usuario ou e-mail)', name: 'username', placeholder: 'joao', span: 'col6' })}
-          ${formField({ label: 'E-mail (obrigatório)', name: 'email', placeholder: 'joao@empresa.com', span: 'col6' })}
-          ${formField({ label: 'Nome', name: 'nome', placeholder: 'Joao', span: 'col6' })}
-          ${selectField({ label: 'Role', name: 'role', options: roleOptions, value: 'operador', span: 'col6' })}
-          ${selectField({ label: 'Motorista (se role=motorista)', name: 'motorista_id', options: motOpts, value: '', span: 'col6' })}
-          <div class="field col6">
-            <div class="label">Senha</div>
-            <div class="pwd-wrap">
-              <input name="password" type="password" autocomplete="new-password" />
-              <button class="pwd-toggle" type="button" aria-label="Mostrar senha" title="Mostrar senha">Ver</button>
+          <div class="form-grid">
+            ${formField({ label: 'Login (usuario ou e-mail)', name: 'username', placeholder: 'joao', span: 'col6' })}
+            ${formField({ label: 'E-mail (obrigatório)', name: 'email', placeholder: 'joao@empresa.com', span: 'col6' })}
+            ${formField({ label: 'Nome', name: 'nome', placeholder: 'Joao', span: 'col6' })}
+            ${selectField({ label: 'Role', name: 'role', options: roleOptions, value: 'operador', span: 'col6' })}
+            ${selectField({ label: 'Motorista (se role=motorista)', name: 'motorista_id', options: motOpts, value: '', span: 'col6' })}
+            <div class="field col6">
+              <div class="label">Senha</div>
+              <div class="pwd-wrap">
+                <input name="password" type="password" autocomplete="new-password" />
+                <button class="pwd-toggle" type="button" aria-label="Mostrar senha" title="Mostrar senha">Ver</button>
+              </div>
             </div>
-          </div>
-          <div class="field col12"><div class="label">Menus</div><div class="hint">Marque as telas que este usuário pode acessar (menu lateral).</div>
-            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">
-              ${allMenus
-                .map(
-                  (m) =>
-                    `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="menu__${escapeHtml(m.key)}" ${m.key === 'usuarios' ? '' : 'checked'} /> ${escapeHtml(m.label)}</label>`,
-                )
-                .join('')}
+            <div class="field col12" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <label style="display:flex;gap:8px;align-items:center">
+                <input type="checkbox" name="must_change_password" checked />
+                Exigir troca no primeiro login
+              </label>
+              <div class="hint" style="margin:0">Se marcado, a senha informada funciona como <b>temporária</b> e o usuário sera obrigado a trocar ao entrar.</div>
             </div>
+            <div class="field col12"><div class="label">Menus</div><div class="hint">Marque as telas que este usuário pode acessar (menu lateral).</div>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">
+                ${allMenus
+                  .map(
+                    (m) =>
+                      `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="menu__${escapeHtml(m.key)}" ${m.key === 'usuarios' ? '' : 'checked'} /> ${escapeHtml(m.label)}</label>`,
+                  )
+                  .join('')}
+              </div>
+            </div>
+            <div class="field col12"><div class="hint">Senha min: 8 caracteres. Para motorista, vincule ao cadastro existente.</div></div>
           </div>
-          <div class="field col12"><div class="hint">Senha min: 8 caracteres. Para motorista, vincule ao cadastro existente.</div></div>
-        </div>
       `,
       onSubmit: async (obj) => {
         const menus = []
@@ -2400,6 +2407,7 @@ async function renderUsuarios() {
             motorista_id: obj.motorista_id ? Number(obj.motorista_id) : null,
             menus,
             password: obj.password,
+            must_change_password: obj.must_change_password === 'on',
           },
         })
         toast('OK', 'Usuário criado.')
@@ -2532,6 +2540,9 @@ async function renderUsuarios() {
           submitLabel: 'Salvar senha',
           bodyHtml: `
             <div class="form-grid">
+              <div class="field col12">
+                <div class="pill"><span class="dot warn"></span><span>Por padrao, a senha definida aqui e <b>temporaria</b> e o usuario sera obrigado a trocar no proximo login.</span></div>
+              </div>
               <div class="field col6">
                 <div class="label">Nova senha</div>
                 <div class="pwd-wrap">
@@ -2539,12 +2550,22 @@ async function renderUsuarios() {
                   <button class="pwd-toggle" type="button" aria-label="Mostrar senha" title="Mostrar senha">Ver</button>
                 </div>
               </div>
+              <div class="field col6" style="align-self:end">
+                <label style="display:flex;gap:8px;align-items:center">
+                  <input type="checkbox" name="must_change_password" checked />
+                  Exigir troca no login
+                </label>
+                <div class="hint" style="margin-top:6px">Desmarque para definir uma senha definitiva (nao exige troca).</div>
+              </div>
             </div>
           `,
           onSubmit: async (obj) => {
             await api(`/api/users/${u.id}/password`, {
               method: 'PUT',
-              body: { password: obj.password },
+              body: {
+                password: obj.password,
+                must_change_password: obj.must_change_password === 'on',
+              },
             })
             toast('OK', 'Senha atualizada.')
           },

@@ -21,6 +21,7 @@ export const UsersSchemas = {
         .nullable()
         .refine((arr) => !arr || arr.every((m) => Object.values(Menus).includes(m)), 'menus invalidos'),
       password: z.string().min(8).max(MAX.password),
+      must_change_password: z.coerce.boolean().optional(),
     })
     .superRefine((v, ctx) => {
       const e = v.email || null
@@ -65,6 +66,7 @@ export const UsersSchemas = {
 
   PasswordBody: z.object({
     password: z.string().min(8).max(MAX.password),
+    must_change_password: z.coerce.boolean().optional(),
   }),
 }
 
