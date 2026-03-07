@@ -8,6 +8,7 @@
     "context:check": "node scripts/self-heal-context.js --check",
     "context:watch": "nodemon --watch src --watch scripts --watch docs --watch package.json --watch .env.example --ext js,json,md --signal SIGINT --exec \"node scripts/self-heal-context.js\"",
     "predev": "node scripts/self-heal-context.js",
+    "prestart": "node scripts/self-heal-context.js",
     "pretest": "node scripts/self-heal-context.js",
     "test": "node --test",
     "start": "node src/server.js",

@@ -133,7 +133,11 @@ function parseApiIndex(apiIndexPath) {
   return { imports, mounts }
 }
 
-function extractRoutesFromRouterFile(filePath) {
+function extractRoutesFromRouterFile(filePath, { exportName = null, seen = null } = {}) {
+  const visited = seen || new Set()
+  if (visited.has(filePath)) return []
+  visited.add(filePath)
+
   const txt = readText(filePath)
   if (!txt) return []
 
@@ -149,6 +153,23 @@ function extractRoutesFromRouterFile(filePath) {
     const verb = method.replace(/[.(]/g, '').toUpperCase()
     out.push({ method: verb, path: m[2] })
   }
+
+  if (out.length) return out
+
+  // If this file is a thin re-export wrapper, follow it.
+  // Example: export { notificationsRouter } from '../../modules/notifications/routes/notificationsRouter.js'
+  if (exportName) {
+    const rxRe = new RegExp(
+      String.raw`export\s+\{[^}]*\b${exportName}\b[^}]*\}\s+from\s+['"](.+?)['"]`,
+      'g',
+    )
+    const m = rxRe.exec(txt)
+    if (m && m[1]) {
+      const abs = path.resolve(path.dirname(filePath), m[1])
+      return extractRoutesFromRouterFile(abs, { exportName, seen: visited })
+    }
+  }
+
   return out
 }
 
@@ -356,13 +377,20 @@ function renderArchitecture(ctx) {
 
   lines.push('## Middleware Layer')
   lines.push('')
-  lines.push('- `requestId` + `pino-http`')
   lines.push('- `helmet` CSP (img-src https/data, frame-src Google Maps)')
   lines.push('- `cors` allowlist via `CORS_ORIGIN`')
+  lines.push('- `compression` (quando habilitado no app)')
+  lines.push('- `pino-http` + `x-request-id`')
   lines.push('- `express.json` (1mb)')
   lines.push('- `enforceSameOrigin` para metodos mutantes em /api quando header Origin existe')
   lines.push('- `rateLimit` (memoria) quando habilitado')
   lines.push('- `authenticate` (anexa req.user via cookie) + `requireAuth` dentro do api router')
+  if (ctx.appMiddleware && ctx.appMiddleware.length) {
+    lines.push('- Custom middlewares (detectados via imports em `src/app.js`):')
+    for (const m of ctx.appMiddleware) {
+      lines.push(`  - ${m.name} (${m.file})`)
+    }
+  }
   lines.push('')
 
   lines.push('## Controllers')
@@ -513,6 +541,8 @@ function buildCurrentContext() {
   const deps = pkg.dependencies || {}
   const envKeys = parseEnvExample(path.join(ROOT, '.env.example'))
 
+  const appMiddleware = extractAppMiddleware(path.join(SRC_DIR, 'app.js'))
+
   const apiIndex = parseApiIndex(path.join(SRC_DIR, 'routes', 'api', 'index.js'))
   const apiRoutes = []
   const mountMeta = []
@@ -522,7 +552,7 @@ function buildCurrentContext() {
       const file = fileByVar[m.varName]
       if (!file) continue
       mountMeta.push({ prefix: m.prefix, varName: m.varName, file: path.relative(ROOT, file).replaceAll('\\', '/') })
-      const routes = extractRoutesFromRouterFile(file)
+      const routes = extractRoutesFromRouterFile(file, { exportName: m.varName })
       for (const r of routes) {
         const full = normalizeJoinPath('/api', m.prefix, r.path)
         apiRoutes.push({ method: r.method, path: full })
@@ -691,6 +721,7 @@ function buildCurrentContext() {
     script: SCRIPT_ID,
     pkg: { name: pkg.name, version: pkg.version, dependencies: deps },
     envKeys,
+    appMiddleware,
     apiRoutes: apiRoutes.sort((a, b) => `${a.method} ${a.path}`.localeCompare(`${b.method} ${b.path}`)),
     pageRoutes: pageRoutes.sort((a, b) => a.path.localeCompare(b.path)),
     db,
@@ -712,6 +743,7 @@ function buildCurrentContext() {
     signaturePayload,
     pkg,
     envKeys,
+    appMiddleware,
     apiRoutes: apiRoutes
       .sort((a, b) => `${a.method} ${a.path}`.localeCompare(`${b.method} ${b.path}`)),
     pageRoutes,
@@ -731,6 +763,33 @@ function buildCurrentContext() {
   }
 }
 
+function buildExpectedDocs(cur) {
+  return {
+    'PROJECT_CONTEXT.md': renderProjectContext(cur),
+    'ARCHITECTURE.md': renderArchitecture(cur),
+    'TASKS_OFICIAL.md': renderTasksOficial(cur),
+    'CHANGELOG.md': renderChangelog(cur),
+    // Lessons learned (requested filename uses unicode)
+    'LIÇÕESAPRENDIDAS.MD': renderLicoesAprendidas(cur),
+  }
+}
+
+function getDocsMismatches(expectedDocs) {
+  const mismatches = []
+  for (const [name, expected] of Object.entries(expectedDocs)) {
+    const p = path.join(DOCS_DIR, name)
+    const actual = readText(p)
+    if (actual === null) {
+      mismatches.push({ file: name, reason: 'missing' })
+      continue
+    }
+    if (actual !== expected) {
+      mismatches.push({ file: name, reason: 'content_mismatch' })
+    }
+  }
+  return mismatches
+}
+
 function main() {
   if (!fs.existsSync(DOCS_DIR)) {
     console.error('docs/ directory not found. Run from project root (colheita-web).')
@@ -739,38 +798,47 @@ function main() {
 
   const cur = buildCurrentContext()
   const prev = loadSnapshot()
-  const changed = !prev || prev.signature !== cur.signature
+  const expectedDocs = buildExpectedDocs(cur)
+  const mismatches = getDocsMismatches(expectedDocs)
+
+  const docsOutOfDate = mismatches.length > 0
+  const snapshotOutOfDate = !prev || prev.signature !== cur.signature
 
   if (MODE_CHECK) {
-    if (changed) {
-      console.error('Context docs are out of date. Run: node scripts/self-heal-context.js')
+    if (docsOutOfDate) {
+      const files = mismatches.map((m) => m.file).join(', ')
+      console.error(`Context docs are out of date: ${files}. Run: node scripts/self-heal-context.js`)
       process.exit(1)
     }
     process.exit(0)
   }
 
-  if (!changed) {
-    process.stdout.write('Context already up-to-date.\n')
-    return
+  if (docsOutOfDate) {
+    // Write official docs (always write deterministic outputs)
+    for (const [name, content] of Object.entries(expectedDocs)) {
+      writeText(path.join(DOCS_DIR, name), content)
+    }
   }
 
-  // Write official docs
-  writeText(path.join(DOCS_DIR, 'PROJECT_CONTEXT.md'), renderProjectContext(cur))
-  writeText(path.join(DOCS_DIR, 'ARCHITECTURE.md'), renderArchitecture(cur))
-  writeText(path.join(DOCS_DIR, 'TASKS_OFICIAL.md'), renderTasksOficial(cur))
-  writeText(path.join(DOCS_DIR, 'CHANGELOG.md'), renderChangelog(cur))
+  if (docsOutOfDate || snapshotOutOfDate) {
+    const docsHashes = Object.fromEntries(Object.entries(expectedDocs).map(([name, content]) => [name, sha256(content)]))
 
-  // Lessons learned (requested filename uses unicode)
-  writeText(path.join(DOCS_DIR, 'LIÇÕESAPRENDIDAS.MD'), renderLicoesAprendidas(cur))
+    saveSnapshot({
+      signature: cur.signature,
+      generated_at: new Date().toISOString(),
+      runtime: cur.runtime,
+      payload: cur.signaturePayload,
+      docs_hashes: docsHashes,
+    })
+  }
 
-  saveSnapshot({
-    signature: cur.signature,
-    generated_at: new Date().toISOString(),
-    runtime: cur.runtime,
-    payload: cur.signaturePayload,
-  })
-
-  process.stdout.write('Context docs updated.\n')
+  if (docsOutOfDate) {
+    process.stdout.write('Context docs updated.\n')
+  } else if (snapshotOutOfDate) {
+    process.stdout.write('Context snapshot updated.\n')
+  } else {
+    process.stdout.write('Context already up-to-date.\n')
+  }
 }
 
 main()

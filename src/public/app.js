@@ -1,3 +1,10 @@
+import { api } from './lib/api.js'
+import { fmtNum, fmtNumInput, fmtKg, fmtMoney } from './lib/format.js'
+import { csvEscape, csvNumber, downloadCsv } from './lib/csv.js'
+import { initTableSorting } from './lib/tableSort.js'
+import { renderFazendaRoute } from './routes/fazenda.js'
+import { renderComunicacaoRoute } from './routes/comunicacao.js'
+
 const view = document.querySelector('#view')
 const toastEl = document.querySelector('#toast')
 const btnRefresh = document.querySelector('#btnRefresh')
@@ -104,36 +111,6 @@ function hideHelpPopover() {
 
 // init once so click handler is registered
 ensureHelpPopover()
-
-function fmtNum(n, digits = 2) {
-  const x = Number(n)
-  if (!Number.isFinite(x)) return '-'
-  return x.toLocaleString('pt-BR', {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  })
-}
-
-function fmtNumInput(n, digits = 2, empty = '') {
-  const x = Number(n)
-  if (!Number.isFinite(x)) return empty
-  return x.toLocaleString('pt-BR', {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  })
-}
-
-function fmtKg(n) {
-  const x = Number(n)
-  if (!Number.isFinite(x)) return '-'
-  return `${fmtNum(x, 0)} kg`
-}
-
-function fmtMoney(n) {
-  const x = Number(n)
-  if (!Number.isFinite(x)) return '-'
-  return x.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
 
 function iconSvg(name) {
   // tiny inline icons (16px) to keep action column compact
@@ -442,75 +419,6 @@ function escapeHtml(s) {
     .replaceAll("'", '&#039;')
 }
 
-function csvEscape(v) {
-  const s = String(v ?? '')
-  if (/[";\n\r]/.test(s)) return `"${s.replaceAll('"', '""')}"`
-  return s
-}
-
-function csvNumber(n, digits = 2) {
-  if (n === null || n === undefined) return ''
-  if (typeof n === 'string') {
-    // aceita "1.234,56" ou "1234,56" ou "1234.56"
-    const s = n.trim()
-    if (!s) return ''
-    const cleaned = s
-      .replace(/\s+/g, '')
-      .replaceAll('R$', '')
-      .replaceAll('.', '')
-      .replaceAll(',', '.')
-    const x2 = Number(cleaned)
-    if (!Number.isFinite(x2)) return s
-    return x2.toFixed(digits).replace('.', ',')
-  }
-  const x = Number(n)
-  if (!Number.isFinite(x)) return ''
-  return x.toFixed(digits).replace('.', ',')
-}
-
-function downloadCsv(filename, headers, rows) {
-  const sep = ';'
-  const lines = []
-  // ajuda o Excel a reconhecer o separador
-  lines.push(`sep=${sep}`)
-  lines.push(headers.map(csvEscape).join(sep))
-  for (const r of rows) {
-    lines.push(r.map(csvEscape).join(sep))
-  }
-  // Excel (Windows) tende a interpretar CSV como ANSI; BOM + CRLF melhora compatibilidade.
-  const content = `\ufeff${lines.join('\r\n')}`
-  const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
-
-async function api(path, { method = 'GET', body } = {}) {
-  const res = await fetch(path, {
-    method,
-    headers: body ? { 'content-type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  const text = await res.text()
-  const data = text ? JSON.parse(text) : null
-  if (!res.ok) {
-    if (res.status === 401 && location.pathname !== '/login') {
-      location.href = '/login'
-      return null
-    }
-    const msg = data?.message || `Erro ${res.status}`
-    const err = new Error(msg)
-    if (data?.details) err.details = data.details
-    throw err
-  }
-  return data
-}
-
 const cache = {
   safras: null,
   talhoes: null,
@@ -543,145 +451,6 @@ function activeNav(route) {
 function setView(html) {
   view.innerHTML = html
   initTableSorting(view)
-}
-
-function parsePtNumberForSort(s) {
-  const raw = String(s ?? '').trim()
-  if (!raw) return NaN
-
-  let t = raw
-    .replaceAll('R$', '')
-    .replaceAll('kg', '')
-    .replaceAll('sc/ha', '')
-    .replaceAll('%', '')
-    .trim()
-
-  // remove spaces
-  t = t.replace(/\s+/g, '')
-
-  // keep digits and separators
-  t = t.replace(/[^0-9,.-]/g, '')
-
-  // pt-BR: thousands '.' and decimal ','
-  if (t.includes(',') && t.includes('.')) {
-    t = t.replaceAll('.', '').replaceAll(',', '.')
-  } else if (t.includes(',') && !t.includes('.')) {
-    t = t.replaceAll(',', '.')
-  }
-
-  const n = Number(t)
-  return Number.isFinite(n) ? n : NaN
-}
-
-function cellSortValue(cell) {
-  if (!cell) return { type: 'empty', value: null }
-
-  const ds = cell.getAttribute('data-sort')
-  if (ds !== null) return { type: 'text', value: String(ds).trim().toLowerCase() }
-
-  const input = cell.querySelector?.('input,select,textarea')
-  const txt = input ? String(input.value ?? '') : String(cell.textContent ?? '')
-  const s = txt.trim()
-  if (!s || s === '-') return { type: 'empty', value: null }
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return { type: 'date', value: s }
-
-  const n = parsePtNumberForSort(s)
-  if (Number.isFinite(n)) return { type: 'number', value: n }
-
-  return { type: 'text', value: s.toLowerCase() }
-}
-
-function compareSort(a, b) {
-  if (a.type === 'empty' && b.type === 'empty') return 0
-  if (a.type === 'empty') return 1
-  if (b.type === 'empty') return -1
-
-  if (a.type === 'number' && b.type === 'number') return a.value - b.value
-  if (a.type === 'date' && b.type === 'date') return String(a.value).localeCompare(String(b.value))
-  const coll = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' })
-  return coll.compare(String(a.value), String(b.value))
-}
-
-function initTableSorting(rootEl) {
-  if (!rootEl) return
-  rootEl.querySelectorAll('table').forEach((table) => {
-    if (table.dataset.sortInit === '1') return
-    const thead = table.querySelector('thead')
-    const tbody = table.querySelector('tbody')
-    if (!thead || !tbody) return
-
-    // Usa a ultima linha do header com colunas "reais" (evita desalinhamento quando existe <th colspan> acima).
-    const headRows = Array.from(thead.querySelectorAll('tr'))
-    const headerRow =
-      headRows
-        .slice()
-        .reverse()
-        .find((tr) =>
-          Array.from(tr.querySelectorAll('th')).some(
-            (x) => !(x.colSpan && x.colSpan > 1),
-          ),
-        ) || headRows[headRows.length - 1]
-
-    if (!headerRow) return
-
-    const ths = Array.from(headerRow.querySelectorAll('th')).filter(
-      (th) => !(th.colSpan && th.colSpan > 1),
-    )
-
-    ths.forEach((th) => {
-      const label = String(th.textContent ?? '').trim()
-      if (!label) return
-      if (th.dataset.nosort === '1') return
-
-      th.classList.add('sortable')
-      th.tabIndex = 0
-      th.setAttribute('role', 'button')
-      th.setAttribute('aria-label', `${label} (ordenar)`)
-
-      const handler = () => {
-        const idx = ths.indexOf(th)
-        if (idx < 0) return
-
-        const prevCol = Number(table.dataset.sortCol)
-        let dir = table.dataset.sortDir === 'desc' ? 'desc' : 'asc'
-        if (Number.isFinite(prevCol) && prevCol === idx) dir = dir === 'asc' ? 'desc' : 'asc'
-        else dir = 'asc'
-
-        table.dataset.sortCol = String(idx)
-        table.dataset.sortDir = dir
-
-        ths.forEach((x) => x.classList.remove('sorted-asc', 'sorted-desc'))
-        th.classList.add(dir === 'asc' ? 'sorted-asc' : 'sorted-desc')
-
-        const rows = Array.from(tbody.querySelectorAll('tr'))
-        const decorated = rows.map((row, i) => {
-          const cell = row.children[idx]
-          return { row, i, v: cellSortValue(cell) }
-        })
-
-        decorated.sort((x, y) => {
-          const c = compareSort(x.v, y.v)
-          if (c !== 0) return dir === 'asc' ? c : -c
-          return x.i - y.i
-        })
-
-        const frag = document.createDocumentFragment()
-        decorated.forEach((d) => frag.appendChild(d.row))
-        tbody.appendChild(frag)
-      }
-
-      th.addEventListener('click', handler)
-      th.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          handler()
-        }
-      })
-    })
-
-    table.dataset.sortInit = '1'
-  })
 }
 
 function formField({
@@ -3637,34 +3406,45 @@ async function renderRegrasDestino() {
              </div>
            </div>
 
-           <div class="field col12">
+            <div class="field col12">
               <div class="label">Contrato(s) com o silo</div>
               <div class="hint">Adicione uma ou mais travas (ex: 10.000 sc a 120 + 5.000 sc a 130). A entrega vai abatendo em ordem.</div>
 
               <div class="contract-split" style="margin-top:10px">
-                <div>
-                  <div class="table-wrap rule-wrap">
+                <div class="stat contract-pane">
+                  <div class="contract-pane-head">
+                    <div>
+                      <div class="label">Travas (faixas)</div>
+                      <div class="hint">Quantidade (sacas) + preco travado (R$/sc).</div>
+                    </div>
+                    <button class="btn ghost" type="button" id="btnAddContrato">Adicionar</button>
+                  </div>
+                  <div class="table-wrap">
                     <table>
                       <thead><tr><th class="actions"></th><th>Sacas</th><th>Preco travado (R$/sc)</th></tr></thead>
                       <tbody id="contratoFaixas"></tbody>
                     </table>
                   </div>
-                  <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end">
-                    <button class="btn ghost" type="button" id="btnAddContrato">Adicionar contrato</button>
-                  </div>
                 </div>
 
-                <div>
-                  <div class="label" style="font-size:12px;color:rgba(14,21,18,.86)">Arquivos do contrato</div>
-                  <div class="hint">Anexe documentos (PDF/JPG/PNG). Disponivel por safra+destino+plantio.</div>
-                  <div class="table-wrap rule-wrap" style="margin-top:8px">
+                <div class="stat contract-pane">
+                  <div class="contract-pane-head">
+                    <div>
+                      <div class="label">Arquivos do contrato</div>
+                      <div class="hint">Anexe documentos (PDF/JPG/PNG). Disponivel por safra+destino+plantio.</div>
+                    </div>
+                  </div>
+                  <div class="table-wrap" style="margin-top:8px">
                     <table>
                       <thead><tr><th>Arquivo</th><th>Upload</th><th>Usuario</th><th class="actions"></th></tr></thead>
                       <tbody id="contratoArquivos"></tbody>
                     </table>
                   </div>
                   <div class="upload-row" style="margin-top:10px">
-                    <input type="file" id="ctFile" />
+                    <div class="field" style="min-width:0">
+                      <div class="label">Selecionar arquivo</div>
+                      <input type="file" id="ctFile" accept=".pdf,image/*" />
+                    </div>
                     <button class="btn ghost" type="button" id="btnUploadCt">Enviar</button>
                   </div>
                   <div class="hint" id="ctFileHint" style="margin-top:6px">Salve o contrato para liberar anexos.</div>
@@ -3673,29 +3453,39 @@ async function renderRegrasDestino() {
             </div>
 
             <div class="field col12">
-           ${formField({ label: 'Custo p/ saca (Silo) R$/sc limpa', name: 'custo_silo_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
-           ${formField({ label: 'Custo p/ saca (Terceiros) R$/sc limpa', name: 'custo_terceiros_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
-
-          ${formField({ label: 'Impureza limite (%)', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
-          ${formField({ label: 'Ardidos limite (%)', name: 'ardidos_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
-          ${formField({ label: 'Queimados limite (%)', name: 'queimados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
-          ${formField({ label: 'Avariados limite (%)', name: 'avariados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
-          ${formField({ label: 'Esverdiados limite (%)', name: 'esverdiados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
-          ${formField({ label: 'Quebrados limite (%)', name: 'quebrados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
-
-          <div class="field col12">
-            <div class="label">Tabela de umidade</div>
-            <div class="hint">Defina faixas: desconto (%) e custo de secagem (R$/sc).</div>
-            <div class="table-wrap rule-wrap" style="margin-top:8px">
-              <table>
-                <thead><tr><th class="actions"></th><th>Umid (&gt;)</th><th>Umid (&lt;=)</th><th>Desconto (%)</th><th>Secagem (R$/sc)</th></tr></thead>
-                <tbody id="faixas"></tbody>
-              </table>
+              <div class="sec" style="margin-top:4px">
+                <div class="sec-title">Custos e limites</div>
+                <div class="sec-line"></div>
+              </div>
+              <div class="hint" style="margin-top:6px">Custos (R$/sc) sao usados no calculo (preview/colheita). Limites (%) definem os descontos por qualidade.</div>
             </div>
-            <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end">
-              <button class="btn ghost" type="button" id="btnAddFaixa">Adicionar faixa</button>
+
+            ${formField({ label: 'Custo p/ saca (Silo) R$/sc limpa', name: 'custo_silo_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col6' })}
+            ${formField({ label: 'Custo p/ saca (Terceiros) R$/sc limpa', name: 'custo_terceiros_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col6' })}
+
+            ${formField({ label: 'Impureza limite (%)', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
+            ${formField({ label: 'Ardidos limite (%)', name: 'ardidos_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
+            ${formField({ label: 'Queimados limite (%)', name: 'queimados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
+            ${formField({ label: 'Avariados limite (%)', name: 'avariados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
+            ${formField({ label: 'Esverdiados limite (%)', name: 'esverdiados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
+            ${formField({ label: 'Quebrados limite (%)', name: 'quebrados_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
+
+            <div class="field col12">
+              <div class="sec" style="margin-top:6px">
+                <div class="sec-title">Tabela de umidade</div>
+                <div class="sec-line"></div>
+              </div>
+              <div class="hint" style="margin-top:6px">Defina faixas: desconto (%) e custo de secagem (R$/sc).</div>
+             <div class="table-wrap" style="margin-top:8px">
+               <table>
+                 <thead><tr><th class="actions"></th><th>Umid (&gt;)</th><th>Umid (&lt;=)</th><th>Desconto (%)</th><th>Secagem (R$/sc)</th></tr></thead>
+                 <tbody id="faixas"></tbody>
+               </table>
+             </div>
+             <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end">
+               <button class="btn ghost" type="button" id="btnAddFaixa">Adicionar faixa</button>
+             </div>
             </div>
-          </div>
         </form>
       </div>
     </section>
@@ -4790,16 +4580,17 @@ async function renderColheitaBase(variant) {
           : Number(v.pct_rateio_100)
 
       const toggleBtn = showToggle
-        ? `<button class="btn small ghost" data-act="toggle" data-id="${v.id}">${toggled ? '▼' : '▶'}</button>`
+        ? `<button class="icon-btn" data-act="toggle" data-id="${v.id}" title="${toggled ? 'Recolher rateio' : 'Expandir rateio'}" aria-label="${toggled ? 'Recolher rateio' : 'Expandir rateio'}">${toggled ? '▼' : '▶'}</button>`
         : ''
 
       const actionCell = isChild
-        ? `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" data-rateio-index="${v.rateio_index}" title="Editar" aria-label="Editar">${iconSvg('edit')}</button></td>`
+        ? `<td class="actions"><button class="icon-btn" data-act="edit" data-id="${v.id}" data-rateio-index="${v.rateio_index}" title="Editar" aria-label="Editar">${iconSvg('edit')}</button></td>`
         : isMotoristaUser
-          ? `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button></td>`
-          : `<td class="actions">${toggleBtn}<button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button>
+          ? `<td class="actions"><button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button>${toggleBtn}</td>`
+          : `<td class="actions"><button class="icon-btn" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''} title="Editar" aria-label="Editar">${iconSvg('edit')}</button>
               <button class="icon-btn" data-act="hist" data-id="${v.id}" title="Histórico" aria-label="Histórico">${iconSvg('more')}</button>
               <button class="icon-btn danger" data-act="del" data-id="${v.id}" title="Excluir" aria-label="Excluir">${iconSvg('trash')}</button>
+              ${toggleBtn}
             </td>`
 
       const childAttrs = isChild ? ` data-parent="${v.id}" style="${expanded.has(v.id) ? '' : 'display:none'}"` : ''
@@ -5223,10 +5014,10 @@ async function renderColheitaBase(variant) {
                ${formField({ label: 'Terceiros (sc)', name: 'custo_terceiros_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_terceiros_sacas ?? '', span: 'col2' })}
                ${formField({ label: 'Outros (sc)', name: 'custo_outros_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_outros_sacas ?? '', span: 'col2' })}
              </div>
-             <div class="card-body" style="padding-top:0">
-               <div class="hint">Opcional: informe custos cobrados em sacas para alimentar o saldo por participante (Producao). Se vazio, o sistema pode usar custos em R$ como equivalentes (quando configurado).</div>
-             </div>
-           </div>
+            <div class="card-body" style="padding-top:0">
+                <div class="hint">Opcional: custos cobrados em sacas para alimentar o saldo por participante (Producao). Quando houver preco de compra (contrato), o preview preenche automaticamente um equivalente em sacas (voce pode sobrescrever).</div>
+              </div>
+            </div>
 
           <div class="form-card">
             <div class="card-head">
@@ -5449,11 +5240,23 @@ async function renderColheitaBase(variant) {
     // Padronizar visualizacao (pt-BR): '.' milhar, ',' decimal
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="carga_total_kg"]'), 0, { after: () => runPreview() })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="tara_kg"]'), 0, { after: () => runPreview() })
-    bindNumberFormatOnBlur(dlgForm.querySelector('input[name="custo_frete_sacas"]'), 2)
-    bindNumberFormatOnBlur(dlgForm.querySelector('input[name="custo_secagem_sacas"]'), 2)
-    bindNumberFormatOnBlur(dlgForm.querySelector('input[name="custo_silo_sacas"]'), 2)
-    bindNumberFormatOnBlur(dlgForm.querySelector('input[name="custo_terceiros_sacas"]'), 2)
-    bindNumberFormatOnBlur(dlgForm.querySelector('input[name="custo_outros_sacas"]'), 2)
+    ;[
+      'custo_frete_sacas',
+      'custo_secagem_sacas',
+      'custo_silo_sacas',
+      'custo_terceiros_sacas',
+      'custo_outros_sacas',
+    ].forEach((name) => {
+      const el = dlgForm.querySelector(`input[name="${name}"]`)
+      bindNumberFormatOnBlur(el, 2)
+      if (!el) return
+      if (el.dataset.userEditBound === '1') return
+      el.dataset.userEditBound = '1'
+      el.addEventListener('input', () => {
+        // Marca que o usuario decidiu informar/alterar (nao sobrescrever no preview).
+        el.dataset.userEdited = '1'
+      })
+    })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="umidade_pct"]'), 2, { after: () => runPreview() })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="umidade_desc_pct_manual"]'), 2, { after: () => runPreview() })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="impureza_pct"]'), 2, { after: () => runPreview() })
@@ -5898,6 +5701,43 @@ async function renderColheitaBase(variant) {
     const previewEl = dlgBody.querySelector('#preview')
     const vForm = dlgBody.querySelector('#vForm')
 
+    function autofillCustosSacasFromPreview(p) {
+      if (!p || !dlgForm) return
+
+      const preco =
+        Number.isFinite(Number(p.valor_compra_por_saca_aplicado)) && Number(p.valor_compra_por_saca_aplicado) > 0
+          ? Number(p.valor_compra_por_saca_aplicado)
+          : Number.isFinite(Number(p.valor_compra_por_saca)) && Number(p.valor_compra_por_saca) > 0
+            ? Number(p.valor_compra_por_saca)
+            : null
+
+      if (!preco) return
+
+      const byName = (name) => dlgForm.querySelector(`input[name="${name}"]`)
+      const shouldFill = (el) => {
+        if (!el) return false
+        if (el.dataset.userEdited === '1') return false
+        const raw = String(el.value ?? '').trim()
+        return raw === ''
+      }
+
+      const setIfEmpty = (name, totalRs) => {
+        const el = byName(name)
+        if (!shouldFill(el)) return
+        const total = Number(totalRs || 0)
+        if (!Number.isFinite(total) || total <= 0) return
+        const sc = total / preco
+        if (!Number.isFinite(sc) || sc <= 0) return
+        el.value = fmtNumInput(sc, 2)
+        el.dataset.autoFilled = '1'
+      }
+
+      setIfEmpty('custo_frete_sacas', p.sub_total_frete)
+      setIfEmpty('custo_secagem_sacas', p.sub_total_secagem)
+      setIfEmpty('custo_silo_sacas', p.sub_total_custo_silo)
+      setIfEmpty('custo_terceiros_sacas', p.sub_total_custo_terceiros)
+    }
+
     const btnCompareDest = dlgBody.querySelector('#btnCompareDest')
     if (btnCompareDest) {
       btnCompareDest.onclick = async () => {
@@ -6170,6 +6010,9 @@ async function renderColheitaBase(variant) {
         updateUmidHighlight()
 
         setDestinoRegraUi({ preview: p })
+
+        // Custos (sacas): se o usuario nao preencheu, sugerir equivalentes em sacas.
+        autofillCustosSacasFromPreview(p)
 
         updateLimitHighlight()
 
@@ -7649,80 +7492,6 @@ async function renderQuitacaoMotoristas() {
   await run()
 }
 
-async function renderFazenda() {
-  activeNav('fazenda')
-  const f = FAZENDA_NAZCA_PUBLIC
-  const mapsEmbed =
-    'https://www.google.com/maps/d/embed?mid=1I31t4h-O1Scw04_yJqcTAs8EqUid5IE&ehbc=2E312F'
-  const mapsOpen =
-    'https://www.google.com/maps/d/edit?mid=1I31t4h-O1Scw04_yJqcTAs8EqUid5IE&ll=-20.193727536387307%2C-45.874922749999996&z=17'
-  setView(`
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title">${escapeHtml(f.nome)}</div>
-          <div class="panel-sub">Informacoes internas + links publicos (redes sociais e Google Maps).</div>
-        </div>
-      </div>
-      <div class="panel-body">
-        <div class="grid">
-          <div class="span12" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-            <img src="/logo.png" alt="${escapeHtml(f.nome)}" style="width:140px;height:140px;object-fit:contain;background:rgba(255,255,255,.75);border:1px solid rgba(15,26,22,.14);border-radius:18px;padding:14px" />
-            <div>
-              <div style="font-family:var(--serif);font-size:22px">NazcaTraker</div>
-              <div style="margin-top:6px;color:var(--muted)">Base interna: colheita (safras, talhões, destinos, viagens, descontos e fretes).</div>
-              <div style="margin-top:10px" class="pill"><span class="dot warn"></span><span>Fontes publicas: Google Maps / Instagram / Facebook.</span></div>
-            </div>
-          </div>
-
-          <div class="span6">
-            <div class="stat">
-              <div class="stat-k">Localizacao (Google Maps)</div>
-              <div class="stat-v" style="font-size:16px">${escapeHtml(f.localizacao.endereco)}</div>
-              <div class="stat-h">Plus Code: <span class="mono">${escapeHtml(f.localizacao.plus_code)}</span></div>
-              <div class="stat-h">Avaliacao: ${escapeHtml(f.localizacao.maps_rating)} (${escapeHtml(f.localizacao.maps_reviews)} avaliacoes)</div>
-              <div style="margin-top:10px">
-                <a class="btn small ghost" href="${escapeHtml(f.localizacao.maps_url)}" target="_blank" rel="noreferrer">Abrir no Maps</a>
-              </div>
-            </div>
-          </div>
-
-          <div class="span6">
-            <div class="stat">
-              <div class="stat-k">Redes sociais</div>
-              <div class="stat-h"><a href="${escapeHtml(f.links.instagram)}" target="_blank" rel="noreferrer">Instagram: @fazendanazca</a></div>
-              <div class="stat-h"><a href="${escapeHtml(f.links.facebook)}" target="_blank" rel="noreferrer">Facebook: /fazendanazca</a></div>
-              <div class="stat-h"><a href="${escapeHtml(f.links.reel)}" target="_blank" rel="noreferrer">Reel (Instagram)</a></div>
-               <div class="stat-h">Obs: a leitura automática do conteúdo pode falhar por bloqueios das plataformas.</div>
-            </div>
-          </div>
-
-          <div class="span12">
-            <div class="stat">
-              <div class="stat-k">Sobre (interno)</div>
-              <div class="stat-h">Objetivo: registrar viagens de colheita, aplicar descontos (umidade/qualidade), calcular sacas/fretes/secagem e gerar relatórios por safra.</div>
-              <div class="stat-h" style="margin-top:10px"><b>Rotina sugerida</b>: cadastrar fretes/regras do destino no início da safra; lançar colheita na saída; completar entrega no silo quando houver (romaneio, tara/peso, análise).</div>
-              <div class="stat-h" style="margin-top:10px"><b>Padrões</b>: percentuais sempre 0..100; umidade/qualidade conforme amostra do silo; revisão semanal do % de área colhida por talhão.</div>
-            </div>
-          </div>
-
-          <div class="span12">
-            <div class="stat">
-              <div class="stat-k">Mapa dos talhões (My Maps)</div>
-              <div class="mini-map" style="margin-top:10px">
-                <iframe title="Mapa dos talhões" loading="lazy" src="${escapeHtml(mapsEmbed)}"></iframe>
-              </div>
-              <div style="margin-top:10px">
-                <a class="btn small ghost" href="${escapeHtml(mapsOpen)}" target="_blank" rel="noreferrer">Abrir mapa</a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  `)
-}
-
 async function renderProducao() {
   activeNav('producao')
   await loadLookups()
@@ -8184,15 +7953,18 @@ async function renderProducao() {
 
       openDialog({
         title: isEdit ? `Editar acordo #${it.id}` : 'Novo acordo',
+        size: 'wide',
         bodyHtml: `
           <div class="form-grid">
             ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safra_id, span: 'col4' })}
-            ${selectField({ label: 'Talhao', name: 'talhao_id', options: talhaoOptions, value: full?.talhao_id || talhaoOptions[0]?.value, span: 'col8' })}
-            ${selectField({ label: 'Tipo de plantio', name: 'tipo_plantio', options: plantioOptions, value: full?.tipo_plantio || '', span: 'col6' })}
-            ${selectField({ label: 'Politica de custos', name: 'politica_custos_id', options: polOptions, value: full?.politica_custos_id || '', span: 'col6' })}
+            ${selectField({ label: 'Tipo de plantio', name: 'tipo_plantio', options: plantioOptions, value: full?.tipo_plantio || '', span: 'col4' })}
+            ${selectField({ label: 'Politica de custos', name: 'politica_custos_id', options: polOptions, value: full?.politica_custos_id || '', span: 'col4' })}
+
+            ${selectField({ label: 'Talhao', name: 'talhao_id', options: talhaoOptions, value: full?.talhao_id || talhaoOptions[0]?.value, span: 'col12' })}
+
             <div class="field col12">
               <div class="label">Participantes</div>
-              <div class="table-wrap rule-wrap" style="margin-top:6px">
+              <div class="table-wrap" style="margin-top:6px">
                 <table>
                   <thead><tr><th>Participante</th><th>Papel</th><th class="t-right">%</th><th class="actions"></th></tr></thead>
                   <tbody id="partsBody">${(parts.length ? parts : [{ participante_id: partOptions[0]?.value, papel: 'parceiro', percentual: 100 }]).map(rowHtml).join('')}</tbody>
@@ -8315,7 +8087,7 @@ async function renderProducao() {
         </div>
         <div class="table-wrap" style="margin-top:10px">
           <table>
-            <thead><tr><th>Data</th><th>Participante</th><th>Comprador</th><th class="t-right">Sacas</th><th class="t-right">R$/sc</th><th class="t-right">Total</th><th class="actions"></th></tr></thead>
+            <thead><tr><th>Data</th><th style="min-width:220px">Participante</th><th style="min-width:280px">Destino / Comprador</th><th class="t-right">Sacas</th><th class="t-right">R$/sc</th><th class="t-right">Total</th><th class="actions"></th></tr></thead>
             <tbody>
               ${(itens || [])
                 .map(
@@ -8323,7 +8095,7 @@ async function renderProducao() {
                   <tr>
                     <td>${escapeHtml(v.data_venda || '')}</td>
                     <td>${escapeHtml(v.participante_nome || '')}</td>
-                    <td>${escapeHtml(v.comprador_tipo === 'destino' ? (v.destino_local || '-') : (v.terceiro_nome || '-'))}</td>
+                    <td style="min-width:280px">${escapeHtml(v.comprador_tipo === 'destino' ? (v.destino_local || '-') : (v.terceiro_nome || '-'))}</td>
                     <td class="t-right">${fmtNum(v.sacas, 2)}</td>
                     <td class="t-right">${fmtNum(v.preco_por_saca, 2)}</td>
                     <td class="t-right">${fmtNum(v.valor_total || (Number(v.sacas || 0) * Number(v.preco_por_saca || 0)), 2)}</td>
@@ -8365,6 +8137,7 @@ async function renderProducao() {
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       openDialog({
         title: isEdit ? `Editar venda #${it.id}` : 'Nova venda',
+        size: 'wide',
         bodyHtml: `
           <div class="form-grid">
             ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: full?.safra_id || safra_id, span: 'col4' })}
@@ -8380,25 +8153,27 @@ async function renderProducao() {
               value: full?.comprador_tipo || 'destino',
               span: 'col4',
             })}
-            ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: full?.destino_id || '', span: 'col4' })}
-            ${formField({ label: 'Terceiro', name: 'terceiro_nome', value: full?.terceiro_nome || '', span: 'col4' })}
+            ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: full?.destino_id || '', span: 'col8' })}
+            ${formField({ label: 'Terceiro', name: 'terceiro_nome', value: full?.terceiro_nome || '', span: 'col8' })}
             ${selectField({ label: 'Tipo plantio', name: 'tipo_plantio', options: plantioOptions, value: full?.tipo_plantio || '', span: 'col4' })}
             ${selectField({ label: 'Talhao (opcional)', name: 'talhao_id', options: [{ value: '', label: '-' }].concat(talhaoOptions), value: full?.talhao_id || '', span: 'col8' })}
             ${formField({ label: 'Sacas', name: 'sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full ? fmtNumInput(full.sacas, 2) : '', span: 'col4' })}
             ${formField({ label: 'Preco por saca (R$)', name: 'preco_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full ? fmtNumInput(full.preco_por_saca, 2) : '', span: 'col4' })}
-            <div class="field col4"><div class="label">Total</div><div class="hint" id="vTotal">-</div></div>
+            ${formField({ label: 'Total (R$)', name: 'calc_total_rs', type: 'text', value: '-', span: 'col4', readonly: true })}
+
+            ${textareaField({ label: 'Observacoes', name: 'observacoes', value: full?.observacoes ?? '', placeholder: 'Opcional', span: 'col12' })}
           </div>
         `,
         onReady: () => {
           const f = document.querySelector('#dlgForm')
           const inS = f.querySelector('input[name="sacas"]')
           const inP = f.querySelector('input[name="preco_por_saca"]')
-          const total = document.querySelector('#vTotal')
+          const total = f.querySelector('input[name="calc_total_rs"]')
           function recalc() {
             const s = parseNumberPt(String(inS?.value || '0'))
             const p = parseNumberPt(String(inP?.value || '0'))
             const t = (Number.isFinite(s) ? s : 0) * (Number.isFinite(p) ? p : 0)
-            if (total) total.textContent = fmtNum(t, 2)
+            if (total) total.value = fmtNumInput(t, 2, '-')
           }
           if (inS) {
             numInputBlur(inS, 2, recalc)
@@ -8433,7 +8208,7 @@ async function renderProducao() {
             talhao_id: obj.talhao_id ? Number(obj.talhao_id) : null,
             sacas: parseNumberPt(String(obj.sacas || '0')),
             preco_por_saca: parseNumberPt(String(obj.preco_por_saca || '0')),
-            observacoes: null,
+            observacoes: obj.observacoes || null,
           }
           if (isEdit) await api(`/api/vendas-sacas/${it.id}`, { method: 'PUT', body })
           else await api('/api/vendas-sacas', { method: 'POST', body })
@@ -8504,15 +8279,20 @@ async function renderProducao() {
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       openDialog({
         title: isEdit ? `Editar custo #${it.id}` : 'Novo custo',
+        size: 'wide',
         bodyHtml: `
           <div class="form-grid">
             ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: full?.safra_id || safra_id, span: 'col4' })}
-            ${selectField({ label: 'Talhao', name: 'talhao_id', options: talhaoOptions, value: full?.talhao_id || talhaoOptions[0]?.value, span: 'col8' })}
             ${formField({ label: 'Data', name: 'data_ref', type: 'date', value: full?.data_ref || today, span: 'col4' })}
             ${formField({ label: 'Tipo', name: 'custo_tipo', value: full?.custo_tipo || 'outros', span: 'col4' })}
-            ${formField({ label: 'Valor (sacas)', name: 'valor_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full?.valor_sacas != null ? fmtNumInput(full.valor_sacas, 2) : '', span: 'col4' })}
-            ${formField({ label: 'Valor (R$ opcional)', name: 'valor_rs', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full?.valor_rs != null ? fmtNumInput(full.valor_rs, 2) : '', span: 'col4' })}
-            <div class="field col8"><div class="label">Obs</div><div class="hint">Preferencia: informe em sacas. Se informar R$, o sistema converte para sacas equivalentes via vendas registradas.</div></div>
+
+            ${selectField({ label: 'Talhao', name: 'talhao_id', options: talhaoOptions, value: full?.talhao_id || talhaoOptions[0]?.value, span: 'col12' })}
+
+            ${formField({ label: 'Valor (sacas)', name: 'valor_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full?.valor_sacas != null ? fmtNumInput(full.valor_sacas, 2) : '', span: 'col6' })}
+            ${formField({ label: 'Valor (R$ opcional)', name: 'valor_rs', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: full?.valor_rs != null ? fmtNumInput(full.valor_rs, 2) : '', span: 'col6' })}
+
+            <div class="field col12"><div class="hint">Preferencia: informe em sacas. Se informar R$, o sistema converte para sacas equivalentes via vendas registradas.</div></div>
+            ${textareaField({ label: 'Observacoes', name: 'observacoes', value: full?.observacoes ?? '', placeholder: 'Opcional', span: 'col12' })}
           </div>
         `,
         onReady: () => {
@@ -8528,7 +8308,7 @@ async function renderProducao() {
             custo_tipo: obj.custo_tipo,
             valor_rs: obj.valor_rs ? parseNumberPt(String(obj.valor_rs)) : null,
             valor_sacas: obj.valor_sacas ? parseNumberPt(String(obj.valor_sacas)) : null,
-            observacoes: null,
+            observacoes: obj.observacoes || null,
           }
           if (isEdit) await api(`/api/custos-lancamentos/${it.id}`, { method: 'PUT', body })
           else await api('/api/custos-lancamentos', { method: 'POST', body })
@@ -8762,173 +8542,15 @@ async function renderProducao() {
   return await tabApuracao()
 }
 
-async function renderComunicacao() {
-  activeNav('comunicacao')
-  const me = window.__me || null
-  const can = await api('/api/auth/can?module=comunicacao').catch(() => null)
-  const canUpdate = can ? Boolean(can.can_update) : true
-
-  const webmail = await api('/api/comunicacao/webmail').catch(() => null)
-  const prefsR = await api('/api/notifications/preferences').catch(() => ({ prefs: [] }))
-  const prefs = Array.isArray(prefsR?.prefs) ? prefsR.prefs : []
-
-  const modules = [
-    { key: '*', label: 'Todos os modulos (geral)' },
-    { key: 'colheita', label: 'Colheita' },
-    { key: 'regras-destino', label: 'Regras do destino' },
-    { key: 'contratos-silo', label: 'Contratos (travas)' },
-    { key: 'safras', label: 'Safras' },
-    { key: 'talhoes', label: 'Talhoes' },
-    { key: 'destinos', label: 'Destinos' },
-    { key: 'motoristas', label: 'Motoristas' },
-    { key: 'fretes', label: 'Fretes' },
-    { key: 'tipos-plantio', label: 'Tipos de plantio' },
-    { key: 'usuarios', label: 'Usuarios' },
-    { key: 'acl', label: 'Permissoes/ACL' },
-    { key: 'auth', label: 'Seguranca (login/reset)' },
-  ]
-
-  const map = new Map(prefs.map((p) => [String(p.module || '').toLowerCase(), p]))
-  function getRow(mod) {
-    return (
-      map.get(String(mod).toLowerCase()) || {
-        module: mod,
-        notify_create: 0,
-        notify_update: 0,
-        notify_delete: 0,
-        notify_status_change: 0,
-        notify_security_events: 0,
-        delivery_mode: 'immediate',
-      }
-    )
-  }
-
-  const rowsHtml = modules
-    .map((m) => {
-      const r = getRow(m.key)
-      const dis = canUpdate ? '' : 'disabled'
-      return `
-        <tr>
-          <td><code class="mono">${escapeHtml(m.key)}</code><div class="hint">${escapeHtml(m.label)}</div></td>
-          <td class="t-center"><input ${dis} type="checkbox" name="${escapeHtml(`c_${m.key}`)}" ${Number(r.notify_create) === 1 ? 'checked' : ''} /></td>
-          <td class="t-center"><input ${dis} type="checkbox" name="${escapeHtml(`u_${m.key}`)}" ${Number(r.notify_update) === 1 ? 'checked' : ''} /></td>
-          <td class="t-center"><input ${dis} type="checkbox" name="${escapeHtml(`d_${m.key}`)}" ${Number(r.notify_delete) === 1 ? 'checked' : ''} /></td>
-          <td class="t-center"><input ${dis} type="checkbox" name="${escapeHtml(`s_${m.key}`)}" ${Number(r.notify_status_change) === 1 ? 'checked' : ''} /></td>
-          <td class="t-center"><input ${dis} type="checkbox" name="${escapeHtml(`sec_${m.key}`)}" ${Number(r.notify_security_events) === 1 ? 'checked' : ''} /></td>
-        </tr>
-      `.trim()
-    })
-    .join('')
-
-  const webmailUrl = webmail?.url || ''
-  const webmailLabel = webmail?.label || 'Webmail da fazenda'
-  const webmailHint = webmail?.hint || ''
-
-  setView(`
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title">Comunicacao</div>
-          <div class="panel-sub">Atalhos e preferencia de notificacoes por e-mail.</div>
-        </div>
-      </div>
-      <div class="panel-body">
-        <div class="grid">
-          <div class="span6">
-            <div class="stat">
-              <div class="stat-k">Webmail da fazenda</div>
-              <div class="hint" style="margin-top:6px">Abertura em nova aba (provedor oficial).</div>
-              ${webmailHint ? `<div class="hint" style="margin-top:6px">${escapeHtml(webmailHint)}</div>` : ''}
-              <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
-                <a class="btn" href="${escapeHtml(webmailUrl || '#')}" target="_blank" rel="noreferrer" ${webmailUrl ? '' : 'aria-disabled="true"'}>${escapeHtml(webmailLabel)}</a>
-              </div>
-              ${!webmailUrl ? `<div class="hint" style="margin-top:10px">Configure <code class="mono">WEBMAIL_URL</code> no ambiente para habilitar o atalho.</div>` : ''}
-            </div>
-          </div>
-
-          <div class="span6">
-            <div class="stat">
-              <div class="stat-k">Preferencias de notificacao</div>
-              <div class="hint" style="margin-top:6px">Escolha o que voce quer receber por e-mail. (Envio imediato; resumo diario pode ser adicionado depois.)</div>
-              ${!canUpdate ? `<div class="pill" style="margin-top:10px"><span class="dot muted"></span><span>Somente leitura: sem permissao para alterar preferencias.</span></div>` : ''}
-              <form id="notifForm" style="margin-top:10px">
-                <div class="table-wrap rule-wrap">
-                  <table>
-                    <thead><tr><th>Modulo</th><th class="t-center">Criar</th><th class="t-center">Alterar</th><th class="t-center">Excluir</th><th class="t-center">Status</th><th class="t-center">Seguranca</th></tr></thead>
-                    <tbody>${rowsHtml}</tbody>
-                  </table>
-                </div>
-                <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
-                  <button class="btn ghost" type="button" id="btnNotifDefaults">Defaults</button>
-                  <button class="btn" type="button" id="btnNotifSave">Salvar preferencias</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  `)
-
-  const form = view.querySelector('#notifForm')
-  const btnSave = view.querySelector('#btnNotifSave')
-  const btnDef = view.querySelector('#btnNotifDefaults')
-
-  function applyDefaults() {
-    const isAdmin = String(me?.role || '').toLowerCase() === 'admin'
-    // Default: security for all; admins get broader
-    for (const m of modules) {
-      const k = m.key
-      const set = (name, v) => {
-        const el = form.querySelector(`input[name="${CSS.escape(name)}"]`)
-        if (el) el.checked = Boolean(v)
-      }
-      const sec = k === 'auth' || k === 'acl' || k === 'usuarios' || k === '*'
-      set(`sec_${k}`, sec)
-      if (isAdmin) {
-        set(`c_${k}`, k === '*' || k === 'colheita' || k === 'regras-destino' || k === 'usuarios')
-        set(`u_${k}`, k === '*' || k === 'colheita' || k === 'regras-destino' || k === 'usuarios')
-        set(`d_${k}`, k === '*' || k === 'colheita' || k === 'usuarios')
-        set(`s_${k}`, k === '*' || k === 'usuarios')
-      }
-    }
-  }
-
-  if (btnDef) {
-    btnDef.disabled = !canUpdate
-    btnDef.onclick = () => {
-      if (!canUpdate) return
-      applyDefaults()
-      toast('OK', 'Defaults aplicados (nao esquece de salvar).')
-    }
-  }
-
-  if (btnSave) {
-    btnSave.disabled = !canUpdate
-    btnSave.onclick = async () => {
-      if (!canUpdate) return
-      const out = modules.map((m) => {
-        const k = m.key
-        const get = (name) => Boolean(form.querySelector(`input[name="${CSS.escape(name)}"]`)?.checked)
-        return {
-          module: k,
-          notify_create: get(`c_${k}`),
-          notify_update: get(`u_${k}`),
-          notify_delete: get(`d_${k}`),
-          notify_status_change: get(`s_${k}`),
-          notify_security_events: get(`sec_${k}`),
-          delivery_mode: 'immediate',
-        }
-      })
-      await api('/api/notifications/preferences', { method: 'PUT', body: { prefs: out } })
-      toast('OK', 'Preferencias salvas.')
-    }
-  }
-}
-
 const routes = {
   painel: renderPainel,
-  fazenda: renderFazenda,
+  fazenda: () =>
+    renderFazendaRoute({
+      activeNav,
+      setView,
+      escapeHtml,
+      fazendaPublic: FAZENDA_NAZCA_PUBLIC,
+    }),
   safras: renderSafras,
   talhoes: renderTalhoes,
   destinos: renderDestinos,
@@ -8943,7 +8565,16 @@ const routes = {
   viagens: renderColheita,
   relatorios: renderRelatorios,
   producao: renderProducao,
-  comunicacao: renderComunicacao,
+  comunicacao: () =>
+    renderComunicacaoRoute({
+      activeNav,
+      setView,
+      escapeHtml,
+      toast,
+      api,
+      viewEl: view,
+      me: window.__me || null,
+    }),
   usuarios: renderUsuarios,
   perfis: renderPerfis,
   auditoria: renderAuditoria,

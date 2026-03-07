@@ -1,6 +1,6 @@
 {
-  "signature": "bafd4b94aff9086a7245bd44bcc4103aabd34f55d8a005ac5e9bdc8ea3458de3",
-  "generated_at": "2026-03-06T23:43:13.780Z",
+  "signature": "37d3434ea8d12c879fb9b23f7dd1620e56f40c513425ffec68076b4df260631f",
+  "generated_at": "2026-03-07T01:41:33.061Z",
   "runtime": {
     "node": "v24.14.0",
     "platform": "win32"
@@ -48,6 +48,28 @@
       "SMTP_USER",
       "SMTP_PASS",
       "SMTP_FROM"
+    ],
+    "appMiddleware": [
+      {
+        "name": "requestId",
+        "file": "src/middleware/requestId.js"
+      },
+      {
+        "name": "errorHandler",
+        "file": "src/middleware/errorHandler.js"
+      },
+      {
+        "name": "authenticate",
+        "file": "src/middleware/auth.js"
+      },
+      {
+        "name": "rateLimit",
+        "file": "src/middleware/rateLimit.js"
+      },
+      {
+        "name": "enforceSameOrigin",
+        "file": "src/middleware/sameOrigin.js"
+      }
     ],
     "apiRoutes": [
       {
@@ -1033,8 +1055,15 @@
         "file": "src/routes/api/viagens.js"
       }
     ],
-    "apiSchemasHash": "d9a27d2fe8d70ed685e82858292b6773c70aa337dd78279eed540e1052b635b0",
+    "apiSchemasHash": "70291de0dc7be0a3d002bfd9d9e0268bbbcd5e1191d462e8d263bacbeaef4d5c",
     "migrateHash": "7f54d1b482d7c7f33b6c526f9d1401d4bde31d913b73f49b44f0fe681961938f",
     "apiIndexHash": "f46ee9f41724d6b724400185377c1516951fae7cbfa3273acc589b273b441ebe"
+  },
+  "docs_hashes": {
+    "PROJECT_CONTEXT.md": "96cd04c1d524e7402a38879d293764a45a16f7d6647fb2d1377f6ff272c98631",
+    "ARCHITECTURE.md": "aff5741911e0baba855e061e83261fbc6a539985baece6ef63bde3cac3c02526",
+    "TASKS_OFICIAL.md": "d0c2ef8c8bf922f3e9aa39c3d36a95ebe8961c167386dd80ec429c6d0375bbe1",
+    "CHANGELOG.md": "7cc29ac5007e79134959ffd97f3df04bb1b6641bf5f42cfb40c7abc790661f46",
+    "LIÇÕESAPRENDIDAS.MD": "5e863f52bd7d6b74e2fab0fa93c353f7934def57125701fe19949bd280629408"
   }
 }

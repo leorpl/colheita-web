@@ -168,13 +168,20 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 
 ## Middleware Layer
 
-- `requestId` + `pino-http`
 - `helmet` CSP (img-src https/data, frame-src Google Maps)
 - `cors` allowlist via `CORS_ORIGIN`
+- `compression` (quando habilitado no app)
+- `pino-http` + `x-request-id`
 - `express.json` (1mb)
 - `enforceSameOrigin` para metodos mutantes em /api quando header Origin existe
 - `rateLimit` (memoria) quando habilitado
 - `authenticate` (anexa req.user via cookie) + `requireAuth` dentro do api router
+- Custom middlewares (detectados via imports em `src/app.js`):
+  - requestId (src/middleware/requestId.js)
+  - errorHandler (src/middleware/errorHandler.js)
+  - authenticate (src/middleware/auth.js)
+  - rateLimit (src/middleware/rateLimit.js)
+  - enforceSameOrigin (src/middleware/sameOrigin.js)
 
 ## Controllers
 

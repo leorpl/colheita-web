@@ -321,10 +321,20 @@ tbody tr.hum-high td.actions{background:rgba(255,255,255,.86)}
 
 /* Contrato + Arquivos (regras destino) */
 .contract-split{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;align-items:start}
-.upload-row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-.upload-row input[type="file"]{flex:1;min-width:200px}
+.contract-pane{min-width:0}
+.contract-pane-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:8px}
+.contract-pane-head .label{margin:0}
+.contract-pane-head .hint{margin-top:4px}
+
+.upload-row{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:end}
+.upload-row .btn{white-space:nowrap}
+.upload-row input[type="file"]{width:100%}
 @media (max-width: 920px){
   .contract-split{grid-template-columns:1fr}
+}
+@media (max-width: 520px){
+  .upload-row{grid-template-columns:1fr}
+  .upload-row .btn{width:100%}
 }
 .table-wrap table td{padding:8px 8px}
 
@@ -613,6 +623,7 @@ code.mono{font-family:var(--mono);font-size:12px}
 .col4{grid-column:span 4}
 .col3{grid-column:span 3}
 .col2{grid-column:span 2}
+.col8{grid-column:span 8}
 .col12{grid-column:span 12}
 
 .sec{display:flex;align-items:center;gap:10px;margin-top:6px}
@@ -812,6 +823,7 @@ code.mono{font-family:var(--mono);font-size:12px}
   .dlg .col3{grid-column:span 6}
   .dlg .col4{grid-column:span 6}
   .dlg .col6{grid-column:span 12}
+  .dlg .col8{grid-column:span 12}
   .dlg .col9{grid-column:span 12}
 }
 
