@@ -35,7 +35,27 @@ function getUserFromRequest(req) {
     motorista_id: sess.motorista_id,
     perms: permsForRole(sess.role),
     menus,
+    must_change_password: Number(sess.must_change_password) === 1,
   }
+}
+
+// Blocks access to most endpoints when the user must change their password.
+export function enforcePasswordChange(req, _res, next) {
+  if (Number(env.AUTH_ENABLED) !== 1) return next()
+  if (!req.user) return next()
+  if (!req.user.must_change_password) return next()
+
+  const p = String(req.path || '')
+  // Allow minimal auth endpoints so the user can fix their password.
+  if (p === '/auth/me') return next()
+  if (p === '/auth/logout') return next()
+  if (p === '/auth/change-password') return next()
+  if (p === '/auth/login') return next()
+  if (p === '/auth/forgot') return next()
+  if (p === '/auth/reset') return next()
+  if (p.startsWith('/health')) return next()
+
+  throw forbidden('Troque sua senha para continuar', { code: 'PASSWORD_CHANGE_REQUIRED' })
 }
 
 // Attach req.user when session is valid.

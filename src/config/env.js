@@ -14,7 +14,7 @@ const EnvSchema = z.object({
   TRUST_PROXY: z.coerce.number().int().min(0).max(1).default(0),
 
   AUTH_ENABLED: z.coerce.number().int().min(0).max(1).default(1),
-  SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(1),
   SESSION_COOKIE_NAME: z.string().default('st_session'),
 
   // Cookie hardening

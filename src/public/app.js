@@ -10,6 +10,7 @@ const toastEl = document.querySelector('#toast')
 const btnRefresh = document.querySelector('#btnRefresh')
 const btnToggleNav = document.querySelector('#btnToggleNav')
 const btnAuth = document.querySelector('#btnAuth')
+const btnChangePwd = document.querySelector('#btnChangePwd')
 
 const dlg = document.querySelector('#dlg')
 const dlgTitle = document.querySelector('#dlgTitle')
@@ -9088,6 +9089,80 @@ async function applyMenuAccess() {
         }
       }
     }
+
+    if (btnChangePwd) {
+      if (!user) {
+        btnChangePwd.style.display = 'none'
+        btnChangePwd.onclick = null
+      } else {
+        btnChangePwd.style.display = ''
+        btnChangePwd.onclick = () => {
+          openDialog({
+            title: 'Trocar senha',
+            submitLabel: 'Salvar',
+            bodyHtml: `
+              <div class="form-grid">
+                <div class="field col12">
+                  <div class="hint">Apos trocar a senha, voce sera desconectado e precisara entrar novamente.</div>
+                </div>
+                <div class="field col12">
+                  <div class="label">Senha atual</div>
+                  <div class="pwd-wrap">
+                    <input name="current_password" type="password" autocomplete="current-password" />
+                    <button class="pwd-toggle" type="button" data-act="toggleCur" aria-label="Mostrar senha" title="Mostrar senha">Ver</button>
+                  </div>
+                </div>
+                <div class="field col12">
+                  <div class="label">Nova senha</div>
+                  <div class="pwd-wrap">
+                    <input name="new_password" type="password" autocomplete="new-password" />
+                    <button class="pwd-toggle" type="button" data-act="toggleNew" aria-label="Mostrar senha" title="Mostrar senha">Ver</button>
+                  </div>
+                </div>
+                <div class="field col12">
+                  <div class="label">Confirmar nova senha</div>
+                  <div class="pwd-wrap">
+                    <input name="new_password2" type="password" autocomplete="new-password" />
+                    <button class="pwd-toggle" type="button" data-act="toggleNew2" aria-label="Mostrar senha" title="Mostrar senha">Ver</button>
+                  </div>
+                </div>
+              </div>
+            `,
+            onReady: () => {
+              const f = document.querySelector('#dlgForm')
+              const bindToggle = (act, inputName) => {
+                const btn = document.querySelector(`button[data-act="${act}"]`)
+                const inp = f?.querySelector(`input[name="${inputName}"]`)
+                if (!btn || !inp) return
+                btn.onclick = () => {
+                  inp.type = inp.type === 'password' ? 'text' : 'password'
+                  btn.textContent = inp.type === 'password' ? 'Ver' : 'Ocultar'
+                }
+              }
+              bindToggle('toggleCur', 'current_password')
+              bindToggle('toggleNew', 'new_password')
+              bindToggle('toggleNew2', 'new_password2')
+            },
+            onSubmit: async (obj) => {
+              const cur = String(obj.current_password || '')
+              const nw = String(obj.new_password || '')
+              const nw2 = String(obj.new_password2 || '')
+              if (!cur) throw new Error('Informe a senha atual')
+              if (!nw || nw.length < 8) throw new Error('A nova senha deve ter pelo menos 8 caracteres')
+              if (nw !== nw2) throw new Error('A confirmacao da nova senha nao confere')
+              await api('/api/auth/change-password', {
+                method: 'POST',
+                body: { current_password: cur, new_password: nw },
+              })
+              toast('OK', 'Senha alterada. Entre novamente.')
+              setTimeout(() => {
+                location.href = '/login'
+              }, 300)
+            },
+          })
+        }
+      }
+    }
   } catch {
     // ignore
   }
@@ -9116,6 +9191,29 @@ async function navigate() {
   await refreshMenuAccessIfNeeded().catch(() => {})
   const hash = window.location.hash || '#/fazenda'
   const route = hash.replace('#/', '').split('?')[0] || 'fazenda'
+
+  if (window.__me?.must_change_password) {
+    // Force password change flow before allowing access.
+    if (!window.__pwdPrompted) {
+      window.__pwdPrompted = true
+      btnChangePwd?.click()
+    }
+    setView(`
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Troca de senha obrigatoria</div>
+            <div class="panel-sub">Por seguranca, voce precisa definir uma nova senha antes de usar o sistema.</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="pill"><span class="dot warn"></span><span>Clique em <b>Trocar senha</b> no topo.</span></div>
+        </div>
+      </section>
+    `)
+    return
+  }
+
   const allowed = window.__allowedRoutes
   if (allowed && allowed.size && !allowed.has(route)) {
     window.location.hash = allowed.has('fazenda') ? '#/fazenda' : `#/${Array.from(allowed)[0] || 'fazenda'}`

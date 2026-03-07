@@ -11,7 +11,7 @@ export const usuarioSessaoRepo = {
   getByTokenHash(token_hash) {
     return db
       .prepare(
-        `SELECT s.*, u.username, u.email, u.nome, u.role, u.motorista_id, u.active, u.menus_json
+        `SELECT s.*, u.username, u.email, u.nome, u.role, u.motorista_id, u.active, u.menus_json, u.must_change_password
          FROM usuario_sessao s
          JOIN usuario u ON u.id = s.usuario_id
          WHERE s.token_hash=? LIMIT 1`,

@@ -5,6 +5,7 @@ export const usuarioRepo = {
     return db
       .prepare(
         `SELECT id, username, email, nome, role, motorista_id, menus_json, active, created_at, updated_at,
+                must_change_password,
                 created_by_user_id, updated_by_user_id, deleted_at, deleted_by_user_id
          FROM usuario
          WHERE deleted_at IS NULL
@@ -17,6 +18,7 @@ export const usuarioRepo = {
     return db
       .prepare(
         `SELECT id, username, email, nome, role, motorista_id, menus_json, active, created_at, updated_at,
+                must_change_password,
                 created_by_user_id, updated_by_user_id, deleted_at, deleted_by_user_id
          FROM usuario WHERE id=?`,
       )
@@ -52,12 +54,17 @@ export const usuarioRepo = {
     return this.getAuthByUsername(l) || this.getAuthByEmail(l)
   },
 
-  create({ username, email, nome, role, motorista_id, password_hash, password_salt }, { user_id } = {}) {
+  create(
+    { username, email, nome, role, motorista_id, password_hash, password_salt, must_change_password = 0 },
+    { user_id } = {},
+  ) {
     const info = db
       .prepare(
         `INSERT INTO usuario (username, email, nome, role, motorista_id, menus_json, password_hash, password_salt, active,
+                              must_change_password,
                               created_by_user_id, updated_by_user_id, updated_at)
          VALUES (@username, @email, @nome, @role, @motorista_id, @menus_json, @password_hash, @password_salt, 1,
+                  @must_change_password,
                   @created_by_user_id, @updated_by_user_id, datetime('now'))`,
       )
       .run({
@@ -69,6 +76,7 @@ export const usuarioRepo = {
         menus_json: null,
         password_hash,
         password_salt,
+        must_change_password: must_change_password ? 1 : 0,
         created_by_user_id: user_id ?? null,
         updated_by_user_id: user_id ?? null,
       })
@@ -96,14 +104,26 @@ export const usuarioRepo = {
     return this.get(id)
   },
 
-  setPassword(id, { password_hash, password_salt }, { user_id } = {}) {
+  setPassword(id, { password_hash, password_salt, must_change_password }, { user_id } = {}) {
     db.prepare(
       `UPDATE usuario
        SET password_hash=@password_hash, password_salt=@password_salt,
+           must_change_password=COALESCE(@must_change_password, must_change_password),
            updated_by_user_id=@updated_by_user_id,
            updated_at=datetime('now')
        WHERE id=@id`,
-    ).run({ id, password_hash, password_salt, updated_by_user_id: user_id ?? null })
+    ).run({
+      id,
+      password_hash,
+      password_salt,
+      must_change_password:
+        must_change_password === null || must_change_password === undefined
+          ? null
+          : must_change_password
+            ? 1
+            : 0,
+      updated_by_user_id: user_id ?? null,
+    })
     return this.get(id)
   },
 

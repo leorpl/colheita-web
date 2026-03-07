@@ -14,8 +14,14 @@ export const AuthSchemas = {
     token: z.string().trim().min(16).max(256),
     password: z.string().min(8).max(MAX.password),
   }),
+
+  ChangePasswordBody: z.object({
+    current_password: z.string().min(1).max(MAX.password),
+    new_password: z.string().min(8).max(MAX.password),
+  }),
 }
 
 export const LoginBody = AuthSchemas.LoginBody
 export const ForgotBody = AuthSchemas.ForgotBody
 export const ResetBody = AuthSchemas.ResetBody
+export const ChangePasswordBody = AuthSchemas.ChangePasswordBody

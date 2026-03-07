@@ -10,13 +10,13 @@ import { usuarioRepo } from '../../../repositories/usuarioRepo.js'
 import { usuarioSessaoRepo } from '../../../repositories/usuarioSessaoRepo.js'
 import { buildCookie, newToken, sha256Hex } from '../../../auth/cookies.js'
 import { verifyPassword, hashPassword } from '../../../auth/password.js'
-import { unauthorized } from '../../../errors.js'
+import { unauthorized, unprocessable } from '../../../errors.js'
 import { permsForRole } from '../../../auth/permissions.js'
 import { can, Actions } from '../../../auth/acl.js'
 import { passwordResetRepo } from '../../../repositories/passwordResetRepo.js'
 import { sendPasswordResetEmail } from '../../../services/mailer.js'
 import { auditService } from '../../../services/auditService.js'
-import { LoginBody, ForgotBody, ResetBody } from '../validators/authSchemas.js'
+import { LoginBody, ForgotBody, ResetBody, ChangePasswordBody } from '../validators/authSchemas.js'
 
 export const authRouter = Router()
 
@@ -77,6 +77,7 @@ authRouter.post('/login', validateBody(LoginBody), (req, res) => {
       role: u.role,
       motorista_id: u.motorista_id,
       perms: permsForRole(u.role),
+      must_change_password: Number(u.must_change_password) === 1,
     },
   })
 })
@@ -127,7 +128,11 @@ authRouter.post('/reset', validateBody(ResetBody), (req, res) => {
   }
 
   const { salt, hash } = hashPassword(password)
-  usuarioRepo.setPassword(row.user_id, { password_hash: hash, password_salt: salt }, { user_id: row.user_id })
+  usuarioRepo.setPassword(
+    row.user_id,
+    { password_hash: hash, password_salt: salt, must_change_password: 0 },
+    { user_id: row.user_id },
+  )
   passwordResetRepo.markUsed(row.id)
   usuarioSessaoRepo.deleteByUserId(row.user_id)
 
@@ -158,6 +163,40 @@ authRouter.post('/logout', (req, res) => {
       sameSite: env.COOKIE_SAMESITE,
     }),
   )
+  res.json({ ok: true })
+})
+
+authRouter.post('/change-password', requireAuth, validateBody(ChangePasswordBody), (req, res) => {
+  const userId = Number(req.user?.id)
+  if (!Number.isFinite(userId) || userId <= 0) throw unauthorized('Sem sessao')
+
+  const current_password = String(req.body.current_password || '')
+  const new_password = String(req.body.new_password || '')
+  if (new_password === current_password) {
+    throw unprocessable('A nova senha deve ser diferente da senha atual')
+  }
+
+  const u = usuarioRepo.getAuthByUsername(req.user.username)
+  if (!u || Number(u.active) !== 1) throw unauthorized('Sem sessao')
+
+  const ok = verifyPassword(current_password, u.password_salt, u.password_hash)
+  if (!ok) throw unauthorized('Senha atual invalida')
+
+  const { salt, hash } = hashPassword(new_password)
+  usuarioRepo.setPassword(
+    userId,
+    { password_hash: hash, password_salt: salt, must_change_password: 0 },
+    { user_id: userId },
+  )
+  usuarioSessaoRepo.deleteByUserId(userId)
+
+  auditService.log(req, {
+    module_name: 'auth',
+    record_id: userId,
+    action_type: 'password_reset',
+    notes: 'alterou a propria senha',
+  })
+
   res.json({ ok: true })
 })
 

@@ -314,6 +314,7 @@ export function migrate() {
       menus_json TEXT,
       password_hash TEXT NOT NULL,
       password_salt TEXT NOT NULL,
+      must_change_password INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT,
@@ -617,6 +618,10 @@ export function migrate() {
 
   if (!hasColumn('usuario', 'menus_json')) {
     db.exec('ALTER TABLE usuario ADD COLUMN menus_json TEXT')
+  }
+
+  if (!hasColumn('usuario', 'must_change_password')) {
+    db.exec('ALTER TABLE usuario ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0')
   }
 
   if (!hasColumn('usuario', 'email')) {

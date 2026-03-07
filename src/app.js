@@ -12,7 +12,7 @@ import { requestId } from './middleware/requestId.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { apiRouter } from './routes/api/index.js'
 import { pagesRouter } from './routes/pages.js'
-import { authenticate } from './middleware/auth.js'
+import { authenticate, enforcePasswordChange } from './middleware/auth.js'
 import { rateLimit } from './middleware/rateLimit.js'
 import { enforceSameOrigin } from './middleware/sameOrigin.js'
 
@@ -146,7 +146,7 @@ export function createApp() {
 
   app.use('/', pagesRouter)
   // Always try to attach req.user (session cookie); authorization happens inside /api router.
-  app.use('/api', authenticate, apiRouter)
+  app.use('/api', authenticate, enforcePasswordChange, apiRouter)
 
   app.use((req, res) => {
     res.status(404).json({

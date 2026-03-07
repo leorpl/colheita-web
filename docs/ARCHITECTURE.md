@@ -118,6 +118,7 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 - POST /api/acl/roles
 - POST /api/acl/roles/:role/clone
 - POST /api/apuracao/reapurar
+- POST /api/auth/change-password
 - POST /api/auth/forgot
 - POST /api/auth/login
 - POST /api/auth/logout
@@ -179,7 +180,6 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 - Custom middlewares (detectados via imports em `src/app.js`):
   - requestId (src/middleware/requestId.js)
   - errorHandler (src/middleware/errorHandler.js)
-  - authenticate (src/middleware/auth.js)
   - rateLimit (src/middleware/rateLimit.js)
   - enforceSameOrigin (src/middleware/sameOrigin.js)
 

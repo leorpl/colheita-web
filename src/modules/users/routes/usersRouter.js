@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { validateBody, validateParams } from '../../../middleware/validate.js'
 import { usuarioRepo } from '../../../repositories/usuarioRepo.js'
 import { hashPassword } from '../../../auth/password.js'
+import { usuarioSessaoRepo } from '../../../repositories/usuarioSessaoRepo.js'
 import { requireCan } from '../../../middleware/auth.js'
 import { Actions, Modules } from '../../../auth/acl.js'
 import { notFound } from '../../../errors.js'
@@ -29,6 +30,7 @@ usersRouter.post('/', requireCan(Modules.USUARIOS, Actions.CREATE), validateBody
       motorista_id: req.body.motorista_id || null,
       password_hash: hash,
       password_salt: salt,
+      must_change_password: 1,
     },
     { user_id: req.user?.id },
   )
@@ -126,7 +128,12 @@ usersRouter.put(
     const exists = usuarioRepo.get(id)
     if (!exists) throw notFound('Usuario nao encontrado')
     const { salt, hash } = hashPassword(req.body.password)
-    const row = usuarioRepo.setPassword(id, { password_hash: hash, password_salt: salt }, { user_id: req.user?.id })
+    const row = usuarioRepo.setPassword(
+      id,
+      { password_hash: hash, password_salt: salt, must_change_password: 1 },
+      { user_id: req.user?.id },
+    )
+    usuarioSessaoRepo.deleteByUserId(Number(id))
     auditService.log(req, { module_name: 'usuarios', record_id: id, action_type: 'password_reset', notes: 'senha alterada via admin' })
     res.json(row)
   },
