@@ -1,4 +1,4 @@
-ode_modules/
+node_modules/
 .env
 npm-debug.log*
 *.log
@@ -6,29 +6,18 @@ npm-debug.log*
 # tmp/logs locais
 _tmp_*.log
 
-# SQLite (producao): nunca versionar banco
+# SQLite / banco
 data/
 *.db
 *.db-wal
 *.db-shm
 *.db-journal
 
-<<<<<<< HEAD
-
-=======
 # backups locais
 *.bak
->>>>>>> b446eeb (Ignore SQLite data folder (match production))
 
 # arquivo local acidental
 Novo(a) Documento de Texto.txt
 
 # arquivo local (nao e repositorio git)
-<<<<<<< HEAD
 git
-
-# backups locais
-*.bak
-=======
-git
->>>>>>> b446eeb (Ignore SQLite data folder (match production))
