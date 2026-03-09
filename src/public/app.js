@@ -2654,7 +2654,7 @@ async function renderPerfis() {
           <div class="hint" style="margin-top:6px">A base do perfil fica em <code class="mono">role_permission</code>. O usuário pode ter exceções (override) em <code class="mono">user_permission</code>.</div>
           <div class="hint" style="margin-top:6px">Na prática: <b>Override do usuário</b> → <b>Base do perfil</b> → (fallback legado). Ações: <code class="mono">V</code>, <code class="mono">C</code>, <code class="mono">U</code>, <code class="mono">D</code>.</div>
         </div>
-        <div class="toolbar">
+        <div class="toolbar col-toolbar">
           <form class="filters" id="roleForm">
             ${selectField({ label: 'Perfil', name: 'role', options: roleOptions.length ? roleOptions : [{ value: '', label: '-' }], value: firstRole, span: 'field' }).replace('field field', 'field')}
           </form>
@@ -3748,27 +3748,19 @@ async function renderRegrasDestino() {
       currentUsedCount = used
       if (used > 0) {
         if (identityHint) {
-          identityHint.textContent = `Bloqueada: regra ja usada em ${used} registro(s) de colheita.`
+          identityHint.textContent = `Regra em uso: ${used} registro(s) de colheita serão recalculados ao salvar.`
         }
 
-        // Bloquear edicao da regra, mas permitir alterar o contrato.
         if (btnSalvar) {
           btnSalvar.disabled = !canUpdate
-          btnSalvar.textContent = canUpdate ? 'Salvar contrato' : 'Somente leitura'
+          btnSalvar.textContent = canUpdate ? 'Salvar e recalcular' : 'Somente leitura'
         }
         form.querySelectorAll('input,select,textarea').forEach((el) => {
-          const name = String(el.getAttribute('name') || '')
-          const isContrato = name === 'ct_sacas' || name === 'ct_preco'
-          el.disabled = !canUpdate || !isContrato
+          el.disabled = !canUpdate
         })
 
-        // Desabilitar botoes de faixas de umidade; manter contrato
-        if (btnAddFaixa) btnAddFaixa.disabled = true
+        if (btnAddFaixa) btnAddFaixa.disabled = !canUpdate
         if (btnAddContrato) btnAddContrato.disabled = !canUpdate
-        toast(
-          'Atenção',
-          'Esta regra de destino ja esta sendo utilizada em registros de colheita. Alteracoes podem comprometer calculos historicos.',
-        )
       } else {
         if (identityHint) identityHint.textContent = `Editando regra #${currentId}`
         if (btnSalvar) {
@@ -3970,7 +3962,7 @@ async function renderRegrasDestino() {
   }
 
   btnAddFaixa.onclick = () => {
-    if (!canUpdate || currentUsedCount > 0) return
+    if (!canUpdate) return
     if (faixasEl.textContent.includes('Nenhuma faixa')) faixasEl.innerHTML = ''
     faixasEl.insertAdjacentHTML('beforeend', faixaRow())
     bindFaixaRemove()
@@ -4014,55 +4006,9 @@ async function renderRegrasDestino() {
       })
     }
 
-    // Se a regra estiver em uso, salvar SOMENTE o contrato.
     if (currentUsedCount > 0) {
-      await api('/api/contratos-silo', {
-        method: 'POST',
-        body: { safra_id, destino_id, tipo_plantio, faixas: contrato_faixas, observacoes: null },
-      })
-
-      // Recalcular para refletir o novo contrato nos valores materializados
-      try {
-        const recalc = await api('/api/viagens/recalcular-todas', {
-          method: 'POST',
-          body: { safra_id, destino_id, tipo_plantio },
-        })
-        if (Number(recalc?.errors_count || 0) > 0) {
-          openDialog({
-            title: 'Recalculo concluido (com erros)',
-            submitLabel: 'Fechar',
-            bodyHtml: `
-              <div>Total: ${escapeHtml(String(recalc.total))} | Atualizadas: ${escapeHtml(String(recalc.updated))} | Ignoradas: ${escapeHtml(String(recalc.skipped))}</div>
-              <div class="hint" style="margin-top:10px">Primeiros erros:</div>
-              <div class="table-wrap" style="margin-top:8px">
-                <table>
-                  <thead><tr><th>ID</th><th>Ficha</th><th>Safra</th><th>Destino</th><th>Plantio</th><th>Erro</th></tr></thead>
-                  <tbody>
-                    ${(Array.isArray(recalc.errors) ? recalc.errors : [])
-                      .map((e) => `<tr>
-                        <td>${escapeHtml(String(e.id))}</td>
-                        <td>${escapeHtml(String(e.ficha || ''))}</td>
-                        <td>${escapeHtml(String(e.safra_id || ''))}</td>
-                        <td>${escapeHtml(String(e.destino_id || ''))}</td>
-                        <td>${escapeHtml(String(e.tipo_plantio || ''))}</td>
-                        <td>${escapeHtml(String(e.message || ''))}</td>
-                      </tr>`)
-                      .join('')}
-                  </tbody>
-                </table>
-              </div>
-            `,
-            onSubmit: async () => {},
-          })
-        } else {
-          toast('OK', `Contrato salvo e recalculado: ${recalc.updated}/${recalc.total} colheitas.`)
-        }
-      } catch {
-        toast('Salvo', 'Contrato atualizado. (Nao foi possivel recalcular automaticamente.)')
-      }
-
-      load()
-      return
+      const msg = `Esta regra esta vinculada a ${currentUsedCount} registro(s) de colheita.\n\nAo salvar, o sistema vai recalcular todas as colheitas atreladas a esta tabela de regra de destino.\n\nDeseja continuar?`
+      if (!(await confirmAction(msg, { title: 'Atenção', confirmLabel: 'Salvar e recalcular' }))) return
     }
 
     const numOr0 = (v) => {
@@ -4175,25 +4121,6 @@ async function renderRegrasDestino() {
 
       load()
     } catch (e) {
-      if (e?.details?.code === 'REGRA_DESTINO_EM_USO') {
-        openDialog({
-          title: 'Edicao bloqueada (regra em uso)',
-          submitLabel: 'Entendi',
-          bodyHtml: `
-            <div>${escapeHtml(String(e.message || 'Edicao bloqueada.')).replace(/\n/g, '<br/>')}</div>
-            <div class="hint" style="margin-top:10px">
-              Fluxo seguro sugerido:
-              <ol style="margin:8px 0 0 18px">
-                ${(Array.isArray(e.details.fluxo_seguro) ? e.details.fluxo_seguro : [])
-                  .map((s) => `<li>${escapeHtml(String(s))}</li>`)
-                  .join('')}
-              </ol>
-            </div>
-          `,
-          onSubmit: async () => {},
-        })
-        return
-      }
       toast('Erro', String(e?.message || e))
     }
   }
@@ -4484,15 +4411,17 @@ async function renderColheitaBase(variant) {
               </select>
             </div>
           </form>
-          <div>
+          <div class="toolbar-actions col-toolbar-actions">
             <button class="btn ghost" id="btnApply" type="button">Aplicar</button>
           </div>
         </div>
 
         <div class="grid" id="totals"></div>
 
+        <div class="mobile-cards" id="colheitaCards" style="margin-top:12px;display:none"></div>
+
         <div class="table-wrap" style="margin-top:12px">
-          <table>
+          <table id="tblColheita">
             <thead>
               <tr>
                 <th class="actions"></th>
@@ -4523,6 +4452,7 @@ async function renderColheitaBase(variant) {
   `)
 
   const tbody = view.querySelector('#tbody')
+  const colheitaCardsEl = view.querySelector('#colheitaCards')
   const totalsEl = view.querySelector('#totals')
   const filtersEl = view.querySelector('#filtersForm')
 
@@ -4705,8 +4635,50 @@ async function renderColheitaBase(variant) {
       </tr>`
     }
 
+    const cardHtml = (v, opts = {}) => {
+      const isChild = Boolean(opts.isChild)
+      const showToggle = Boolean(opts.showToggle)
+      const toggled = Boolean(opts.toggled)
+      const umidRaw = Number(v.umidade_pct)
+      const umid = Number.isFinite(umidRaw) && umidRaw > 1 ? umidRaw / 100 : umidRaw
+      const pb = Number(v.peso_bruto_kg)
+      const pls = Number(v.peso_limpo_seco_kg)
+      const descPct = Number.isFinite(pb) && pb > 0 && Number.isFinite(pls) ? clamp01(1 - pls / pb) * 100 : 0
+      const fichaDisp = v.display_ficha ? String(v.display_ficha) : String(v.ficha || '')
+      const compraSilo = v.valor_compra_por_saca_aplicado ?? v.regra_valor_compra_por_saca ?? null
+      const toggleBtn = showToggle
+        ? `<button class="btn ghost small" data-act="toggle" data-id="${v.id}">${toggled ? 'Recolher rateio' : 'Expandir rateio'}</button>`
+        : ''
+      const parentId = opts.parentId ?? v.id
+      const childAttrs = isChild ? ` data-parent-card="${parentId}" style="${expanded.has(parentId) ? '' : 'display:none'}"` : ''
+      return `<div class="mobile-card${isChild ? ' child' : ''}"${childAttrs}>
+        <div class="mobile-card-head">
+          <div>
+            <div class="mobile-card-title"><code class="mono">${escapeHtml(fichaDisp)}</code> - ${escapeHtml(v.talhao_nome || '')}</div>
+            <div class="mobile-card-sub">${escapeHtml(v.destino_local || '-')} • ${escapeHtml(v.motorista_nome || '-')}</div>
+          </div>
+          <div class="mobile-card-actions">
+            ${!isChild ? toggleBtn : ''}
+            <button class="btn ghost small" data-act="edit" data-id="${v.id}" ${v.rateio_index !== undefined ? `data-rateio-index="${v.rateio_index}"` : ''}>Editar</button>
+            ${!isChild && !isMotoristaUser ? `<button class="btn ghost small" data-act="hist" data-id="${v.id}">Histórico</button><button class="btn ghost small danger" data-act="del" data-id="${v.id}">Excluir</button>` : ''}
+          </div>
+        </div>
+        <div class="mobile-kv">
+          <div><span>Saída</span><b>${escapeHtml(String(v.data_saida || '-'))}</b></div>
+          <div><span>Umidade</span><b>${Number.isFinite(umid) ? `${fmtNum(umid * 100, 2)}%` : '-'}</b></div>
+          <div><span>Peso bruto</span><b>${fmtKg(v.peso_bruto_kg)}</b></div>
+          <div><span>Peso limpo</span><b>${fmtKg(v.peso_limpo_seco_kg)}</b></div>
+          <div><span>Desconto</span><b>${fmtNum(descPct, 2)}%</b></div>
+          <div><span>Sacas</span><b>${fmtNum(v.sacas, 2)}</b></div>
+          <div><span>Frete</span><b>${fmtMoney(v.sub_total_frete)}</b></div>
+          <div><span>Compra</span><b>${compraSilo === null || compraSilo === undefined ? '-' : fmtMoney(compraSilo)}</b></div>
+        </div>
+      </div>`
+    }
+
     if (viewMode === 'grouped') {
       const parts = []
+      const cardParts = []
       for (const g of data.items || []) {
         const isRateado = Boolean(g.is_rateado)
         const kids = Array.isArray(g.children) ? g.children : []
@@ -4723,6 +4695,7 @@ async function renderColheitaBase(variant) {
           pct_rateio_100: null,
         }
         parts.push(rowHtml(parent, { showToggle: isRateado, toggled: expanded.has(g.id) }))
+        cardParts.push(cardHtml(parent, { showToggle: isRateado, toggled: expanded.has(g.id) }))
         if (isRateado) {
           for (const c of kids) {
             parts.push(rowHtml({
@@ -4731,12 +4704,20 @@ async function renderColheitaBase(variant) {
               destino_local: g.destino_local,
               motorista_nome: g.motorista_nome,
             }, { isChild: true }))
+            cardParts.push(cardHtml({
+              ...c,
+              safra_nome: g.safra_nome,
+              destino_local: g.destino_local,
+              motorista_nome: g.motorista_nome,
+            }, { isChild: true, parentId: g.id }))
           }
         }
       }
       tbody.innerHTML = parts.join('')
+      if (colheitaCardsEl) colheitaCardsEl.innerHTML = cardParts.join('')
     } else if (viewMode === 'flat') {
       tbody.innerHTML = (data.items || []).map((v) => rowHtml(v)).join('')
+      if (colheitaCardsEl) colheitaCardsEl.innerHTML = (data.items || []).map((v) => cardHtml(v)).join('')
     } else {
       // legacy
       tbody.innerHTML = (data.items || []).map((v) => rowHtml({
@@ -4746,27 +4727,33 @@ async function renderColheitaBase(variant) {
         pct_rateio_100: null,
         is_rateado: false,
       })).join('')
+      if (colheitaCardsEl) colheitaCardsEl.innerHTML = (data.items || []).map((v) => cardHtml({
+        ...v,
+        display_ficha: v.ficha,
+        ficha_original: v.ficha,
+        pct_rateio_100: null,
+        is_rateado: false,
+      })).join('')
     }
 
     if (!data.items.length) tbody.innerHTML = `<tr><td colspan="18">Nenhuma viagem.</td></tr>`
+    if (!data.items.length && colheitaCardsEl) colheitaCardsEl.innerHTML = `<div class="mobile-empty">Nenhuma viagem.</div>`
 
-    tbody.querySelectorAll('[data-act]').forEach((btn) => {
+    ;[tbody, colheitaCardsEl].forEach((root) => root?.querySelectorAll('[data-act]').forEach((btn) => {
       btn.onclick = async () => {
         const id = Number(btn.dataset.id)
         const act = btn.dataset.act
         if (act === 'toggle') {
           if (expanded.has(id)) {
             expanded.delete(id)
-            btn.textContent = '▶'
-            tbody.querySelectorAll(`tr[data-parent="${id}"]`).forEach((tr) => {
-              tr.style.display = 'none'
-            })
+            btn.textContent = btn.classList.contains('btn') ? 'Expandir rateio' : '▶'
+            tbody.querySelectorAll(`tr[data-parent="${id}"]`).forEach((tr) => { tr.style.display = 'none' })
+            colheitaCardsEl?.querySelectorAll(`[data-parent-card="${id}"]`).forEach((el) => { el.style.display = 'none' })
           } else {
             expanded.add(id)
-            btn.textContent = '▼'
-            tbody.querySelectorAll(`tr[data-parent="${id}"]`).forEach((tr) => {
-              tr.style.display = ''
-            })
+            btn.textContent = btn.classList.contains('btn') ? 'Recolher rateio' : '▼'
+            tbody.querySelectorAll(`tr[data-parent="${id}"]`).forEach((tr) => { tr.style.display = '' })
+            colheitaCardsEl?.querySelectorAll(`[data-parent-card="${id}"]`).forEach((el) => { el.style.display = '' })
           }
           return
         }
@@ -4792,7 +4779,7 @@ async function renderColheitaBase(variant) {
           }
         }
       }
-    })
+    }))
   }
 
   view.querySelector('#btnApply').onclick = refreshList
@@ -6451,13 +6438,13 @@ async function renderRelatorios() {
       <div class="panel-body">
         <div class="grid">
           <div class="span12">
-            <div class="toolbar">
+            <div class="toolbar rel-toolbar">
               <form class="filters" id="rFilters">
                 ${selectField({ label: 'Safra', name: 'safra_id', options: safraOpts, value: safraId, span: 'field' }).replace('field field', 'field')}
                 <div class="field"><div class="label">De</div><input name="de" type="date" /></div>
                 <div class="field"><div class="label">Até</div><input name="ate" type="date" /></div>
               </form>
-              <div>
+              <div class="toolbar-actions rel-toolbar-actions">
                 <button class="btn ghost" id="btnRun" type="button">Atualizar</button>
                 <button class="btn ghost" id="btnExpTal" type="button">Exportar resumo</button>
                 <button class="btn ghost" id="btnExpDes" type="button">Exportar destinos</button>
@@ -6470,8 +6457,9 @@ async function renderRelatorios() {
           </div>
 
           <div class="span12">
+            <div class="mobile-cards" id="rTalCards" style="margin-bottom:10px;display:none"></div>
             <div class="table-wrap">
-              <table>
+              <table id="tblResumoTalhao">
                 <thead><tr><th colspan="9">Resumo por talhão</th></tr>
                   <tr><th>Talhão</th><th>Local</th><th>Área (ha)</th><th>Área colhida</th><th>Sacas</th><th>Prod (sc/ha)</th><th>Prod ajust.</th><th>Peso limpo/seco</th><th>Frete</th></tr></thead>
                 <tbody id="rtalhao"><tr><td colspan="9">Carregando...</td></tr></tbody>
@@ -6480,18 +6468,20 @@ async function renderRelatorios() {
           </div>
 
           <div class="span12">
+            <div class="mobile-cards" id="rDesCards" style="margin-bottom:10px;display:none"></div>
             <div class="table-wrap">
-              <table>
+              <table id="tblEntregasDestino">
                  <thead><tr><th colspan="6">Entregas por destino</th></tr>
                     <tr><th>Destino</th><th>Contrato (sacas)</th><th>Entrega (sacas)</th><th>Data entrega</th><th>Peso limpo/seco</th><th>Status</th></tr></thead>
-                 <tbody id="rdest"><tr><td colspan="5">Carregando...</td></tr></tbody>
+                 <tbody id="rdest"><tr><td colspan="6">Carregando...</td></tr></tbody>
                </table>
              </div>
            </div>
 
           <div class="span12">
+            <div class="mobile-cards" id="rPayCards" style="margin-bottom:10px;display:none"></div>
             <div class="table-wrap">
-              <table>
+              <table id="tblPagMotoristas">
                 <thead><tr><th colspan="4">Pagamento de motoristas (por data_saida)</th></tr>
                   <tr><th>Motorista</th><th>Quantidade</th><th>Valor</th><th>Placa</th></tr></thead>
                 <tbody id="rpay"><tr><td colspan="4">Carregando...</td></tr></tbody>
@@ -6514,6 +6504,9 @@ async function renderRelatorios() {
   const rTal = view.querySelector('#rtalhao')
   const rDes = view.querySelector('#rdest')
   const rPay = view.querySelector('#rpay')
+  const rTalCards = view.querySelector('#rTalCards')
+  const rDesCards = view.querySelector('#rDesCards')
+  const rPayCards = view.querySelector('#rPayCards')
 
   // Restore route state (visible to user)
   try {
@@ -6554,6 +6547,9 @@ async function renderRelatorios() {
         rTal.innerHTML = '<tr><td colspan="9" class="hint">Selecione uma safra.</td></tr>'
         rDes.innerHTML = '<tr><td colspan="5" class="hint">Selecione uma safra.</td></tr>'
         rPay.innerHTML = '<tr><td colspan="4" class="hint">Selecione uma safra.</td></tr>'
+        if (rTalCards) rTalCards.innerHTML = '<div class="mobile-empty">Selecione uma safra.</div>'
+        if (rDesCards) rDesCards.innerHTML = '<div class="mobile-empty">Selecione uma safra.</div>'
+        if (rPayCards) rPayCards.innerHTML = '<div class="mobile-empty">Selecione uma safra.</div>'
         return
       }
 
@@ -6631,7 +6627,52 @@ async function renderRelatorios() {
       })
       .join('')
 
-      rPay.innerHTML = pay
+      if (rDesCards) {
+        rDesCards.innerHTML = desItems.length
+          ? desItems.map((d) => {
+              const trava = d.trava_sacas
+              const entrega = Number(d.entrega_sacas || 0)
+              let status = 'OK'
+              if (trava && trava > 0) {
+                const ratio = entrega / trava
+                if (entrega > trava) status = 'Limite contratado ultrapassado'
+                else if (ratio >= 1) status = 'Limite contratado atingido'
+                else if (ratio >= 0.85) status = 'Próximo do limite contratado'
+              }
+              return `<div class="mobile-card">
+                <div class="mobile-card-head"><div><div class="mobile-card-title">${escapeHtml(d.destino_local || '')}</div><div class="mobile-card-sub">Entrega até ${escapeHtml(d.ultima_data_entrega || '-')}</div></div></div>
+                <div class="mobile-kv">
+                  <div><span>Contrato</span><b>${trava === null ? '-' : fmtNum(trava, 2)}</b></div>
+                  <div><span>Entrega</span><b>${fmtNum(d.entrega_sacas, 2)}</b></div>
+                  <div><span>Peso limpo</span><b>${fmtKg(d.peso_limpo_seco_kg)}</b></div>
+                  <div><span>Status</span><b>${escapeHtml(status)}</b></div>
+                </div>
+              </div>`
+            }).join('')
+          : '<div class="mobile-empty">Nenhum dado.</div>'
+      }
+
+      if (rTalCards) {
+        rTalCards.innerHTML = talItems.length
+          ? talItems.map((t) => {
+              const pct = Number(t.pct_area_colhida ?? 0) * 100
+              const areaColhidaHa = Number(t.hectares || 0) * Number(t.pct_area_colhida ?? 0)
+              return `<div class="mobile-card">
+                <div class="mobile-card-head"><div><div class="mobile-card-title">${escapeHtml(t.talhao_nome || '')}</div><div class="mobile-card-sub">${escapeHtml(t.talhao_local || '-')}</div></div></div>
+                <div class="mobile-kv">
+                  <div><span>Área</span><b>${fmtNum(t.hectares, 2)} ha</b></div>
+                  <div><span>Colhida</span><b>${fmtNum(areaColhidaHa, 2)} ha (${fmtNum(pct, 0)}%)</b></div>
+                  <div><span>Sacas</span><b>${fmtNum(t.sacas, 2)}</b></div>
+                  <div><span>Prod</span><b>${fmtNum(t.produtividade_sacas_ha, 2)} sc/ha</b></div>
+                  <div><span>Prod ajust.</span><b>${fmtNum(t.produtividade_ajustada_sacas_ha, 2)} sc/ha</b></div>
+                  <div><span>Frete</span><b>${fmtMoney(t.sub_total_frete)}</b></div>
+                </div>
+              </div>`
+            }).join('')
+          : '<div class="mobile-empty">Nenhum dado.</div>'
+      }
+
+    rPay.innerHTML = pay
       .map((p) => `<tr>
         <td>${escapeHtml(p.motorista_nome)}</td>
         <td>${p.quantidade}</td>
@@ -6639,6 +6680,18 @@ async function renderRelatorios() {
         <td>${escapeHtml(p.placa || '')}</td>
       </tr>`)
       .join('')
+
+      if (rPayCards) {
+        rPayCards.innerHTML = (pay || []).length
+          ? (pay || []).map((p) => `<div class="mobile-card">
+              <div class="mobile-card-head"><div><div class="mobile-card-title">${escapeHtml(p.motorista_nome || '')}</div><div class="mobile-card-sub">${escapeHtml(p.placa || '-')}</div></div></div>
+              <div class="mobile-kv">
+                <div><span>Quantidade</span><b>${escapeHtml(String(p.quantidade || 0))}</b></div>
+                <div><span>Valor</span><b>${fmtMoney(p.valor)}</b></div>
+              </div>
+            </div>`).join('')
+          : '<div class="mobile-empty">Nenhum dado.</div>'
+      }
     } catch (e) {
       toast('Erro', String(e?.message || e))
     }
@@ -7624,7 +7677,7 @@ async function renderProducao() {
             <div class="panel-title">Controle de producao e divisao de sacas</div>
             <div class="panel-sub">Por talhao e por participante (dono/meeiro/parceiro). Custos preferencialmente em sacas (sem dinheiro); opcionalmente em R$ (vira sacas equivalentes).</div>
           </div>
-          <div class="panel-actions">
+          <div class="panel-actions producao-head-actions">
             ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safra_id, span: 'col6' })}
           </div>
         </div>
@@ -7697,7 +7750,7 @@ async function renderProducao() {
           <button class="btn" type="button" id="btnNew">Novo participante</button>
         </div>
         <div class="table-wrap" style="margin-top:10px">
-          <table>
+          <table id="tblProdParticipantes">
             <thead><tr><th>Nome</th><th>Tipo</th><th>Documento</th><th>Ativo</th><th class="actions"></th></tr></thead>
             <tbody>
               ${items
@@ -7789,7 +7842,7 @@ async function renderProducao() {
           <button class="btn" type="button" id="btnNew">Nova politica</button>
         </div>
         <div class="table-wrap" style="margin-top:10px">
-          <table>
+          <table id="tblProdPoliticas">
             <thead><tr><th>Nome</th><th>Descricao</th><th class="actions"></th></tr></thead>
             <tbody>
               ${items
@@ -7947,7 +8000,7 @@ async function renderProducao() {
           <button class="btn" type="button" id="btnNew">Novo acordo</button>
         </div>
         <div class="table-wrap" style="margin-top:10px">
-          <table>
+          <table id="tblProdAcordos">
             <thead><tr><th>Talhao</th><th>Plantio</th><th>Politica</th><th class="actions"></th></tr></thead>
             <tbody>
               ${(itens || [])
@@ -8162,7 +8215,7 @@ async function renderProducao() {
           <button class="btn" type="button" id="btnNew">Nova venda</button>
         </div>
         <div class="table-wrap" style="margin-top:10px">
-          <table>
+          <table id="tblProdVendas">
             <thead><tr><th>Data</th><th style="min-width:220px">Participante</th><th style="min-width:280px">Destino / Comprador</th><th class="t-right">Sacas</th><th class="t-right">R$/sc</th><th class="t-right">Total</th><th class="actions"></th></tr></thead>
             <tbody>
               ${(itens || [])
@@ -8305,7 +8358,7 @@ async function renderProducao() {
           <button class="btn" type="button" id="btnNew">Novo custo</button>
         </div>
         <div class="table-wrap" style="margin-top:10px">
-          <table>
+          <table id="tblProdCustos">
             <thead><tr><th>Data</th><th>Talhao</th><th>Tipo</th><th class="t-right">R$</th><th class="t-right">Sacas</th><th class="actions"></th></tr></thead>
             <tbody>
               ${(itens || [])
@@ -8421,7 +8474,7 @@ async function renderProducao() {
             <div class="stat">
               <div class="stat-k">Saldo por participante</div>
               <div class="table-wrap" style="margin-top:10px">
-                <table>
+                <table id="tblSaldoParticipantes">
                   <thead><tr><th>Participante</th><th class="t-right">Credito</th><th class="t-right">Debito</th><th class="t-right">Saldo</th><th class="actions"></th></tr></thead>
                   <tbody>
                     ${rowsP
@@ -8446,7 +8499,7 @@ async function renderProducao() {
             <div class="stat">
               <div class="stat-k">Saldo por talhao</div>
               <div class="table-wrap" style="margin-top:10px">
-                <table>
+                <table id="tblSaldoTalhoes">
                   <thead><tr><th>Talhao</th><th class="t-right">Credito</th><th class="t-right">Debito</th><th class="t-right">Saldo</th><th class="actions"></th></tr></thead>
                   <tbody>
                     ${rowsT
@@ -8471,7 +8524,7 @@ async function renderProducao() {
             <div class="stat">
               <div class="stat-k">Saldo por destino (armazem)</div>
               <div class="table-wrap" style="margin-top:10px">
-                <table>
+                <table id="tblSaldoDestinos">
                   <thead><tr><th>Destino</th><th class="t-right">Credito</th><th class="t-right">Debito</th><th class="t-right">Saldo</th></tr></thead>
                   <tbody>
                     ${(rowsD || [])
@@ -8775,7 +8828,7 @@ async function renderAuditoria() {
                 <option value="1">Somente críticos</option>
               </select>
             </div>
-            <div class="field" style="display:flex;gap:10px">
+            <div class="field audit-quick-range" style="display:flex;gap:10px">
               <button class="btn ghost" id="btnToday" type="button">Hoje</button>
               <button class="btn ghost" id="btnYest" type="button">Ontem</button>
               <button class="btn ghost" id="btn7" type="button">7d</button>
@@ -8814,6 +8867,8 @@ async function renderAuditoria() {
           </table>
         </div>
 
+        <div class="mobile-cards" id="aCardsList" style="margin-top:12px;display:none"></div>
+
         <div class="pager">
           <div class="hint" id="aCount"></div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -8836,6 +8891,7 @@ async function renderAuditoria() {
   const elMod = view.querySelector('#aMod')
   const elAct = view.querySelector('#aAct')
   const elRid = view.querySelector('#aRid')
+  const cardsListEl = view.querySelector('#aCardsList')
   const elQ = view.querySelector('#aQ')
   const elCrit = view.querySelector('#aCrit')
   const elLimit = view.querySelector('#aLimit')
@@ -8944,6 +9000,7 @@ async function renderAuditoria() {
 
     if (!Array.isArray(items) || !items.length) {
       body.innerHTML = '<tr><td colspan="9">Nenhum evento.</td></tr>'
+      if (cardsListEl) cardsListEl.innerHTML = '<div class="mobile-empty">Nenhum evento.</div>'
       return
     }
 
@@ -8972,19 +9029,52 @@ async function renderAuditoria() {
       })
       .join('')
 
-    body.querySelectorAll('button[data-act="adetail"]').forEach((b) => {
+    if (cardsListEl) {
+      cardsListEl.innerHTML = items
+        .map((r2) => {
+          const who = r2.changed_by_nome || r2.changed_by_username || r2.changed_by_name_snapshot || '-'
+          const sev = auditSeverity(r2)
+          const openHash = auditJumpHash(r2)
+          const recordTxt = r2.record_id == null ? '-' : String(r2.record_id)
+          return `<div class="mobile-card">
+            <div class="mobile-card-head">
+              <div>
+                <div class="mobile-card-title">${escapeHtml(fmtDateTimeBr(r2.created_at))}</div>
+                <div class="mobile-card-sub">${escapeHtml(String(who || '-'))}</div>
+              </div>
+              <div class="mobile-card-actions">
+                <button class="btn ghost small" data-act="adetail" data-id="${escapeHtml(String(r2.id))}">Detalhes</button>
+              </div>
+            </div>
+            <div class="mobile-kv">
+              <div><span>Módulo</span><b>${escapeHtml(String(r2.module_name || ''))}</b></div>
+              <div><span>Registro</span><b>${escapeHtml(recordTxt)}</b></div>
+              <div><span>Ação</span><b>${escapeHtml(String(r2.action_type || ''))}</b></div>
+              <div><span>Criticidade</span><b>${escapeHtml(sev === 'high' ? 'Alta' : sev === 'med' ? 'Média' : 'Baixa')}</b></div>
+            </div>
+            <div class="hint" style="margin-top:8px">${escapeHtml(String(r2.summary || r2.notes || ''))}</div>
+            <div class="mobile-card-actions" style="margin-top:10px">
+              <button class="btn ghost small" data-act="ahist" data-mod="${escapeHtml(String(r2.module_name || ''))}" data-rid="${escapeHtml(recordTxt)}" ${r2.record_id == null ? 'disabled' : ''}>Histórico</button>
+              <button class="btn ghost small" data-act="aopen" data-hash="${escapeHtml(openHash || '')}" ${openHash ? '' : 'disabled'}>Abrir</button>
+            </div>
+          </div>`
+        })
+        .join('')
+    }
+
+    ;[body, cardsListEl].forEach((root) => root?.querySelectorAll('button[data-act="adetail"]').forEach((b) => {
       b.onclick = () => openAuditDetail(Number(b.dataset.id))
-    })
-    body.querySelectorAll('button[data-act="ahist"]').forEach((b) => {
+    }))
+    ;[body, cardsListEl].forEach((root) => root?.querySelectorAll('button[data-act="ahist"]').forEach((b) => {
       b.onclick = () => openAuditHistory({ module_name: String(b.dataset.mod || ''), record_id: Number(b.dataset.rid) })
-    })
-    body.querySelectorAll('button[data-act="aopen"]').forEach((b) => {
+    }))
+    ;[body, cardsListEl].forEach((root) => root?.querySelectorAll('button[data-act="aopen"]').forEach((b) => {
       b.onclick = () => {
         const h = String(b.dataset.hash || '')
         if (!h) return
         window.location.hash = h
       }
-    })
+    }))
   }
 
   // Header actions
@@ -9248,6 +9338,7 @@ async function applyMenuAccess() {
 const MENU_REFRESH_MS = 20000
 let _lastMenuAccessAt = 0
 let _menuRefreshPromise = null
+const compactViewportQuery = window.matchMedia('(max-width: 920px)')
 
 async function refreshMenuAccessIfNeeded({ force = false } = {}) {
   const now = Date.now()
@@ -9297,6 +9388,7 @@ async function navigate() {
   const fn = routes[route] || routes.fazenda
   try {
     await fn()
+    if (compactViewportQuery.matches) setNavCollapsed(true)
   } catch (e) {
     setView(`<section class="panel"><div class="panel-head"><div><div class="panel-title">Erro</div><div class="panel-sub">Falha ao carregar a tela.</div></div></div><div class="panel-body"><code class="mono">${escapeHtml(e.message)}</code></div></section>`)
   }
@@ -9306,14 +9398,16 @@ btnRefresh.onclick = () => refreshMenuAccessIfNeeded({ force: true }).finally(()
 
 function setNavCollapsed(collapsed) {
   document.body.classList.toggle('nav-collapsed', collapsed)
+   document.body.classList.toggle('nav-open', !collapsed)
   try {
     localStorage.setItem('nav_collapsed', collapsed ? '1' : '0')
   } catch {
     // ignore
   }
   if (btnToggleNav) {
-    btnToggleNav.textContent = collapsed ? 'Menu' : 'Recolher'
-    btnToggleNav.title = collapsed ? 'Expandir menu' : 'Recolher menu'
+    const compact = compactViewportQuery.matches
+    btnToggleNav.textContent = collapsed ? 'Menu' : compact ? 'Fechar' : 'Recolher'
+    btnToggleNav.title = collapsed ? 'Expandir menu' : compact ? 'Fechar menu' : 'Recolher menu'
   }
 }
 
@@ -9328,8 +9422,32 @@ if (btnToggleNav) {
   } catch {
     // ignore
   }
-  setNavCollapsed(initial)
+  setNavCollapsed(compactViewportQuery.matches ? true : initial)
 }
+
+compactViewportQuery.addEventListener('change', (e) => {
+  if (e.matches) {
+    setNavCollapsed(true)
+  } else {
+    let initial = false
+    try {
+      initial = localStorage.getItem('nav_collapsed') === '1'
+    } catch {
+      // ignore
+    }
+    setNavCollapsed(initial)
+  }
+})
+
+document.addEventListener('click', (e) => {
+  if (!compactViewportQuery.matches) return
+  if (document.body.classList.contains('nav-collapsed')) return
+  const t = e.target
+  if (!(t instanceof Element)) return
+  if (t.closest('.nav')) return
+  if (t.closest('#btnToggleNav')) return
+  setNavCollapsed(true)
+})
 window.addEventListener('hashchange', navigate)
 
 applyMenuAccess().finally(() => {

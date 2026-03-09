@@ -121,52 +121,13 @@ destinoRegrasRouter.post(
   const body = req.body
   const tipo_plantio = String(body.tipo_plantio || '').trim().toUpperCase()
 
-  // Se ja existe regra para esta combinacao e ela ja foi usada em colheitas,
-  // bloquear alteracao (upsert atualizaria retroativamente).
+  // Se ja existe regra para esta combinacao, atualizar a mesma regra.
+  // Alteracoes retroativas sao permitidas, mas a UI deve avisar e recalcular as colheitas vinculadas.
   const existing = destinoRegraRepo.getBySafraDestinoPlantio({
     safra_id: body.safra_id,
     destino_id: body.destino_id,
     tipo_plantio,
   })
-  if (existing) {
-    const used = db
-      .prepare(
-        `SELECT COUNT(*) as c
-         FROM viagem v
-         JOIN safra s ON s.id = v.safra_id
-         WHERE v.safra_id=@safra_id
-           AND v.destino_id=@destino_id
-           AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio`,
-      )
-      .get({
-        safra_id: body.safra_id,
-        destino_id: body.destino_id,
-        tipo_plantio,
-      })?.c
-
-    if (Number(used || 0) > 0) {
-      throw conflict(
-        'Esta regra de destino ja esta sendo utilizada em registros de colheita.\nAlteracoes podem comprometer calculos historicos (ex.: umidade, descontos e limites).',
-        {
-          code: 'REGRA_DESTINO_EM_USO',
-          used_count: Number(used || 0),
-          safra_id: body.safra_id,
-          destino_id: body.destino_id,
-          tipo_plantio,
-          orientacao: [
-            'Corrigir os registros de colheita vinculados.',
-            'Ou criar uma nova regra de destino.',
-            'Ou copiar a safra para uma nova versao e ajustar os registros.',
-          ],
-          fluxo_seguro: [
-            'Criar copia da safra com outro nome',
-            'Ajustar as regras de destino da nova safra',
-            'Alterar os registros de colheita para apontar para a nova safra/regra',
-          ],
-        },
-      )
-    }
-  }
 
   const base = {
     safra_id: body.safra_id,
@@ -226,7 +187,7 @@ destinoRegrasRouter.post(
     old_values: oldRow,
     new_values: out,
   })
-  res.status(201).json(out)
+  res.status(oldRow ? 200 : 201).json(out)
   },
 )
 
@@ -244,47 +205,6 @@ destinoRegrasRouter.put(
 
     const exists = destinoRegraRepo.getPlantioById(id)
     if (!exists) throw notFound('Regra (plantio) nao encontrada')
-
-    // Regra obrigatoria: se ja existe qualquer colheita vinculada a esta regra,
-    // bloquear edicao para evitar alteracao retroativa.
-    const used = db
-      .prepare(
-        `SELECT COUNT(*) as c
-         FROM viagem v
-         JOIN safra s ON s.id = v.safra_id
-         WHERE v.safra_id=@safra_id
-           AND v.destino_id=@destino_id
-           AND UPPER(COALESCE(NULLIF(v.tipo_plantio, ''), NULLIF(s.plantio, ''))) = @tipo_plantio
-           AND v.id IS NOT NULL`,
-      )
-      .get({
-        safra_id: exists.safra_id,
-        destino_id: exists.destino_id,
-        tipo_plantio: String(exists.tipo_plantio || '').trim().toUpperCase(),
-      })?.c
-
-    if (Number(used || 0) > 0) {
-      throw conflict(
-        'Esta regra de destino ja esta sendo utilizada em registros de colheita.\nAlteracoes podem comprometer calculos historicos (ex.: umidade, descontos e limites).',
-        {
-          code: 'REGRA_DESTINO_EM_USO',
-          used_count: Number(used || 0),
-          safra_id: exists.safra_id,
-          destino_id: exists.destino_id,
-          tipo_plantio: String(exists.tipo_plantio || '').trim().toUpperCase(),
-          orientacao: [
-            'Corrigir os registros de colheita vinculados.',
-            'Ou criar uma nova regra de destino.',
-            'Ou copiar a safra para uma nova versao e ajustar os registros.',
-          ],
-          fluxo_seguro: [
-            'Criar copia da safra com outro nome',
-            'Ajustar as regras de destino da nova safra',
-            'Alterar os registros de colheita para apontar para a nova safra/regra',
-          ],
-        },
-      )
-    }
 
     // conflito de identidade (duplicacao)
     const other = db

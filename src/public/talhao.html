@@ -38,6 +38,15 @@
       .section .hint{color:rgba(255,255,255,.70)}
       .table-wrap{border-color:rgba(255,255,255,.10)}
       table{background:rgba(255,255,255,.82)}
+      @media (max-width: 560px){
+        .public{padding:12px}
+        .hero-actions{width:100%}
+        .hero-actions .btn{flex:1 1 100%}
+        .badge{max-width:100%}
+        .badge code{overflow-wrap:anywhere;word-break:break-word}
+        .kv{grid-template-columns:1fr;gap:4px}
+        .mstat-grid{grid-template-columns:1fr}
+      }
     </style>
   </head>
   <body>
