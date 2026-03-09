@@ -126,17 +126,78 @@ export const destinoRegraRepo = {
   listPlantio({ safra_id } = {}) {
     return db
       .prepare(
-        `SELECT
-           rp.*, s.safra as safra_nome,
-           d.local as destino_local, d.codigo as destino_codigo
-         FROM destino_regra_plantio rp
-         JOIN safra s ON s.id = rp.safra_id
-         JOIN destino d ON d.id = rp.destino_id
-          WHERE (@safra_id IS NULL OR rp.safra_id = @safra_id)
-          ORDER BY
-            CASE WHEN rp.updated_at IS NULL OR rp.updated_at='' THEN 1 ELSE 0 END,
-            rp.updated_at DESC,
-            rp.id DESC`,
+        `SELECT * FROM (
+           SELECT
+             rp.id,
+             rp.safra_id,
+             rp.destino_id,
+             rp.tipo_plantio,
+             rp.custo_silo_por_saca,
+             rp.custo_terceiros_por_saca,
+             rp.impureza_limite_pct,
+             rp.ardidos_limite_pct,
+             rp.queimados_limite_pct,
+             rp.avariados_limite_pct,
+             rp.esverdiados_limite_pct,
+             rp.quebrados_limite_pct,
+             rp.created_at,
+             rp.updated_at,
+             rp.created_by_user_id,
+             rp.updated_by_user_id,
+             s.safra as safra_nome,
+             d.local as destino_local,
+             d.codigo as destino_codigo,
+             0 as orphan_contract,
+             c.id as contrato_silo_id,
+             (SELECT COUNT(*) FROM contrato_silo_faixa cf WHERE cf.contrato_silo_id = c.id) as contrato_faixas_count
+           FROM destino_regra_plantio rp
+           JOIN safra s ON s.id = rp.safra_id
+           JOIN destino d ON d.id = rp.destino_id
+           LEFT JOIN contrato_silo c
+             ON c.safra_id = rp.safra_id
+            AND c.destino_id = rp.destino_id
+            AND UPPER(c.tipo_plantio) = UPPER(rp.tipo_plantio)
+           WHERE (@safra_id IS NULL OR rp.safra_id = @safra_id)
+
+           UNION ALL
+
+           SELECT
+             -c.id as id,
+             c.safra_id,
+             c.destino_id,
+             c.tipo_plantio,
+             NULL as custo_silo_por_saca,
+             NULL as custo_terceiros_por_saca,
+             NULL as impureza_limite_pct,
+             NULL as ardidos_limite_pct,
+             NULL as queimados_limite_pct,
+             NULL as avariados_limite_pct,
+             NULL as esverdiados_limite_pct,
+             NULL as quebrados_limite_pct,
+             c.created_at,
+             c.updated_at,
+             NULL as created_by_user_id,
+             NULL as updated_by_user_id,
+             s.safra as safra_nome,
+             d.local as destino_local,
+             d.codigo as destino_codigo,
+             1 as orphan_contract,
+             c.id as contrato_silo_id,
+             (SELECT COUNT(*) FROM contrato_silo_faixa cf WHERE cf.contrato_silo_id = c.id) as contrato_faixas_count
+           FROM contrato_silo c
+           JOIN safra s ON s.id = c.safra_id
+           JOIN destino d ON d.id = c.destino_id
+           LEFT JOIN destino_regra_plantio rp
+             ON rp.safra_id = c.safra_id
+            AND rp.destino_id = c.destino_id
+            AND UPPER(rp.tipo_plantio) = UPPER(c.tipo_plantio)
+           WHERE rp.id IS NULL
+             AND (@safra_id IS NULL OR c.safra_id = @safra_id)
+         ) x
+         ORDER BY
+           CASE WHEN x.updated_at IS NULL OR x.updated_at='' THEN 1 ELSE 0 END,
+           x.updated_at DESC,
+           x.id DESC`,
       )
       .all({ safra_id: safra_id ?? null })
   },

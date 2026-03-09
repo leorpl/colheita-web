@@ -90,6 +90,18 @@ export const FreteSchemas = {
     from_safra_id: z.coerce.number().int().positive(),
     to_safra_id: z.coerce.number().int().positive(),
   }),
+  BulkDeleteSafraBody: z.object({
+    safra_id: z.coerce.number().int().positive(),
+    items: z
+      .array(
+        z.object({
+          motorista_id: z.coerce.number().int().positive(),
+          destino_id: z.coerce.number().int().positive(),
+        }),
+      )
+      .max(10_000)
+      .default([]),
+  }),
   BulkUpsertBody: z.object({
     safra_id: z.coerce.number().int().positive(),
     items: z
@@ -98,6 +110,28 @@ export const FreteSchemas = {
           motorista_id: z.coerce.number().int().positive(),
           destino_id: z.coerce.number().int().positive(),
           valor_por_saca: z.coerce.number().min(0).max(999_999),
+        }),
+      )
+      .max(10_000)
+      .default([]),
+  }),
+  BulkSaveBody: z.object({
+    safra_id: z.coerce.number().int().positive(),
+    items: z
+      .array(
+        z.object({
+          motorista_id: z.coerce.number().int().positive(),
+          destino_id: z.coerce.number().int().positive(),
+          valor_por_saca: z.coerce.number().min(0).max(999_999),
+        }),
+      )
+      .max(10_000)
+      .default([]),
+    delete_items: z
+      .array(
+        z.object({
+          motorista_id: z.coerce.number().int().positive(),
+          destino_id: z.coerce.number().int().positive(),
         }),
       )
       .max(10_000)

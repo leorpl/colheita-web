@@ -16,6 +16,14 @@ export const freteRepo = {
   get(id) {
     return db.prepare('SELECT * FROM frete WHERE id = ?').get(id)
   },
+  getByKey({ safra_id, motorista_id, destino_id }) {
+    return db
+      .prepare('SELECT * FROM frete WHERE safra_id=? AND motorista_id=? AND destino_id=?')
+      .get(safra_id, motorista_id, destino_id)
+  },
+  listBySafra(safra_id) {
+    return db.prepare('SELECT * FROM frete WHERE safra_id=? ORDER BY id DESC').all(safra_id)
+  },
   getValor({ safra_id, motorista_id, destino_id }) {
     const row = db
       .prepare(

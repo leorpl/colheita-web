@@ -242,6 +242,8 @@ export function listViagensView(filters = {}) {
       motorista_nome: g.motorista_nome,
       data_saida: g.data_saida,
       hora_saida: g.hora_saida,
+      data_entrega: g.data_entrega,
+      hora_entrega: g.hora_entrega,
       tipo_plantio: g.tipo_plantio,
       umidade_pct: g.umidade_pct,
       peso_bruto_kg: g.peso_bruto_kg,

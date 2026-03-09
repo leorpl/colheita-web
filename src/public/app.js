@@ -760,6 +760,18 @@ function confirmDanger(message) {
 }
 
 function confirmAction(message, { title = 'Confirmar', confirmLabel = 'Confirmar' } = {}) {
+  if (dlg?.open) {
+    return new Promise((resolve) => {
+      showDialogOverlay({
+        title,
+        primaryLabel: confirmLabel,
+        bodyHtml: `<div class="hint">${escapeHtml(message)}</div>`,
+        onPrimary: () => resolve(true),
+        onClose: () => resolve(false),
+      })
+    })
+  }
+
   return new Promise((resolve) => {
     openDialog({
       title,
@@ -780,6 +792,7 @@ function showDialogOverlay({
   bodyHtml = '',
   primaryLabel = 'OK',
   onPrimary,
+  onClose,
 } = {}) {
   // Overlay dentro do <dialog> atual (mantem o formulario intacto)
   if (!dlgForm) {
@@ -802,23 +815,29 @@ function showDialogOverlay({
     </div>
   `.trim()
 
-  const close = () => wrap.remove()
+  let closed = false
+  const close = (confirmed = false) => {
+    if (closed) return
+    closed = true
+    wrap.remove()
+    if (!confirmed && typeof onClose === 'function') onClose()
+  }
 
   wrap.addEventListener('click', (e) => {
     const act = e.target?.closest?.('button')?.dataset?.act
-    if (act === 'close') return close()
+    if (act === 'close') return close(false)
     if (act === 'primary') {
       try {
         if (onPrimary) onPrimary()
       } finally {
-        close()
+        close(true)
       }
     }
   })
 
   // click fora fecha
   wrap.addEventListener('mousedown', (e) => {
-    if (e.target === wrap) close()
+    if (e.target === wrap) close(false)
   })
 
   dlgForm.appendChild(wrap)
@@ -2921,7 +2940,7 @@ async function renderFretes() {
     updated_by_user_id,
   }) {
     openDialog({
-      title: title || 'Definir frete (upsert)',
+      title: title || 'Novo frete',
       submitLabel: 'Salvar',
       bodyHtml: `
         <div class="form-grid">
@@ -3115,6 +3134,9 @@ async function renderFretes() {
             <div class="hint">Edite os valores (R$/sc) e salve.</div>
             <div class="table-wrap" style="margin-top:8px" id="gridPreview"><table><tbody><tr><td>Carregando...</td></tr></tbody></table></div>
           </div>
+          <div class="field col12" style="display:flex;justify-content:flex-end">
+            <button class="btn ghost danger" type="button" id="btnDeleteFretesSafra">Excluir registros visíveis da grade</button>
+          </div>
         </div>
       `,
       onSubmit: async (obj) => {
@@ -3123,10 +3145,24 @@ async function renderFretes() {
           dlgBody.querySelectorAll('#gridPreview input[data-m][data-d]'),
         )
         const items2 = []
+        const deleteItems = []
+        const fretesAtuais = items.filter((f) => Number(f.safra_id) === safra_id)
+        const existingMap = new Map(
+          fretesAtuais.map((f) => [`${f.motorista_id}:${f.destino_id}`, f]),
+        )
         for (const el of inputs) {
           if (el.disabled) continue
           const raw = String(el.value || '').trim()
-          if (!raw) continue
+          const key = `${Number(el.dataset.m)}:${Number(el.dataset.d)}`
+          if (!raw) {
+            if (existingMap.has(key)) {
+              deleteItems.push({
+                motorista_id: Number(el.dataset.m),
+                destino_id: Number(el.dataset.d),
+              })
+            }
+            continue
+          }
           const valor = parseNumberPt(raw)
           if (!Number.isFinite(valor) || valor < 0) {
             throw new Error('Valor por saca invalido na grade')
@@ -3137,15 +3173,23 @@ async function renderFretes() {
             valor_por_saca: valor,
           })
         }
-        if (!items2.length) {
-          toast('Erro', 'Nenhum valor preenchido para salvar.')
+        if (!items2.length && !deleteItems.length) {
+          toast('Erro', 'Nenhuma alteração preenchida para salvar.')
           return
         }
-        const r = await api('/api/fretes/bulk-upsert', {
+
+        if (deleteItems.length) {
+          const msg1 = 'Você limpou um ou mais valores na grade. Isso vai excluir fretes existentes. Deseja continuar?'
+          if (!(await confirmAction(msg1, { title: 'Confirmar alteração', confirmLabel: 'Continuar' }))) return
+          const msg2 = `Serão excluídos ${deleteItems.length} registro(s) de frete da safra selecionada.`
+          if (!(await confirmAction(msg2, { title: 'Confirmação final', confirmLabel: 'Excluir e salvar' }))) return
+        }
+
+        const r = await api('/api/fretes/bulk-save', {
           method: 'POST',
-          body: { safra_id, items: items2 },
+          body: { safra_id, items: items2, delete_items: deleteItems },
         })
-        toast('OK', `Salvos ${r.upserted} fretes.`)
+        toast('OK', `Salvos ${r.upserted} fretes e excluídos ${r.deleted || 0}.`)
         renderFretes()
       },
     })
@@ -3153,8 +3197,27 @@ async function renderFretes() {
     const selSafra = dlgForm.querySelector('select[name="safra_id"]')
     const ckOnlyHas = dlgForm.querySelector('input[name="only_has_values"]')
     const previewEl = dlgBody.querySelector('#gridPreview')
+    const btnDeleteFretesSafra = dlgBody.querySelector('#btnDeleteFretesSafra')
 
     const skipMot = new Set()
+
+    function getGridScope() {
+      const safra_id = Number(selSafra?.value)
+      const fretesS = items.filter((f) => Number(f.safra_id) === safra_id)
+      const motIds = new Set(fretesS.map((f) => Number(f.motorista_id)))
+      const desIds = new Set(fretesS.map((f) => Number(f.destino_id)))
+      const onlyHas = ckOnlyHas?.checked !== false
+
+      const rows = (cache.motoristas || []).filter((m) =>
+        onlyHas ? motIds.has(Number(m.id)) : true,
+      )
+      const cols = (cache.destinos || []).filter((d) =>
+        onlyHas ? desIds.has(Number(d.id)) : true,
+      )
+
+      return { safra_id, fretesS, rows, cols }
+    }
+
     if (previewEl) {
       previewEl.onclick = (e) => {
         const btn = e.target?.closest?.('button[data-act="row-skip"]')
@@ -3169,22 +3232,9 @@ async function renderFretes() {
 
     function renderGrid() {
       if (!previewEl || !selSafra) return
-      const safra_id = Number(selSafra.value)
-      const fretesS = items.filter((f) => Number(f.safra_id) === safra_id)
+      const { fretesS, rows, cols } = getGridScope()
       const map = new Map(
         fretesS.map((f) => [`${f.motorista_id}:${f.destino_id}`, f.valor_por_saca]),
-      )
-
-      const motIds = new Set(fretesS.map((f) => Number(f.motorista_id)))
-      const desIds = new Set(fretesS.map((f) => Number(f.destino_id)))
-
-      const onlyHas = ckOnlyHas?.checked !== false
-
-      const rows = (cache.motoristas || []).filter((m) =>
-        onlyHas ? motIds.has(Number(m.id)) : true,
-      )
-      const cols = (cache.destinos || []).filter((d) =>
-        onlyHas ? desIds.has(Number(d.id)) : true,
       )
 
       const head = `<thead><tr><th>Motorista</th>${cols
@@ -3217,6 +3267,46 @@ async function renderFretes() {
 
     if (selSafra) selSafra.onchange = renderGrid
     if (ckOnlyHas) ckOnlyHas.onchange = renderGrid
+
+    if (btnDeleteFretesSafra) {
+      btnDeleteFretesSafra.onclick = async () => {
+        const { safra_id, fretesS, rows, cols } = getGridScope()
+        if (!Number.isFinite(safra_id) || safra_id <= 0) {
+          toast('Erro', 'Selecione uma safra.')
+          return
+        }
+        const rowIds = new Set(rows.filter((m) => !skipMot.has(Number(m.id))).map((m) => Number(m.id)))
+        const colIds = new Set(cols.map((d) => Number(d.id)))
+        const selected = fretesS.filter(
+          (f) => rowIds.has(Number(f.motorista_id)) && colIds.has(Number(f.destino_id)),
+        )
+        const count = selected.length
+        if (!count) {
+          toast('Erro', 'Nao ha fretes visíveis na grade para excluir.')
+          return
+        }
+        if (!(await confirmAction('Isto vai excluir em lote os fretes atualmente visíveis na grade. Deseja continuar?', { title: 'Atenção', confirmLabel: 'Continuar' }))) return
+        if (!(await confirmAction(`Você está prestes a excluir permanentemente ${count} registro(s) de frete visíveis na grade da safra ${safra_id}. Esta ação não pode ser desfeita.`, { title: 'Confirmação final', confirmLabel: 'Excluir permanentemente' }))) return
+        try {
+          const r = await api('/api/fretes/bulk-delete-safra', {
+            method: 'POST',
+            body: {
+              safra_id,
+              items: selected.map((f) => ({
+                motorista_id: Number(f.motorista_id),
+                destino_id: Number(f.destino_id),
+              })),
+            },
+          })
+          toast('OK', `Excluídos ${r.deleted || 0} fretes.`)
+          dlg.close('default')
+          renderFretes()
+        } catch (e) {
+          if (e?.details?.code === 'DEPENDENCIAS_VINCULADAS') return showDependencyError(e, { title: 'Exclusão em lote bloqueada' })
+          throw e
+        }
+      }
+    }
     renderGrid()
   }
 
@@ -3246,7 +3336,7 @@ async function renderFretes() {
         format: (v) => fmtMoney(v),
       },
     ],
-    addLabel: 'Definir frete',
+    addLabel: 'Novo frete',
     headerActions: [
       { act: 'copy-safra', label: 'Copiar de safra', className: 'ghost' },
       { act: 'grid-safra', label: 'Editar em grade', className: 'ghost' },
@@ -3259,7 +3349,7 @@ async function renderFretes() {
     showDefaultHint: false,
     onCreate: () => {
       openUpsertDialog({
-        title: 'Definir frete (upsert)',
+        title: 'Editar frete',
         safra_id: safraOptions[0]?.value,
         motorista_id: motoristaOptions[0]?.value,
         destino_id: destinoOptions[0]?.value,
@@ -3320,19 +3410,24 @@ async function renderRegrasDestino() {
        subtitle: 'Regras por safra + destino + plantio. Edite para configurar tabelas.',
        fetchPath: '/api/destino-regras/plantio',
        items: rules,
-      columns: [
-        { key: 'id', label: 'Item' },
-        { key: 'safra_nome', label: 'Safra' },
-        { key: 'destino_local', label: 'Destino' },
-        {
-          key: 'tipo_plantio',
-          label: 'Plantio',
-          html: true,
-          format: (v) => `<code class="mono">${escapeHtml(String(v || ''))}</code>`,
-        },
-        { key: 'updated_at', label: 'Alteração' },
-        { key: 'created_at', label: 'Criação' },
-      ],
+       columns: [
+         { key: 'id', label: 'Item' },
+         { key: 'safra_nome', label: 'Safra' },
+         { key: 'destino_local', label: 'Destino' },
+         {
+           key: 'tipo_plantio',
+           label: 'Plantio',
+           html: true,
+           format: (v, r) => `<code class="mono">${escapeHtml(String(v || ''))}</code>${Number(r?.orphan_contract) === 1 ? ` <span class="pill"><span class="dot bad"></span><span>Contrato órfão</span></span>` : ''}`,
+          },
+         {
+           key: 'contrato_faixas_count',
+           label: 'Travas',
+           format: (v, r) => Number(r?.contrato_silo_id) > 0 ? `${Number(v || 0)} faixa(s)` : '-',
+         },
+         { key: 'updated_at', label: 'Alteração' },
+         { key: 'created_at', label: 'Criação' },
+       ],
       addLabel: 'Nova regra',
       headerActions: [{ act: 'recalc-all', label: 'Recalcular colheitas', className: 'ghost' }],
       onHeaderAction: async (act) => {
@@ -3397,16 +3492,31 @@ async function renderRegrasDestino() {
              window.location.hash = '#/regras-destino?new=1'
            }
          : null,
-      onEdit: (r) => {
-        if (!r) return
-        const id = Number(r.id)
-        const qp = new URLSearchParams({ edit_id: String(id) })
-        window.location.hash = `#/regras-destino?${qp.toString()}`
-      },
-       onDelete: canDelete
-         ? async (r) => {
-             if (!r) return
-             const id = Number(r.id)
+       onEdit: (r) => {
+         if (!r) return
+         if (Number(r.orphan_contract) === 1) {
+           const qp = new URLSearchParams({
+             new: '1',
+             safra_id: String(r.safra_id),
+             destino_id: String(r.destino_id),
+             tipo_plantio: String(r.tipo_plantio || ''),
+           })
+           window.location.hash = `#/regras-destino?${qp.toString()}`
+           toast('Aviso', 'Contrato órfão encontrado. Complete a regra para esta combinação.')
+           return
+         }
+         const id = Number(r.id)
+         const qp = new URLSearchParams({ edit_id: String(id) })
+         window.location.hash = `#/regras-destino?${qp.toString()}`
+       },
+        onDelete: canDelete
+          ? async (r) => {
+              if (!r) return
+              if (Number(r.orphan_contract) === 1) {
+                toast('Erro', 'Este item é um contrato órfão. Abra para completar/remover a regra/contrato correspondente.')
+                return
+              }
+              const id = Number(r.id)
              const msg = `Excluir a regra?\n\nSafra: ${r.safra_nome}\nDestino: ${r.destino_local}\nPlantio: ${r.tipo_plantio}`
              if (!(await confirmAction(msg, { title: 'Confirmar', confirmLabel: 'Excluir' }))) return
 
@@ -4635,6 +4745,10 @@ async function renderColheitaBase(variant) {
       const badge = isRateado
         ? `<span class="pill" style="margin-left:8px"><span class="dot warn"></span><span>Rateado</span></span>`
         : ''
+      const entregaPendente = !String(v.data_entrega || '').trim() || !String(v.hora_entrega || '').trim()
+      const pendBadge = entregaPendente
+        ? `<span class="pill" style="margin-left:8px"><span class="dot bad"></span><span>Falta chegada</span></span>`
+        : ''
 
       const pct =
         v.pct_rateio_100 === null || v.pct_rateio_100 === undefined
@@ -4657,9 +4771,9 @@ async function renderColheitaBase(variant) {
 
       const childAttrs = isChild ? ` data-parent="${v.id}" style="${expanded.has(v.id) ? '' : 'display:none'}"` : ''
 
-      return `<tr class="${humClass}${isChild ? ' rateio-child' : ''}"${childAttrs}>
+      return `<tr class="${humClass}${entregaPendente ? ' row-pendente' : ''}${isChild ? ' rateio-child' : ''}"${childAttrs}>
         ${actionCell}
-        <td data-sort="${escapeHtml(String(v.ficha_original || v.ficha || ''))}"><code class="mono">${escapeHtml(fichaDisp)}</code>${badge}</td>
+        <td data-sort="${escapeHtml(String(v.ficha_original || v.ficha || ''))}"><code class="mono">${escapeHtml(fichaDisp)}</code>${badge}${pendBadge}</td>
         <td>${escapeHtml(v.safra_nome || '')}</td>
         <td>${escapeHtml(v.talhao_nome || '')}</td>
         <td>${escapeHtml(v.talhao_local || '')}</td>
@@ -4690,16 +4804,17 @@ async function renderColheitaBase(variant) {
       const descPct = Number.isFinite(pb) && pb > 0 && Number.isFinite(pls) ? clamp01(1 - pls / pb) * 100 : 0
       const fichaDisp = v.display_ficha ? String(v.display_ficha) : String(v.ficha || '')
       const compraSilo = v.valor_compra_por_saca_aplicado ?? v.regra_valor_compra_por_saca ?? null
+      const entregaPendente = !String(v.data_entrega || '').trim() || !String(v.hora_entrega || '').trim()
       const toggleBtn = showToggle
         ? `<button class="btn ghost small" data-act="toggle" data-id="${v.id}">${toggled ? 'Recolher rateio' : 'Expandir rateio'}</button>`
         : ''
       const parentId = opts.parentId ?? v.id
       const childAttrs = isChild ? ` data-parent-card="${parentId}" style="${expanded.has(parentId) ? '' : 'display:none'}"` : ''
-      return `<div class="mobile-card${isChild ? ' child' : ''}"${childAttrs}>
+      return `<div class="mobile-card${entregaPendente ? ' pendente' : ''}${isChild ? ' child' : ''}"${childAttrs}>
         <div class="mobile-card-head">
           <div>
             <div class="mobile-card-title"><code class="mono">${escapeHtml(fichaDisp)}</code> - ${escapeHtml(v.talhao_nome || '')}</div>
-            <div class="mobile-card-sub">${escapeHtml(v.destino_local || '-')} • ${escapeHtml(v.motorista_nome || '-')}</div>
+            <div class="mobile-card-sub">${escapeHtml(v.destino_local || '-')} • ${escapeHtml(v.motorista_nome || '-')}${entregaPendente ? ' • Falta chegada' : ''}</div>
           </div>
           <div class="mobile-card-actions">
             ${!isChild ? toggleBtn : ''}
@@ -4709,6 +4824,7 @@ async function renderColheitaBase(variant) {
         </div>
         <div class="mobile-kv">
           <div><span>Saída</span><b>${escapeHtml(String(v.data_saida || '-'))}</b></div>
+          <div><span>Chegada</span><b>${escapeHtml(String(v.data_entrega || '-'))}${v.hora_entrega ? ` ${escapeHtml(String(v.hora_entrega))}` : ''}</b></div>
           <div><span>Umidade</span><b>${Number.isFinite(umid) ? `${fmtNum(umid * 100, 2)}%` : '-'}</b></div>
           <div><span>Peso bruto</span><b>${fmtKg(v.peso_bruto_kg)}</b></div>
           <div><span>Peso limpo</span><b>${fmtKg(v.peso_limpo_seco_kg)}</b></div>
@@ -5287,10 +5403,18 @@ async function renderColheitaBase(variant) {
 
         if (isEdit) {
           await api(`/api/viagens/${viagem.id}`, { method: 'PUT', body })
-          toast('Atualizado', 'Colheita atualizada.')
+          if (!body.data_entrega || !body.hora_entrega) {
+            toast('Aviso', 'Colheita atualizada com pendência: falta informar data/hora de chegada.')
+          } else {
+            toast('Atualizado', 'Colheita atualizada.')
+          }
         } else {
           await api('/api/viagens', { method: 'POST', body })
-          toast('Cadastrada', 'Colheita registrada.')
+          if (!body.data_entrega || !body.hora_entrega) {
+            toast('Aviso', 'Colheita registrada com pendência: falta informar data/hora de chegada.')
+          } else {
+            toast('Cadastrada', 'Colheita registrada.')
+          }
         }
         refreshList()
       },

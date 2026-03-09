@@ -761,6 +761,7 @@ code.mono{font-family:var(--mono);font-size:12px}
 .mobile-cards{display:flex;flex-direction:column;gap:10px}
 .mobile-card{border:1px solid rgba(15,26,22,.12);border-radius:14px;background:rgba(255,255,255,.74);padding:12px}
 .mobile-card.child{background:rgba(255,255,255,.62);margin-left:10px}
+.mobile-card.pendente{border-color:rgba(180,35,24,.26);background:rgba(180,35,24,.05)}
 .mobile-card-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
 .mobile-card-title{font-family:var(--serif);font-size:15px;color:rgba(14,21,18,.92)}
 .mobile-card-sub{margin-top:4px;font-size:12px;color:var(--muted)}
@@ -770,6 +771,7 @@ code.mono{font-family:var(--mono);font-size:12px}
 .mobile-kv span{font-size:11px;color:var(--muted)}
 .mobile-kv b{font-size:13px;color:rgba(14,21,18,.90)}
 .mobile-empty{padding:14px;border:1px dashed rgba(15,26,22,.16);border-radius:14px;background:rgba(255,255,255,.52);color:var(--muted)}
+.row-pendente td{background:rgba(180,35,24,.035)}
 
 /* Rateio de talhoes (viagem) */
 .rateio-card{

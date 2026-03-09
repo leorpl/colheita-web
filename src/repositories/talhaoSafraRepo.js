@@ -37,4 +37,8 @@ export const talhaoSafraRepo = {
       )
       .all(safra_id)
   },
+
+  removeBySafra({ safra_id }) {
+    return db.prepare('DELETE FROM talhao_safra WHERE safra_id=?').run(safra_id)
+  },
 }

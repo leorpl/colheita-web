@@ -129,6 +129,8 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 - POST /api/destino-regras
 - POST /api/destinos
 - POST /api/fretes
+- POST /api/fretes/bulk-delete-safra
+- POST /api/fretes/bulk-save
 - POST /api/fretes/bulk-upsert
 - POST /api/fretes/copiar-safra
 - POST /api/motoristas

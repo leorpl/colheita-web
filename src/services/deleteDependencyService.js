@@ -5,6 +5,19 @@ function count(sql, params = {}) {
   return Number(db.prepare(sql).get(params)?.c || 0)
 }
 
+function listContratoRefsBySafra(id) {
+  return db
+    .prepare(
+      `SELECT d.local as destino_local, c.tipo_plantio
+       FROM contrato_silo c
+       JOIN destino d ON d.id = c.destino_id
+       WHERE c.safra_id=@id
+       ORDER BY d.local, c.tipo_plantio
+       LIMIT 5`,
+    )
+    .all({ id })
+}
+
 const suggestionByKey = {
   fretes: 'Exclua ou ajuste os fretes vinculados antes de excluir este cadastro.',
   colheitas: 'Exclua as colheitas vinculadas ou altere o vínculo nelas antes de excluir este cadastro.',
@@ -42,12 +55,19 @@ function assertNoDependencies(entityLabel, details) {
 
 export const deleteDependencyService = {
   assertCanDeleteSafra(id) {
+    const contratoRefs = listContratoRefsBySafra(id)
     assertNoDependencies('Safra', [
       { key: 'fretes', label: 'Fretes', count: count(`SELECT COUNT(*) c FROM frete WHERE safra_id=@id`, { id }) },
       { key: 'colheitas', label: 'Colheitas', count: count(`SELECT COUNT(*) c FROM viagem WHERE safra_id=@id AND deleted_at IS NULL`, { id }) },
       { key: 'regras_destino', label: 'Regras do destino', count: count(`SELECT COUNT(*) c FROM destino_regra_plantio WHERE safra_id=@id`, { id }) },
-      { key: 'contratos', label: 'Contratos de trava', count: count(`SELECT COUNT(*) c FROM contrato_silo WHERE safra_id=@id`, { id }) },
-      { key: 'talhao_safra', label: 'Área colhida / Talhão-safra', count: count(`SELECT COUNT(*) c FROM talhao_safra WHERE safra_id=@id`, { id }) },
+      {
+        key: 'contratos',
+        label: 'Contratos de trava',
+        count: count(`SELECT COUNT(*) c FROM contrato_silo WHERE safra_id=@id`, { id }),
+        suggestion: contratoRefs.length
+          ? `Exclua ou ajuste os contratos de trava desta safra antes de excluir. Exemplos: ${contratoRefs.map((r) => `${r.destino_local} (${r.tipo_plantio})`).join(', ')}.`
+          : undefined,
+      },
       { key: 'acordos', label: 'Acordos', count: count(`SELECT COUNT(*) c FROM talhao_acordo WHERE safra_id=@id AND deleted_at IS NULL`, { id }) },
       { key: 'vendas', label: 'Vendas de sacas', count: count(`SELECT COUNT(*) c FROM venda_saca WHERE safra_id=@id AND deleted_at IS NULL`, { id }) },
       { key: 'custos', label: 'Custos manuais', count: count(`SELECT COUNT(*) c FROM custo_lancamento WHERE safra_id=@id AND deleted_at IS NULL`, { id }) },
