@@ -165,6 +165,30 @@ function actorLabel(usersById, id) {
   return String(u?.nome || u?.username || `#${uid}`)
 }
 
+function parseUtcDateTime(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T')
+  const withZone = /Z|[+-]\d{2}:?\d{2}$/.test(normalized) ? normalized : `${normalized}Z`
+  const d = new Date(withZone)
+  return Number.isFinite(d.getTime()) ? d : null
+}
+
+function fmtDateTimeBr(value) {
+  const d = parseUtcDateTime(value)
+  if (!d) return String(value || '-')
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(d)
+}
+
 async function hydrateTraceMeta(rootEl) {
   const root = rootEl || document
   const els = Array.from(root.querySelectorAll('[data-role="trace"]'))
@@ -178,8 +202,8 @@ async function hydrateTraceMeta(rootEl) {
 
     const cWho = actorLabel(usersById, createdBy)
     const uWho = actorLabel(usersById, updatedBy)
-    const cWhen = createdAt || '-'
-    const uWhen = updatedAt || '-'
+    const cWhen = createdAt ? fmtDateTimeBr(createdAt) : '-'
+    const uWhen = updatedAt ? fmtDateTimeBr(updatedAt) : '-'
 
     el.innerHTML = `Criado por <b>${escapeHtml(cWho)}</b> em <span class="mono">${escapeHtml(cWhen)}</span> · Última edição por <b>${escapeHtml(uWho)}</b> em <span class="mono">${escapeHtml(uWhen)}</span>`
   }
@@ -309,7 +333,7 @@ async function openAuditDetail(id) {
         ${auditSeverityBadge(severity)}
         <span class="pill"><span class="dot muted"></span><span>${escapeHtml(mod)}${rid ? ` #${escapeHtml(rid)}` : ''}</span></span>
       </div>
-      <div class="hint" style="margin-top:10px">${escapeHtml(String(r.created_at || ''))} — <b>${escapeHtml(who)}</b></div>
+      <div class="hint" style="margin-top:10px">${escapeHtml(fmtDateTimeBr(r.created_at))} — <b>${escapeHtml(who)}</b></div>
       <div class="hint">IP: ${escapeHtml(ip || '-')}</div>
       <div class="hint">User-Agent: ${escapeHtml(ua || '-')}</div>
       <div class="pill-row" style="margin-top:12px">
@@ -357,7 +381,7 @@ async function openAuditHistory({ module_name, record_id }) {
           const who = r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'
           const tone = auditTone(r)
           return `<tr>
-            <td>${escapeHtml(String(r.created_at || ''))}</td>
+            <td>${escapeHtml(fmtDateTimeBr(r.created_at))}</td>
             <td>${escapeHtml(String(who))}</td>
             <td>${pillBadge({ label: String(r.action_type || ''), tone })}</td>
             <td>${escapeHtml(String(r.summary || r.notes || ''))}</td>
@@ -3851,7 +3875,7 @@ async function renderRegrasDestino() {
       const items = await api(`/api/contratos-silo/${encodeURIComponent(String(contratoId))}/arquivos`).catch(() => [])
       const rows = (items || []).map((a) => {
         const who = a.uploaded_by_nome || a.uploaded_by_username || (a.created_by_user_id ? `#${a.created_by_user_id}` : '')
-        const dt = String(a.created_at || '').slice(0, 19).replace('T', ' ')
+        const dt = fmtDateTimeBr(a.created_at)
         const size = Number(a.file_size || 0)
         const sizeTxt = size > 0 ? `${fmtNum(size / 1024, 0)} KB` : ''
         const mime = String(a.mime_type || '')
@@ -8933,7 +8957,7 @@ async function renderAuditoria() {
           <td class="actions">
             <button class="act-btn" data-act="adetail" data-id="${escapeHtml(String(r2.id))}" title="Detalhes" aria-label="Detalhes">${iconSvg('view')}<span>Ver</span></button>
           </td>
-          <td>${escapeHtml(String(r2.created_at || ''))}</td>
+          <td>${escapeHtml(fmtDateTimeBr(r2.created_at))}</td>
           <td>${escapeHtml(String(who || '-'))}</td>
           <td><code class="mono">${escapeHtml(String(r2.module_name || ''))}</code></td>
           <td>${escapeHtml(recordTxt)}</td>
