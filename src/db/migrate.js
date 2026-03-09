@@ -911,6 +911,10 @@ export function migrate() {
     db.exec("ALTER TABLE destino ADD COLUMN maps_url TEXT")
   }
 
+  if (!hasColumn('contrato_silo_faixa', 'data_entrega')) {
+    db.exec('ALTER TABLE contrato_silo_faixa ADD COLUMN data_entrega TEXT')
+  }
+
   // destino: remover trava_sacas (agora fica nas regras por safra+plantio)
   if (hasColumn('destino', 'trava_sacas')) {
     // Se existirem regras plantio sem trava, aproveitar o valor antigo do destino.
@@ -995,6 +999,7 @@ export function migrate() {
       id INTEGER PRIMARY KEY,
       contrato_silo_id INTEGER NOT NULL,
       ordem INTEGER NOT NULL,
+      data_entrega TEXT,
       sacas REAL NOT NULL,
       preco_por_saca REAL NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),

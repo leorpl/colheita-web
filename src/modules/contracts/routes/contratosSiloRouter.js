@@ -26,6 +26,7 @@ const UpsertBody = z.object({
   faixas: z
     .array(
       z.object({
+        data_entrega: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
         sacas: z.coerce.number().positive().max(9_999_999),
         preco_por_saca: z.coerce.number().min(0).max(999_999),
       }),

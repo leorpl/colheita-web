@@ -602,7 +602,8 @@ export const relatoriosService = {
              c.sacas_contratadas as trava_sacas,
              d.distancia_km as distancia_km,
              COALESCE(SUM(v.sacas), 0) as entrega_sacas,
-             COALESCE(SUM(v.peso_limpo_seco_kg), 0) as peso_limpo_seco_kg
+             COALESCE(SUM(v.peso_limpo_seco_kg), 0) as peso_limpo_seco_kg,
+             MAX(v.data_entrega) as ultima_data_entrega
            FROM destino d
            JOIN viagem v
              ON v.destino_id = d.id
@@ -637,7 +638,8 @@ export const relatoriosService = {
            c.sacas_contratadas as trava_sacas,
            d.distancia_km as distancia_km,
            COALESCE(SUM(v.sacas), 0) as entrega_sacas,
-           COALESCE(SUM(v.peso_limpo_seco_kg), 0) as peso_limpo_seco_kg
+           COALESCE(SUM(v.peso_limpo_seco_kg), 0) as peso_limpo_seco_kg,
+           MAX(v.data_entrega) as ultima_data_entrega
           FROM destino d
          LEFT JOIN (
            SELECT
@@ -652,11 +654,11 @@ export const relatoriosService = {
            ON c.destino_id = d.id
           AND c.safra_id = @safra_id
           AND (@tipo_plantio = '' OR c.tipo_plantio = @tipo_plantio)
-          LEFT JOIN viagem v
-            ON v.destino_id = d.id
-           AND v.safra_id = @safra_id
-           AND (@de IS NULL OR v.data_saida >= @de)
-           AND (@ate IS NULL OR v.data_saida <= @ate)
+           LEFT JOIN viagem v
+             ON v.destino_id = d.id
+            AND v.safra_id = @safra_id
+            AND (@de IS NULL OR v.data_saida >= @de)
+            AND (@ate IS NULL OR v.data_saida <= @ate)
           GROUP BY d.id, c.sacas_contratadas
           ORDER BY d.local`,
       )

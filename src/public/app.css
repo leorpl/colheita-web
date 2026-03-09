@@ -632,6 +632,8 @@ code.mono{font-family:var(--mono);font-size:12px}
 
 .hint{margin-top:10px;color:var(--muted);font-size:12px}
 
+.ha-input{width:88px;min-width:88px;max-width:88px;text-align:right}
+
 /* ACL helpers */
 .acl-help{
   padding:12px 12px;

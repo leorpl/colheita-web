@@ -34,7 +34,7 @@ export const contratoSiloRepo = {
     if (!hdr) return null
     const faixas = db
       .prepare(
-        `SELECT ordem, sacas, preco_por_saca
+        `SELECT ordem, data_entrega, sacas, preco_por_saca
          FROM contrato_silo_faixa
          WHERE contrato_silo_id=?
          ORDER BY ordem ASC`,
@@ -65,6 +65,7 @@ export const contratoSiloRepo = {
     const norm = list
       .map((f, i) => ({
         ordem: i + 1,
+        data_entrega: f?.data_entrega ? String(f.data_entrega) : null,
         sacas: Number(f?.sacas || 0),
         preco_por_saca: Number(f?.preco_por_saca || 0),
       }))
@@ -150,9 +151,9 @@ export const contratoSiloRepo = {
       db.prepare('DELETE FROM contrato_silo_faixa WHERE contrato_silo_id=?').run(hdr.id)
       const ins = db.prepare(
         `INSERT INTO contrato_silo_faixa (
-           contrato_silo_id, ordem, sacas, preco_por_saca, created_by_user_id, updated_by_user_id, updated_at
+           contrato_silo_id, ordem, data_entrega, sacas, preco_por_saca, created_by_user_id, updated_by_user_id, updated_at
           ) VALUES (
-           @contrato_silo_id, @ordem, @sacas, @preco_por_saca, @created_by_user_id, @updated_by_user_id, datetime('now')
+           @contrato_silo_id, @ordem, @data_entrega, @sacas, @preco_por_saca, @created_by_user_id, @updated_by_user_id, datetime('now')
           )`,
       )
       for (const f of norm) {

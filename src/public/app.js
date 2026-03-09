@@ -3443,7 +3443,7 @@ async function renderRegrasDestino() {
                   </div>
                   <div class="table-wrap">
                     <table>
-                      <thead><tr><th class="actions"></th><th>Sacas</th><th>Preco travado (R$/sc)</th></tr></thead>
+                      <thead><tr><th class="actions"></th><th>Data entrega</th><th>Sacas</th><th>Preco travado (R$/sc)</th></tr></thead>
                       <tbody id="contratoFaixas"></tbody>
                     </table>
                   </div>
@@ -3529,6 +3529,47 @@ async function renderRegrasDestino() {
   const ruleTraceWrap = view.querySelector('#ruleTraceWrap')
   const ruleTrace = view.querySelector('#ruleTrace')
   const btnHistContrato = view.querySelector('#btnHistContrato')
+
+  // ENTER should validate/normalize without submitting the page.
+  form.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return
+    const t = e.target
+    if (!(t instanceof HTMLElement)) return
+    if (t.tagName !== 'INPUT' && t.tagName !== 'SELECT' && t.tagName !== 'TEXTAREA') return
+    // Avoid accidental form submit; treat Enter as "apply".
+    e.preventDefault()
+    // Blur triggers formatting handlers already bound in multiple places.
+    t.blur?.()
+
+    // Lightweight validation: only complain when there is a clear invalid value.
+    const name = t.getAttribute('name') || ''
+    const v = String((t).value ?? '').trim()
+    if (!v) return
+    const isPct = name.endsWith('_limite_pct') || name === 'desconto_pct' || name.startsWith('umid_')
+    const isMoney = name.includes('custo_') || name === 'ct_preco' || name === 'custo_secagem_por_saca'
+    const isQty = name === 'ct_sacas'
+    const n = parseNumberPt(v)
+    if (!Number.isFinite(n)) {
+      toast('Erro', 'Numero invalido')
+      t.focus?.()
+      return
+    }
+    if (isPct && (n < 0 || n > 100)) {
+      toast('Erro', 'Percentual deve estar entre 0 e 100')
+      t.focus?.()
+      return
+    }
+    if (isMoney && n < 0) {
+      toast('Erro', 'Valor nao pode ser negativo')
+      t.focus?.()
+      return
+    }
+    if (isQty && n <= 0) {
+      toast('Erro', 'Sacas deve ser maior que 0')
+      t.focus?.()
+      return
+    }
+  })
 
   // ACL -> UI
   if (!canUpdate) {
@@ -3618,11 +3659,12 @@ async function renderRegrasDestino() {
     })
   }
 
-  function contratoRow(f = { sacas: '', preco_por_saca: '' }) {
+  function contratoRow(f = { data_entrega: '', sacas: '', preco_por_saca: '' }) {
     const dis = canUpdate ? '' : 'disabled'
     const rmBtn = canUpdate ? '<button class="btn small danger" type="button" data-act="rm-contrato">Remover</button>' : ''
     return `<tr>
       <td class="actions">${rmBtn}</td>
+      <td style="width:150px"><input ${dis} type="date" name="ct_data_entrega" value="${escapeHtml(f.data_entrega || '')}" /></td>
       <td style="width:160px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_sacas" value="${escapeHtml(f.sacas)}" /></td>
       <td style="width:160px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_preco" value="${escapeHtml(f.preco_por_saca)}" /></td>
     </tr>`
@@ -3770,12 +3812,13 @@ async function renderRegrasDestino() {
         ? faixas
             .map((f) =>
               contratoRow({
+                data_entrega: f.data_entrega || '',
                 sacas: fmtNum(Number(f.sacas || 0), 2),
                 preco_por_saca: fmtNum(Number(f.preco_por_saca || 0), 2),
               }),
             )
             .join('')
-        : `<tr><td colspan="3" class="hint">Sem contrato cadastrado.</td></tr>`
+        : `<tr><td colspan="4" class="hint">Sem contrato cadastrado.</td></tr>`
       bindContratoRemove()
     }
 
@@ -3938,13 +3981,12 @@ async function renderRegrasDestino() {
     const contrato_faixas = []
     if (contratoEl) {
       contratoEl.querySelectorAll('tr').forEach((tr) => {
-        const inputs = tr.querySelectorAll('input')
-        if (inputs.length < 2) return
-        const sacas = parseNumberPt(inputs[0].value)
-        const preco = parseNumberPt(inputs[1].value)
+        const dataEntrega = String(tr.querySelector('input[name="ct_data_entrega"]')?.value || '').trim() || null
+        const sacas = parseNumberPt(String(tr.querySelector('input[name="ct_sacas"]')?.value || ''))
+        const preco = parseNumberPt(String(tr.querySelector('input[name="ct_preco"]')?.value || ''))
         if (!Number.isFinite(sacas) || sacas <= 0) return
         if (!Number.isFinite(preco) || preco < 0) return
-        contrato_faixas.push({ sacas, preco_por_saca: preco })
+        contrato_faixas.push({ data_entrega: dataEntrega, sacas, preco_por_saca: preco })
       })
     }
 
@@ -5027,20 +5069,6 @@ async function renderColheitaBase(variant) {
              </div>
            </div>
 
-           <div class="form-card">
-             <div class="card-head"><div class="card-title">Custos (sacas)</div></div>
-             <div class="form-grid">
-               ${formField({ label: 'Frete (sc)', name: 'custo_frete_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_frete_sacas ?? '', span: 'col3' })}
-               ${formField({ label: 'Secagem (sc)', name: 'custo_secagem_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_secagem_sacas ?? '', span: 'col3' })}
-               ${formField({ label: 'Silo (sc)', name: 'custo_silo_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_silo_sacas ?? '', span: 'col2' })}
-               ${formField({ label: 'Terceiros (sc)', name: 'custo_terceiros_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_terceiros_sacas ?? '', span: 'col2' })}
-               ${formField({ label: 'Outros (sc)', name: 'custo_outros_sacas', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: base.custo_outros_sacas ?? '', span: 'col2' })}
-             </div>
-            <div class="card-body" style="padding-top:0">
-                <div class="hint">Opcional: custos cobrados em sacas para alimentar o saldo por participante (Producao). Quando houver preco de compra (contrato), o preview preenche automaticamente um equivalente em sacas (voce pode sobrescrever).</div>
-              </div>
-            </div>
-
           <div class="form-card">
             <div class="card-head">
               <div class="card-title">Qualidade da amostra</div>
@@ -5153,13 +5181,6 @@ async function renderColheitaBase(variant) {
           carga_total_kg: asNumberOrNull(obj.carga_total_kg) ?? 0,
           tara_kg: asNumberOrNull(obj.tara_kg) ?? 0,
 
-          // Custos em sacas (opcional)
-          custo_frete_sacas: obj.custo_frete_sacas ? parseNumberPt(String(obj.custo_frete_sacas)) : null,
-          custo_secagem_sacas: obj.custo_secagem_sacas ? parseNumberPt(String(obj.custo_secagem_sacas)) : null,
-          custo_silo_sacas: obj.custo_silo_sacas ? parseNumberPt(String(obj.custo_silo_sacas)) : null,
-          custo_terceiros_sacas: obj.custo_terceiros_sacas ? parseNumberPt(String(obj.custo_terceiros_sacas)) : null,
-          custo_outros_sacas: obj.custo_outros_sacas ? parseNumberPt(String(obj.custo_outros_sacas)) : null,
-
           umidade_pct: parsePercent100OrZero(obj.umidade_pct, 'umidade_pct'),
           // Campo unico: se igual ao sugerido, manda null (usa tabela); se diferente, manda valor.
           umidade_desc_pct_manual: umidManualValue,
@@ -5262,23 +5283,6 @@ async function renderColheitaBase(variant) {
     // Padronizar visualizacao (pt-BR): '.' milhar, ',' decimal
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="carga_total_kg"]'), 0, { after: () => runPreview() })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="tara_kg"]'), 0, { after: () => runPreview() })
-    ;[
-      'custo_frete_sacas',
-      'custo_secagem_sacas',
-      'custo_silo_sacas',
-      'custo_terceiros_sacas',
-      'custo_outros_sacas',
-    ].forEach((name) => {
-      const el = dlgForm.querySelector(`input[name="${name}"]`)
-      bindNumberFormatOnBlur(el, 2)
-      if (!el) return
-      if (el.dataset.userEditBound === '1') return
-      el.dataset.userEditBound = '1'
-      el.addEventListener('input', () => {
-        // Marca que o usuario decidiu informar/alterar (nao sobrescrever no preview).
-        el.dataset.userEdited = '1'
-      })
-    })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="umidade_pct"]'), 2, { after: () => runPreview() })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="umidade_desc_pct_manual"]'), 2, { after: () => runPreview() })
     bindNumberFormatOnBlur(dlgForm.querySelector('input[name="impureza_pct"]'), 2, { after: () => runPreview() })
@@ -5723,43 +5727,6 @@ async function renderColheitaBase(variant) {
     const previewEl = dlgBody.querySelector('#preview')
     const vForm = dlgBody.querySelector('#vForm')
 
-    function autofillCustosSacasFromPreview(p) {
-      if (!p || !dlgForm) return
-
-      const preco =
-        Number.isFinite(Number(p.valor_compra_por_saca_aplicado)) && Number(p.valor_compra_por_saca_aplicado) > 0
-          ? Number(p.valor_compra_por_saca_aplicado)
-          : Number.isFinite(Number(p.valor_compra_por_saca)) && Number(p.valor_compra_por_saca) > 0
-            ? Number(p.valor_compra_por_saca)
-            : null
-
-      if (!preco) return
-
-      const byName = (name) => dlgForm.querySelector(`input[name="${name}"]`)
-      const shouldFill = (el) => {
-        if (!el) return false
-        if (el.dataset.userEdited === '1') return false
-        const raw = String(el.value ?? '').trim()
-        return raw === ''
-      }
-
-      const setIfEmpty = (name, totalRs) => {
-        const el = byName(name)
-        if (!shouldFill(el)) return
-        const total = Number(totalRs || 0)
-        if (!Number.isFinite(total) || total <= 0) return
-        const sc = total / preco
-        if (!Number.isFinite(sc) || sc <= 0) return
-        el.value = fmtNumInput(sc, 2)
-        el.dataset.autoFilled = '1'
-      }
-
-      setIfEmpty('custo_frete_sacas', p.sub_total_frete)
-      setIfEmpty('custo_secagem_sacas', p.sub_total_secagem)
-      setIfEmpty('custo_silo_sacas', p.sub_total_custo_silo)
-      setIfEmpty('custo_terceiros_sacas', p.sub_total_custo_terceiros)
-    }
-
     const btnCompareDest = dlgBody.querySelector('#btnCompareDest')
     if (btnCompareDest) {
       btnCompareDest.onclick = async () => {
@@ -6032,9 +5999,6 @@ async function renderColheitaBase(variant) {
         updateUmidHighlight()
 
         setDestinoRegraUi({ preview: p })
-
-        // Custos (sacas): se o usuario nao preencheu, sugerir equivalentes em sacas.
-        autofillCustosSacasFromPreview(p)
 
         updateLimitHighlight()
 
@@ -6494,12 +6458,12 @@ async function renderRelatorios() {
           <div class="span12">
             <div class="table-wrap">
               <table>
-                <thead><tr><th colspan="5">Entregas por destino</th></tr>
-                   <tr><th>Destino</th><th>Contrato (sacas)</th><th>Entrega (sacas)</th><th>Peso limpo/seco</th><th>Status</th></tr></thead>
-                <tbody id="rdest"><tr><td colspan="5">Carregando...</td></tr></tbody>
-              </table>
-            </div>
-          </div>
+                 <thead><tr><th colspan="6">Entregas por destino</th></tr>
+                    <tr><th>Destino</th><th>Contrato (sacas)</th><th>Entrega (sacas)</th><th>Data entrega</th><th>Peso limpo/seco</th><th>Status</th></tr></thead>
+                 <tbody id="rdest"><tr><td colspan="5">Carregando...</td></tr></tbody>
+               </table>
+             </div>
+           </div>
 
           <div class="span12">
             <div class="table-wrap">
@@ -6636,6 +6600,7 @@ async function renderRelatorios() {
           <td>${escapeHtml(d.destino_local)}</td>
           <td>${trava === null ? '-' : fmtNum(trava, 2)}</td>
           <td>${fmtNum(d.entrega_sacas, 2)}</td>
+          <td>${escapeHtml(d.ultima_data_entrega || '-')}</td>
           <td>${fmtKg(d.peso_limpo_seco_kg)}</td>
           <td>${status}</td>
         </tr>`
@@ -6730,10 +6695,10 @@ async function renderRelatorios() {
       return Number(d?.entrega_sacas || 0) > 0 || Number(d?.peso_limpo_seco_kg || 0) > 0
     })
 
-    downloadCsv(
-      `entregas-por-destino-safra-${safra_id}.csv`,
-      ['Destino', 'Contrato (sacas)', 'Entrega (sacas)', 'Peso limpo/seco (kg)', 'Status'],
-      des2.map((d) => {
+      downloadCsv(
+        `entregas-por-destino-safra-${safra_id}.csv`,
+        ['Destino', 'Contrato (sacas)', 'Entrega (sacas)', 'Data entrega', 'Peso limpo/seco (kg)', 'Status'],
+        des2.map((d) => {
         const trava = d.trava_sacas
         const entrega = Number(d.entrega_sacas || 0)
         let status = 'OK'
@@ -6743,15 +6708,16 @@ async function renderRelatorios() {
           else if (ratio >= 1) status = 'Limite contratado atingido'
           else if (ratio >= 0.85) status = 'Próximo do limite contratado'
         }
-        return [
-          d.destino_local,
-          trava === null ? '' : csvNumber(trava, 2),
-          csvNumber(d.entrega_sacas, 2),
-          csvNumber(d.peso_limpo_seco_kg, 0),
-          status,
-        ]
-      }),
-    )
+          return [
+            d.destino_local,
+            trava === null ? '' : csvNumber(trava, 2),
+            csvNumber(d.entrega_sacas, 2),
+            d.ultima_data_entrega || '',
+            csvNumber(d.peso_limpo_seco_kg, 0),
+            status,
+          ]
+        }),
+      )
   }
 
   btnExpPay.onclick = async () => {
@@ -7056,7 +7022,22 @@ async function renderAreaColhida() {
               />
             </div>
           </td>
-          <td><span data-act="area-ha">${fmtNum(areaColhidaHa, 2)}</span> ha</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;justify-content:flex-start">
+              <input
+                class="ha-input"
+                type="text"
+                inputmode="decimal"
+                pattern="[0-9.,]*"
+                value="${fmtNumInput(areaColhidaHa, 2)}"
+                data-act="area-ha-input"
+                data-talhao="${t.talhao_id}"
+                data-hectares="${escapeHtml(String(hectares))}"
+                aria-label="Area colhida (ha)"
+                title="Digite hectares e pressione Enter"
+              />
+            </div>
+          </td>
           <td data-sort="${escapeHtml(String(sacas))}">${fmtNum(sacas, 2)}</td>
           <td><span data-act="prod-adj">${fmtNum(prodAdj, 2)}</span> sc/ha</td>
           <td class="actions"><button class="btn ghost small" type="button" data-act="ac-hist" data-talhao="${escapeHtml(String(t.talhao_id))}" data-nome="${escapeHtml(String(t.talhao_nome || ''))}">Histórico</button></td>
@@ -7064,17 +7045,17 @@ async function renderAreaColhida() {
       })
       .join('')
 
-    function updateRowUi(rangeEl) {
+    function updateRowUi(rangeEl, opts = {}) {
       const tr = rangeEl.closest('tr')
       if (!tr) return
       const read = tr.querySelector('[data-act="pct-read"]')
-      const area = tr.querySelector('[data-act="area-ha"]')
+      const areaInp = tr.querySelector('input[data-act="area-ha-input"]')
       const pct100 = Number(rangeEl.value)
       const hectares = Number(rangeEl.dataset.hectares || 0)
       const sacas = Number(rangeEl.dataset.sacas || 0)
       const pct2 = Number.isFinite(pct100) ? Math.min(1, Math.max(0, pct100 / 100)) : 0
       if (read) read.textContent = `${fmtNum(pct2 * 100, 1)}%`
-      if (area) area.textContent = fmtNum(hectares * pct2, 2)
+       if (areaInp && !opts.preserveAreaInput) areaInp.value = fmtNumInput(hectares * pct2, 2)
 
       const prodAdjEl = tr.querySelector('[data-act="prod-adj"]')
       if (prodAdjEl) {
@@ -7109,6 +7090,55 @@ async function renderAreaColhida() {
       }, 250)
 
       updateRowUi(el)
+    })
+
+    body.querySelectorAll('input[data-act="area-ha-input"]').forEach((inp) => {
+      const tr = inp.closest('tr')
+      const rangeEl = tr?.querySelector('input[data-act="pct-range"]')
+      const hectares = Number(inp.dataset.hectares || 0)
+      const talhao_id = Number(inp.dataset.talhao || 0)
+
+      const syncFromHa = () => {
+        if (!rangeEl) return
+        const v = parseNumberPt(String(inp.value || ''))
+        if (!Number.isFinite(v) || v < 0) return
+        const ha = Math.min(Math.max(0, v), Math.max(0, hectares))
+        const pct2 = hectares > 0 ? ha / hectares : 0
+        rangeEl.value = String(Math.min(100, Math.max(0, pct2 * 100)))
+        updateRowUi(rangeEl, { preserveAreaInput: true })
+      }
+
+      const saveFromHa = debounce(async () => {
+        if (!Number.isFinite(talhao_id) || talhao_id <= 0) return
+        const v = parseNumberPt(String(inp.value || ''))
+        if (!Number.isFinite(v) || v < 0) {
+          toast('Erro', 'Area colhida (ha) invalida')
+          return
+        }
+        const ha = Math.min(Math.max(0, v), Math.max(0, hectares))
+        const pct2 = hectares > 0 ? Math.min(1, Math.max(0, ha / hectares)) : 0
+        await api('/api/talhao-safra', {
+          method: 'POST',
+          body: { safra_id, talhao_id, pct_area_colhida: pct2 },
+        })
+        toast('Atualizado', 'Area colhida (ha) salva.')
+        // normaliza exibicao
+        inp.value = fmtNumInput(ha, 2)
+      }, 250)
+
+      inp.addEventListener('input', () => {
+        syncFromHa()
+      })
+      inp.addEventListener('blur', () => {
+        syncFromHa()
+        saveFromHa()
+      })
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          inp.blur()
+        }
+      })
     })
 
     body.querySelectorAll('button[data-act="ac-hist"]').forEach((b) => {
