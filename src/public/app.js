@@ -435,6 +435,40 @@ function toast(title, message) {
   toastEl._t = window.setTimeout(() => toastEl.classList.remove('show'), 3300)
 }
 
+function showDependencyError(e, { title = 'Exclusão bloqueada' } = {}) {
+  const deps = Array.isArray(e?.details?.dependencies) ? e.details.dependencies : []
+  if (!deps.length) {
+    toast('Erro', String(e?.message || e || 'Operação não permitida'))
+    return
+  }
+  const suggestions = deps
+    .map((d) => String(d?.suggestion || '').trim())
+    .filter(Boolean)
+  openDialog({
+    title,
+    submitLabel: 'Entendi',
+    bodyHtml: `
+      <div>${escapeHtml(String(e?.message || 'Existem registros vinculados.')).replace(/\n/g, '<br/>')}</div>
+      <div class="table-wrap" style="margin-top:12px">
+        <table>
+          <thead><tr><th>Vínculo</th><th class="t-right">Qtd.</th></tr></thead>
+          <tbody>
+            ${deps.map((d) => `<tr><td>${escapeHtml(String(d.label || d.key || 'Dependência'))}</td><td class="t-right">${escapeHtml(String(d.count || 0))}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${suggestions.length ? `
+        <div class="hint" style="margin-top:12px">Ação sugerida:</div>
+        <ol style="margin:8px 0 0 18px;color:var(--muted)">
+          ${suggestions.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}
+        </ol>
+      ` : ''}
+      <div class="hint" style="margin-top:10px">Resolva os registros vinculados antes de excluir este cadastro.</div>
+    `,
+    onSubmit: async () => {},
+  })
+}
+
 function escapeHtml(s) {
   return String(s ?? '')
     .replaceAll('&', '&amp;')
@@ -1458,7 +1492,17 @@ async function renderCrudPage({
       const act = btn.dataset.act
       const item = items.find((x) => x.id === id)
       if (act === 'edit') return await onEdit(item)
-      if (act === 'del') return await onDelete(item)
+      if (act === 'del') {
+        try {
+          return await onDelete(item)
+        } catch (e) {
+          if (e?.details?.code === 'DEPENDENCIAS_VINCULADAS') {
+            showDependencyError(e)
+            return
+          }
+          throw e
+        }
+      }
       if (onAction) return onAction(act, item)
     }
   })
@@ -4759,7 +4803,12 @@ async function renderColheitaBase(variant) {
         }
         if (act === 'del') {
           if (!(await confirmDanger(`Excluir a viagem #${id}?`))) return
-          await api(`/api/viagens/${id}`, { method: 'DELETE' })
+          try {
+            await api(`/api/viagens/${id}`, { method: 'DELETE' })
+          } catch (e) {
+            if (e?.details?.code === 'DEPENDENCIAS_VINCULADAS') return showDependencyError(e)
+            throw e
+          }
           toast('Excluída', 'Viagem removida.')
           refreshList()
           return
@@ -7785,7 +7834,12 @@ async function renderProducao() {
         if (b.dataset.act === 'edit') return openEdit(it)
         if (b.dataset.act === 'del') {
           if (!(await confirmDanger(`Excluir participante "${it.nome}"?`))) return
-          await api(`/api/participantes/${it.id}`, { method: 'DELETE' })
+          try {
+            await api(`/api/participantes/${it.id}`, { method: 'DELETE' })
+          } catch (e) {
+            if (e?.details?.code === 'DEPENDENCIAS_VINCULADAS') return showDependencyError(e)
+            throw e
+          }
           toast('Excluido', 'Participante removido.')
           renderProducao()
         }
@@ -7875,7 +7929,12 @@ async function renderProducao() {
         if (b.dataset.act === 'edit') return openEdit(it)
         if (b.dataset.act === 'del') {
           if (!(await confirmDanger(`Excluir politica "${it.nome}"?`))) return
-          await api(`/api/politicas-custos/${it.id}`, { method: 'DELETE' })
+          try {
+            await api(`/api/politicas-custos/${it.id}`, { method: 'DELETE' })
+          } catch (e) {
+            if (e?.details?.code === 'DEPENDENCIAS_VINCULADAS') return showDependencyError(e)
+            throw e
+          }
           toast('Excluida', 'Politica removida.')
           renderProducao()
         }

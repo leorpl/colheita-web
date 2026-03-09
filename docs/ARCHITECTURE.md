@@ -191,6 +191,7 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 
 - `src/services/auditService.js`
 - `src/services/auditService.test.js`
+- `src/services/deleteDependencyService.js`
 - `src/services/emailNotificationService.js`
 - `src/services/mailer.js`
 - `src/services/producaoService.js`

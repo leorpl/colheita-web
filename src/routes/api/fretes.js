@@ -7,6 +7,7 @@ import { Actions, Modules } from '../../auth/acl.js'
 import { S, FreteSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
 import { db } from '../../db/db.js'
+import { deleteDependencyService } from '../../services/deleteDependencyService.js'
 
 export const fretesRouter = Router()
 
@@ -80,6 +81,7 @@ fretesRouter.delete(
   const id = req.params.id
   const exists = freteRepo.get(id)
   if (!exists) throw notFound('Frete nao encontrado')
+  deleteDependencyService.assertCanDeleteFrete(Number(id))
   auditService.log(req, { module_name: 'fretes', record_id: id, action_type: 'delete', old_values: exists })
   freteRepo.remove(id)
   res.status(204).send()

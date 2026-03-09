@@ -481,7 +481,7 @@ code.mono{font-family:var(--mono);font-size:12px}
 .mini-map iframe{width:100%;height:100%;border:0;display:block}
 
 .toast{
-  position:fixed;right:18px;bottom:18px;z-index:20;
+  position:fixed;right:18px;bottom:18px;z-index:80;
   min-width:260px;max-width:360px;
   background:rgba(255,255,255,.92);
   border:1px solid rgba(15,26,22,.16);

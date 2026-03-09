@@ -7,6 +7,7 @@ import { requirePerm } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { S, ProducaoSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
+import { deleteDependencyService } from '../../services/deleteDependencyService.js'
 
 export const politicasCustosRouter = Router()
 
@@ -64,6 +65,7 @@ politicasCustosRouter.delete(
     const id = req.params.id
     const exists = politicaCustosRepo.get(id)
     if (!exists) throw notFound('Politica nao encontrada')
+    deleteDependencyService.assertCanDeletePoliticaCustos(Number(id))
     auditService.log(req, { module_name: 'politicas-custos', record_id: id, action_type: 'delete', old_values: exists })
     politicaCustosRepo.remove(id, { user_id: req.user?.id })
     res.status(204).send()

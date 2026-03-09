@@ -1,6 +1,6 @@
 {
-  "signature": "103c2b1f97210d1a95f91931d38209751847a9c71e6229f3f00104ff0b169bb3",
-  "generated_at": "2026-03-09T12:13:28.124Z",
+  "signature": "55678de2e61f40cd5fe8b50b545cb03a3e289055763c2f69656251f8260e0ffc",
+  "generated_at": "2026-03-09T18:10:16.986Z",
   "runtime": {
     "node": "v24.14.0",
     "platform": "win32"
@@ -905,6 +905,7 @@
     "services": [
       "src/services/auditService.js",
       "src/services/auditService.test.js",
+      "src/services/deleteDependencyService.js",
       "src/services/emailNotificationService.js",
       "src/services/mailer.js",
       "src/services/producaoService.js",
@@ -1061,7 +1062,7 @@
   },
   "docs_hashes": {
     "PROJECT_CONTEXT.md": "96cd04c1d524e7402a38879d293764a45a16f7d6647fb2d1377f6ff272c98631",
-    "ARCHITECTURE.md": "1dd4128e2ab9d91872622315d669427e93be2726f2542eb3d35dd2996b7c5e04",
+    "ARCHITECTURE.md": "db061d6b7f75851acb28434e51c90c41d86e8f6e84cc56c7b5dbfecf2cf2e6d9",
     "TASKS_OFICIAL.md": "d0c2ef8c8bf922f3e9aa39c3d36a95ebe8961c167386dd80ec429c6d0375bbe1",
     "CHANGELOG.md": "7cc29ac5007e79134959ffd97f3df04bb1b6641bf5f42cfb40c7abc790661f46",
     "LIÇÕESAPRENDIDAS.MD": "5e863f52bd7d6b74e2fab0fa93c353f7934def57125701fe19949bd280629408"

@@ -6,6 +6,7 @@ import { requirePerm } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { S, TalhaoSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
+import { deleteDependencyService } from '../../services/deleteDependencyService.js'
 
 export const talhoesRouter = Router()
 
@@ -60,6 +61,7 @@ talhoesRouter.delete(
   const id = req.params.id
   const exists = talhaoRepo.get(id)
   if (!exists) throw notFound('Talhao nao encontrado')
+  deleteDependencyService.assertCanDeleteTalhao(Number(id))
   auditService.log(req, { module_name: 'talhoes', record_id: id, action_type: 'delete', old_values: exists })
   talhaoRepo.remove(id, { user_id: req.user?.id })
   res.status(204).send()

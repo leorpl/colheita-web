@@ -7,6 +7,7 @@ import { requirePerm } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { S, ProducaoSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
+import { deleteDependencyService } from '../../services/deleteDependencyService.js'
 
 export const participantesRouter = Router()
 
@@ -56,6 +57,7 @@ participantesRouter.delete(
     const id = req.params.id
     const exists = participanteRepo.get(id)
     if (!exists) throw notFound('Participante nao encontrado')
+    deleteDependencyService.assertCanDeleteParticipante(Number(id))
     auditService.log(req, { module_name: 'participantes', record_id: id, action_type: 'delete', old_values: exists })
     participanteRepo.remove(id, { user_id: req.user?.id })
     res.status(204).send()

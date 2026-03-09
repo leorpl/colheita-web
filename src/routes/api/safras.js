@@ -6,6 +6,7 @@ import { requirePerm } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { S, SafraSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
+import { deleteDependencyService } from '../../services/deleteDependencyService.js'
 
 export const safrasRouter = Router()
 
@@ -80,6 +81,7 @@ safrasRouter.delete(
   const id = req.params.id
   const exists = safraRepo.get(id)
   if (!exists) throw notFound('Safra nao encontrada')
+  deleteDependencyService.assertCanDeleteSafra(Number(id))
   auditService.log(req, { module_name: 'safras', record_id: id, action_type: 'delete', old_values: exists })
   safraRepo.remove(id, { user_id: req.user?.id })
   res.status(204).send()
