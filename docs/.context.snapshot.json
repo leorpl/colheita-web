@@ -1,6 +1,6 @@
 {
-  "signature": "49cd29116e3872fa2526fb2a6b8da23e3d89841630caa3978795824f4cd97dbf",
-  "generated_at": "2026-03-10T17:05:41.820Z",
+  "signature": "561492b5d942c1246b9e433566d48f75db7fa9bd034afa8817bceb77e1d42807",
+  "generated_at": "2026-03-10T18:53:05.075Z",
   "runtime": {
     "node": "v24.14.0",
     "platform": "win32"
@@ -257,6 +257,14 @@
       },
       {
         "method": "GET",
+        "path": "/api/destino-regras/plantio/:id/umidade-template.xlsx"
+      },
+      {
+        "method": "GET",
+        "path": "/api/destino-regras/umidade-template.xlsx"
+      },
+      {
+        "method": "GET",
         "path": "/api/destinos"
       },
       {
@@ -458,6 +466,10 @@
       {
         "method": "POST",
         "path": "/api/destino-regras"
+      },
+      {
+        "method": "POST",
+        "path": "/api/destino-regras/umidade-import-preview"
       },
       {
         "method": "POST",
@@ -1098,7 +1110,7 @@
   },
   "docs_hashes": {
     "PROJECT_CONTEXT.md": "96cd04c1d524e7402a38879d293764a45a16f7d6647fb2d1377f6ff272c98631",
-    "ARCHITECTURE.md": "ec39dde2b9f6ad5d99c8325dde4203d82e3b34c1fd4f78922f1581226861602e",
+    "ARCHITECTURE.md": "e89c5f0f163361f69877c454c9a7c7cfab39b7f3cc3594aa5b7b2d35f0776cfe",
     "TASKS_OFICIAL.md": "d0c2ef8c8bf922f3e9aa39c3d36a95ebe8961c167386dd80ec429c6d0375bbe1",
     "CHANGELOG.md": "7cc29ac5007e79134959ffd97f3df04bb1b6641bf5f42cfb40c7abc790661f46",
     "LIÇÕESAPRENDIDAS.MD": "30f62df514d76838e953f305c705d819ef02484ee17a3ae9c512dc0e17efdb17",

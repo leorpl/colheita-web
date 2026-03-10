@@ -78,6 +78,8 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 - GET /api/destino-regras/one
 - GET /api/destino-regras/plantio
 - GET /api/destino-regras/plantio/:id
+- GET /api/destino-regras/plantio/:id/umidade-template.xlsx
+- GET /api/destino-regras/umidade-template.xlsx
 - GET /api/destinos
 - GET /api/destinos/:id
 - GET /api/fretes
@@ -129,6 +131,7 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 - POST /api/contratos-silo/:id/arquivos
 - POST /api/custos-lancamentos
 - POST /api/destino-regras
+- POST /api/destino-regras/umidade-import-preview
 - POST /api/destinos
 - POST /api/fretes
 - POST /api/fretes/bulk-delete-safra

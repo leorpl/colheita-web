@@ -1,4 +1,6 @@
 import { Router } from 'express'
+import multer from 'multer'
+import XLSX from 'xlsx'
 
 import { validateBody, validateQuery, validateParams } from '../../middleware/validate.js'
 import { destinoRegraRepo } from '../../repositories/destinoRegraRepo.js'
@@ -9,8 +11,10 @@ import { requirePerm } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { S, DestinoRegrasSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
+import { xlsxExportService } from '../../services/xlsxExportService.js'
 
 export const destinoRegrasRouter = Router()
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
 
 // compra por faixas removida (somente contrato)
 
@@ -27,6 +31,99 @@ destinoRegrasRouter.get(
 
 // Lista regras por safra+destino+plantio (nova UI)
 const ListPlantioQuery = DestinoRegrasSchemas.ListPlantioQuery
+
+destinoRegrasRouter.get(
+  '/umidade-template.xlsx',
+  requirePerm(Modules.REGRAS_DESTINO, Actions.VIEW),
+  (_req, res) => {
+    const buf = xlsxExportService.aoaToXlsxBuffer({
+      sheetName: 'Umidade',
+      aoa: [
+        ['umid_gt', 'umid_lte', 'desconto_pct', 'custo_secagem_por_saca'],
+        [13, 14, 0.5, 0],
+        [14, 15, 1.0, 0],
+        [15, 16, 1.5, 0],
+      ],
+    })
+    res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('content-disposition', 'attachment; filename="modelo-umidade-destino.xlsx"')
+    res.send(buf)
+  },
+)
+
+destinoRegrasRouter.get(
+  '/plantio/:id/umidade-template.xlsx',
+  requirePerm(Modules.REGRAS_DESTINO, Actions.VIEW),
+  validateParams(S.IdParam),
+  (req, res) => {
+    const regra = destinoRegraRepo.getPlantioById(req.params.id)
+    if (!regra) throw notFound('Regra (plantio) nao encontrada')
+    const faixas = destinoRegraRepo.getUmidadeFaixasPlantio(regra.id)
+    const buf = xlsxExportService.aoaToXlsxBuffer({
+      sheetName: 'Umidade',
+      aoa: [
+        ['umid_gt', 'umid_lte', 'desconto_pct', 'custo_secagem_por_saca'],
+        ...faixas.map((f) => [
+          Number(f.umid_gt || 0),
+          Number(f.umid_lte || 0),
+          Number(f.desconto_pct || 0),
+          Number(f.custo_secagem_por_saca || 0),
+        ]),
+      ],
+    })
+    res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('content-disposition', `attachment; filename="umidade-regra-${req.params.id}.xlsx"`)
+    res.send(buf)
+  },
+)
+
+destinoRegrasRouter.post(
+  '/umidade-import-preview',
+  requirePerm(Modules.REGRAS_DESTINO, Actions.UPDATE),
+  upload.single('file'),
+  (req, res) => {
+    if (!req.file?.buffer) throw conflict('Arquivo Excel nao enviado')
+    let wb
+    try {
+      wb = XLSX.read(req.file.buffer, { type: 'buffer' })
+    } catch {
+      throw conflict('Nao foi possivel ler o arquivo Excel enviado.')
+    }
+    const sheetName = wb.SheetNames?.[0]
+    const ws = sheetName ? wb.Sheets[sheetName] : null
+    if (!ws) throw conflict('A planilha nao possui aba valida.')
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' })
+    if (!Array.isArray(rows) || rows.length < 2) throw conflict('A planilha nao possui linhas suficientes para importar.')
+
+    const header = rows[0].map((h) => String(h || '').trim().toLowerCase())
+    const col = (names) => names.map((n) => header.indexOf(n)).find((i) => i >= 0) ?? -1
+    const idxGt = col(['umid_gt', 'umidade_gt', 'umid >', 'umid_gt (%)'])
+    const idxLte = col(['umid_lte', 'umidade_lte', 'umid <=', 'umid_lte (%)'])
+    const idxDesc = col(['desconto_pct', 'desconto', 'desconto (%)'])
+    const idxCusto = col(['custo_secagem_por_saca', 'secagem', 'secagem (r$/sc)', 'custo'])
+    if ([idxGt, idxLte, idxDesc].some((i) => i < 0)) {
+      throw conflict('Colunas obrigatorias nao encontradas. Use o arquivo modelo para preencher a tabela.')
+    }
+
+    const toNum = (v) => {
+      if (typeof v === 'number') return v
+      const s = String(v || '').trim()
+      if (!s) return NaN
+      return Number(s.replace(/\./g, '').replace(',', '.'))
+    }
+    const faixas = rows.slice(1)
+      .map((r) => ({
+        umid_gt: toNum(r[idxGt]),
+        umid_lte: toNum(r[idxLte]),
+        desconto_pct: toNum(r[idxDesc]),
+        custo_secagem_por_saca: idxCusto >= 0 ? toNum(r[idxCusto]) : 0,
+      }))
+      .filter((f) => Number.isFinite(f.umid_gt) && Number.isFinite(f.umid_lte) && Number.isFinite(f.desconto_pct))
+
+    if (!faixas.length) throw conflict('Nenhuma faixa valida foi encontrada na planilha.')
+    res.json({ file_name: req.file.originalname, count: faixas.length, faixas })
+  },
+)
 
 destinoRegrasRouter.get(
   '/plantio',

@@ -47,7 +47,17 @@ async function run() {
     externalBtn.href = externalUrl
     externalBtn.style.display = ''
   }
-  const talhoes = await api('/api/public/talhoes-geometrias')
+  let talhoes = await api('/api/public/talhoes-geometrias').catch(() => [])
+  if ((!Array.isArray(talhoes) || !talhoes.length) && focusTalhao?.geometry_geojson?.geometry) {
+    talhoes = [{
+      id: focusTalhao.id,
+      codigo: focusTalhao.codigo,
+      nome: focusTalhao.nome,
+      local: focusTalhao.local,
+      geometry_geojson: focusTalhao.geometry_geojson,
+      geometry_source_name: focusTalhao.geometry_source_name,
+    }]
+  }
   if (!Array.isArray(talhoes) || !talhoes.length) {
     if (externalUrl) throw new Error('Este talhão não possui polígono salvo. Use o link externo para abrir o mapa de referência.')
     throw new Error('Nenhum talhão com geometria salva.')

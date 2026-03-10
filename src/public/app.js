@@ -4360,11 +4360,17 @@ async function renderRegrasDestino() {
                 <div class="sec-line"></div>
               </div>
               <div class="hint" style="margin-top:6px">Defina faixas: desconto (%) e custo de secagem (R$/sc).</div>
+              <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+                <a class="btn ghost" id="btnDownloadUmidadeTemplate" href="/api/destino-regras/umidade-template.xlsx" target="_blank" rel="noreferrer">Baixar arquivo modelo</a>
+                <a class="btn ghost" id="btnDownloadUmidadeAtual" href="#" target="_blank" rel="noreferrer" style="display:none">Baixar tabela atual</a>
+                <input type="file" id="umidadeImportFile" accept=".xlsx,.xls,.csv" style="display:none" />
+                <button class="btn ghost" type="button" id="btnImportUmidade">Importar planilha</button>
+              </div>
              <div class="table-wrap" style="margin-top:8px">
                <table>
-                 <thead><tr><th class="actions"></th><th>Umid (&gt;)</th><th>Umid (&lt;=)</th><th>Desconto (%)</th><th>Secagem (R$/sc)</th></tr></thead>
-                 <tbody id="faixas"></tbody>
-               </table>
+                  <thead><tr><th class="actions"></th><th>Umid (&gt;)</th><th>Umid (&lt;=)</th><th>Desconto (%)</th><th>Secagem (R$/sc)</th></tr></thead>
+                  <tbody id="faixas"></tbody>
+                </table>
              </div>
              <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end">
                <button class="btn ghost" type="button" id="btnAddFaixa">Adicionar faixa</button>
@@ -4384,6 +4390,9 @@ async function renderRegrasDestino() {
   const ctFileHint = view.querySelector('#ctFileHint')
   const btnSalvar = view.querySelector('#btnSalvar')
   const btnAddFaixa = view.querySelector('#btnAddFaixa')
+  const btnDownloadUmidadeAtual = view.querySelector('#btnDownloadUmidadeAtual')
+  const btnImportUmidade = view.querySelector('#btnImportUmidade')
+  const inputUmidadeImport = view.querySelector('#umidadeImportFile')
   const btnAddContrato = view.querySelector('#btnAddContrato')
   const btnCopyRule = view.querySelector('#btnCopyRule')
   const btnBackRules = view.querySelector('#btnBackRules')
@@ -4465,6 +4474,15 @@ async function renderRegrasDestino() {
     }
   }
 
+  if (btnDownloadUmidadeAtual) {
+    if (currentId) {
+      btnDownloadUmidadeAtual.style.display = ''
+      btnDownloadUmidadeAtual.href = `/api/destino-regras/plantio/${encodeURIComponent(String(currentId))}/umidade-template.xlsx`
+    } else {
+      btnDownloadUmidadeAtual.style.display = 'none'
+    }
+  }
+
   if (btnUploadCt) {
     btnUploadCt.onclick = async () => {
       if (!Number.isFinite(contratoId) || contratoId <= 0) {
@@ -4496,6 +4514,46 @@ async function renderRegrasDestino() {
         toast('Erro', String(e?.message || e))
       } finally {
         btnUploadCt.disabled = false
+      }
+    }
+  }
+
+  if (btnImportUmidade) {
+    btnImportUmidade.disabled = !canUpdate
+    btnImportUmidade.onclick = () => {
+      if (!canUpdate) return
+      inputUmidadeImport?.click()
+    }
+  }
+  if (inputUmidadeImport) {
+    inputUmidadeImport.onchange = async () => {
+      const file = inputUmidadeImport.files?.[0]
+      if (!file) return
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch('/api/destino-regras/umidade-import-preview', {
+          method: 'POST',
+          body: fd,
+          credentials: 'same-origin',
+        })
+        const text = await res.text()
+        const data = text ? JSON.parse(text) : null
+        if (!res.ok) throw new Error(data?.message || `Erro ${res.status}`)
+        faixasEl.innerHTML = (data.faixas || [])
+          .map((f) => faixaRow({
+            umid_gt: fmtNum(Number(f.umid_gt || 0), 2),
+            umid_lte: fmtNum(Number(f.umid_lte || 0), 2),
+            desconto_pct: fmtNum(Number(f.desconto_pct || 0), 2),
+            custo_secagem_por_saca: fmtNum(Number(f.custo_secagem_por_saca || 0), 2),
+          }))
+          .join('')
+        bindFaixaRemove()
+        toast('OK', `Planilha importada: ${data.count || 0} faixa(s) carregadas.`)
+      } catch (e) {
+        toast('Erro', String(e?.message || e))
+      } finally {
+        inputUmidadeImport.value = ''
       }
     }
   }
