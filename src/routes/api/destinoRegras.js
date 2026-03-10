@@ -64,9 +64,9 @@ destinoRegrasRouter.get(
       aoa: [
         ['umid_gt', 'umid_lte', 'desconto_pct', 'custo_secagem_por_saca'],
         ...faixas.map((f) => [
-          Number(f.umid_gt || 0),
-          Number(f.umid_lte || 0),
-          Number(f.desconto_pct || 0),
+          Number(f.umid_gt || 0) * 100,
+          Number(f.umid_lte || 0) * 100,
+          Number(f.desconto_pct || 0) * 100,
           Number(f.custo_secagem_por_saca || 0),
         ]),
       ],
@@ -109,13 +109,21 @@ destinoRegrasRouter.post(
       if (typeof v === 'number') return v
       const s = String(v || '').trim()
       if (!s) return NaN
-      return Number(s.replace(/\./g, '').replace(',', '.'))
+      const cleaned = s.replace('%', '').replace(/\./g, '').replace(',', '.')
+      return Number(cleaned)
+    }
+    const toPercent = (v) => {
+      const n = toNum(v)
+      if (!Number.isFinite(n)) return NaN
+      // Excel often stores percent-formatted cells as fractions (e.g. 14% => 0.14).
+      if (n >= 0 && n <= 1) return n * 100
+      return n
     }
     const faixas = rows.slice(1)
       .map((r) => ({
-        umid_gt: toNum(r[idxGt]),
-        umid_lte: toNum(r[idxLte]),
-        desconto_pct: toNum(r[idxDesc]),
+        umid_gt: toPercent(r[idxGt]),
+        umid_lte: toPercent(r[idxLte]),
+        desconto_pct: toPercent(r[idxDesc]),
         custo_secagem_por_saca: idxCusto >= 0 ? toNum(r[idxCusto]) : 0,
       }))
       .filter((f) => Number.isFinite(f.umid_gt) && Number.isFinite(f.umid_lte) && Number.isFinite(f.desconto_pct))

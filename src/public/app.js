@@ -4530,6 +4530,18 @@ async function renderRegrasDestino() {
       const file = inputUmidadeImport.files?.[0]
       if (!file) return
       try {
+        const currentRows = Array.from(faixasEl.querySelectorAll('tr')).filter((tr) => !/Nenhuma faixa/i.test(String(tr.textContent || '')))
+        if (currentRows.length) {
+          const ok = await confirmAction(
+            `A importação vai substituir as ${currentRows.length} faixa(s) atuais da tabela de umidade. Deseja continuar?`,
+            { title: 'Substituir faixas atuais', confirmLabel: 'Substituir tabela' },
+          )
+          if (!ok) {
+            inputUmidadeImport.value = ''
+            return
+          }
+        }
+
         const fd = new FormData()
         fd.append('file', file)
         const res = await fetch('/api/destino-regras/umidade-import-preview', {
@@ -4549,7 +4561,7 @@ async function renderRegrasDestino() {
           }))
           .join('')
         bindFaixaRemove()
-        toast('OK', `Planilha importada: ${data.count || 0} faixa(s) carregadas.`)
+        toast('OK', `Planilha importada: ${data.count || 0} faixa(s) substituíram a tabela atual.`)
       } catch (e) {
         toast('Erro', String(e?.message || e))
       } finally {

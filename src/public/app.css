@@ -272,6 +272,19 @@ input:focus,select:focus,textarea:focus{border-color:rgba(30,106,77,.55);box-sha
 .btn.preset{padding:6px 9px;border-radius:999px}
 .btn.preset.active{background:#fff3c4;border-color:rgba(209,154,43,.40);color:rgba(15,26,22,.86)}
 
+/* Keep action/button typography consistent across tables and grids. */
+.table-wrap .btn,
+.grid-table .btn,
+.grid-table .act-btn,
+.mobile-card-actions .btn,
+.actions .btn,
+.actions .act-btn{
+  font-size:12px;
+  line-height:1.2;
+  font-family:inherit;
+  font-weight:600;
+}
+
 .table-wrap{overflow:auto;border-radius:14px;border:1px solid var(--line);-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:separate;border-spacing:0;background:rgba(255,255,255,.72)}
 thead th{
