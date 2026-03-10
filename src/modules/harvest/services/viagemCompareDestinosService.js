@@ -241,28 +241,10 @@ export function compararDestinos(input, { resolveUmidadeFaixa } = {}) {
 
     const sub_total_secagem = round(calc.sacas * secagem_custo_por_saca, 6)
     const custo_silo_por_saca = Number(r.custo_silo_por_saca || 0)
+    const custo_terceiros_por_saca = Number(r.custo_terceiros_por_saca || 0)
     const sub_total_custo_silo = round(calc.sacas * custo_silo_por_saca, 6)
 
     const entregaAntes = getEntregaAntesSacas({ destino_id: r.destino_id })
-
-    const contrato = contratoSiloRepo.getOne({
-      safra_id,
-      destino_id: Number(r.destino_id),
-      tipo_plantio,
-    })
-    const contratoFaixas = Array.isArray(contrato?.faixas) ? contrato.faixas : []
-
-    const contratoCalc = computeContratoByFaixas({
-      entregueAntes: entregaAntes,
-      sacas: calc.sacas,
-      faixas: contratoFaixas,
-    })
-
-    const contratoExcedido = Number(contratoCalc.fora_sacas || 0) > 0
-    const preco_compra_por_saca =
-      contrato && !contratoExcedido ? Number(contratoCalc.precoMedio || 0) : null
-    const valor_compra_total =
-      contrato && !contratoExcedido ? Number(contratoCalc.total || 0) : null
 
     // Frete (por motorista x destino)
     const frete_tabela = freteRepo.getValor({
@@ -275,26 +257,19 @@ export function compararDestinos(input, { resolveUmidadeFaixa } = {}) {
         ? null
         : round(sacas_frete * Number(frete_tabela || 0), 6)
 
-    // Precos/valores finais (Silo)
-    // - preco_liquido_sem_frete: compra - secagem - custos do silo
-    // - total_sem_frete: sacas * preco_liquido_sem_frete
-    // - total_com_frete: total_sem_frete - frete
-    const preco_liquido_sem_frete_por_saca =
-      preco_compra_por_saca === null
+    const frete_por_saca = frete_tabela === null || frete_tabela === undefined ? null : Number(frete_tabela || 0)
+    const abatimento_operacional_silo_por_saca =
+      frete_por_saca === null
         ? null
-        : round(
-            preco_compra_por_saca - (secagem_custo_por_saca || 0) - (custo_silo_por_saca || 0),
-            6,
-          )
-
-    const valor_final_total_sem_frete =
-      preco_liquido_sem_frete_por_saca === null
+        : round(frete_por_saca + (secagem_custo_por_saca || 0) + (custo_silo_por_saca || 0), 6)
+    const abatimento_operacional_terceiros_por_saca =
+      frete_por_saca === null
         ? null
-        : round(calc.sacas * preco_liquido_sem_frete_por_saca, 6)
-    const valor_final_total_com_frete =
-      sub_total_frete === null || valor_final_total_sem_frete === null
-        ? null
-        : round(valor_final_total_sem_frete - sub_total_frete, 6)
+        : round(frete_por_saca + (secagem_custo_por_saca || 0) + (custo_terceiros_por_saca || 0), 6)
+    const abatimento_operacional_silo_total =
+      abatimento_operacional_silo_por_saca === null ? null : round(calc.sacas * abatimento_operacional_silo_por_saca, 6)
+    const abatimento_operacional_terceiros_total =
+      abatimento_operacional_terceiros_por_saca === null ? null : round(calc.sacas * abatimento_operacional_terceiros_por_saca, 6)
 
     return {
       destino_id: r.destino_id,
@@ -311,12 +286,11 @@ export function compararDestinos(input, { resolveUmidadeFaixa } = {}) {
       sub_total_custo_silo,
       frete_tabela,
       sub_total_frete,
-
-      preco_compra_por_saca,
-      valor_compra_total,
-      preco_liquido_sem_frete_por_saca,
-      valor_final_total_sem_frete,
-      valor_final_total_com_frete,
+      frete_por_saca,
+      abatimento_operacional_silo_por_saca,
+      abatimento_operacional_terceiros_por_saca,
+      abatimento_operacional_silo_total,
+      abatimento_operacional_terceiros_total,
     }
   }
 
@@ -327,28 +301,21 @@ export function compararDestinos(input, { resolveUmidadeFaixa } = {}) {
     .map((x) => ({
       ...x,
       is_atual: Number(x.destino_id) === destino_atual_id,
-      delta_valor_final_total_com_frete:
-        atual && atual.valor_final_total_com_frete !== null && x.valor_final_total_com_frete !== null
+      delta_abatimento_operacional_silo_total:
+        atual && atual.abatimento_operacional_silo_total !== null && x.abatimento_operacional_silo_total !== null
           ? round(
-              Number(x.valor_final_total_com_frete) - Number(atual.valor_final_total_com_frete),
+              Number(x.abatimento_operacional_silo_total) - Number(atual.abatimento_operacional_silo_total),
               6,
             )
           : null,
     }))
 
-    // Ordenar por valor final com frete quando existir; senao, por valor final sem frete
+    // Ordenar por menor abatimento operacional no silo; em empate, mais sacas.
     .sort((a, b) => {
-      const av =
-        a.valor_final_total_com_frete === null
-          ? a.valor_final_total_sem_frete
-          : a.valor_final_total_com_frete
-      const bv =
-        b.valor_final_total_com_frete === null
-          ? b.valor_final_total_sem_frete
-          : b.valor_final_total_com_frete
-      const aKey = av === null || av === undefined ? -1e18 : Number(av || 0)
-      const bKey = bv === null || bv === undefined ? -1e18 : Number(bv || 0)
-      return bKey - aKey
+      const aKey = a.abatimento_operacional_silo_total === null || a.abatimento_operacional_silo_total === undefined ? 1e18 : Number(a.abatimento_operacional_silo_total || 0)
+      const bKey = b.abatimento_operacional_silo_total === null || b.abatimento_operacional_silo_total === undefined ? 1e18 : Number(b.abatimento_operacional_silo_total || 0)
+      if (aKey !== bKey) return aKey - bKey
+      return Number(b.sacas || 0) - Number(a.sacas || 0)
     })
 
   return {

@@ -5347,12 +5347,11 @@ async function renderColheitaBase(variant) {
                 <th>Desconto %</th>
                 <th>Sacas</th>
                 <th>Frete</th>
-                <th>Compra (Silo)</th>
-                <th>Silo (líquida)</th>
-                <th>Terceiros (ideal)</th>
+                <th>Custo op. silo/sc</th>
+                <th>Custo op. terc./sc</th>
               </tr>
             </thead>
-                <tbody id="tbody"><tr><td colspan="18">Carregando...</td></tr></tbody>
+                <tbody id="tbody"><tr><td colspan="17">Carregando...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -5469,30 +5468,13 @@ async function renderColheitaBase(variant) {
 
       const saida = String(v.data_saida || '').trim()
 
-      const valorCompraApplied = Number(v.valor_compra_por_saca_aplicado)
-      const valorCompraRule =
-        v.regra_valor_compra_por_saca === null || v.regra_valor_compra_por_saca === undefined
-          ? null
-          : Number(v.regra_valor_compra_por_saca)
-
-      const valorCompra = Number.isFinite(valorCompraApplied)
-        ? valorCompraApplied
-        : Number.isFinite(valorCompraRule)
-          ? valorCompraRule
-          : null
-
       const sacas = Number(v.sacas || 0)
       const fretePorSaca = sacas > 0 ? Number(v.sub_total_frete || 0) / sacas : 0
       const secagemPorSaca = Number(v.secagem_custo_por_saca || 0)
       const custoSiloPorSaca = Number(v.custo_silo_por_saca || 0)
       const custoTercPorSaca = Number(v.custo_terceiros_por_saca || 0)
-
-      const compraSilo = valorCompra !== null && Number.isFinite(valorCompra) ? valorCompra : null
-      const siloLiquida =
-        compraSilo === null
-          ? null
-          : compraSilo - (fretePorSaca + secagemPorSaca + custoSiloPorSaca)
-      const terceirosIdeal = compraSilo === null ? null : compraSilo + custoTercPorSaca
+      const abatSilo = fretePorSaca + secagemPorSaca + custoSiloPorSaca
+      const abatTerc = fretePorSaca + secagemPorSaca + custoTercPorSaca
 
       const fichaDisp = v.display_ficha ? String(v.display_ficha) : String(v.ficha || '')
       const isRateado = Boolean(v.is_rateado)
@@ -5541,9 +5523,8 @@ async function renderColheitaBase(variant) {
         <td>${fmtNum(descPct, 2)}%</td>
         <td>${fmtNum(v.sacas, 2)}</td>
         <td>${fmtMoney(v.sub_total_frete)}</td>
-        <td>${compraSilo === null ? '-' : fmtMoney(compraSilo)}</td>
-        <td>${siloLiquida === null ? '-' : fmtMoney(siloLiquida)}</td>
-        <td>${terceirosIdeal === null ? '-' : fmtMoney(terceirosIdeal)}</td>
+        <td>${fmtMoney(abatSilo)}</td>
+        <td>${fmtMoney(abatTerc)}</td>
       </tr>`
     }
 
@@ -5557,8 +5538,14 @@ async function renderColheitaBase(variant) {
       const pls = Number(v.peso_limpo_seco_kg)
       const descPct = Number.isFinite(pb) && pb > 0 && Number.isFinite(pls) ? clamp01(1 - pls / pb) * 100 : 0
       const fichaDisp = v.display_ficha ? String(v.display_ficha) : String(v.ficha || '')
-      const compraSilo = v.valor_compra_por_saca_aplicado ?? v.regra_valor_compra_por_saca ?? null
       const entregaPendente = !String(v.data_entrega || '').trim() || !String(v.hora_entrega || '').trim()
+      const sacas = Number(v.sacas || 0)
+      const fretePorSaca = sacas > 0 ? Number(v.sub_total_frete || 0) / sacas : 0
+      const secagemPorSaca = Number(v.secagem_custo_por_saca || 0)
+      const custoSiloPorSaca = Number(v.custo_silo_por_saca || 0)
+      const custoTercPorSaca = Number(v.custo_terceiros_por_saca || 0)
+      const abatSilo = fretePorSaca + secagemPorSaca + custoSiloPorSaca
+      const abatTerc = fretePorSaca + secagemPorSaca + custoTercPorSaca
       const toggleBtn = showToggle
         ? `<button class="btn ghost small" data-act="toggle" data-id="${v.id}">${toggled ? 'Recolher rateio' : 'Expandir rateio'}</button>`
         : ''
@@ -5585,7 +5572,8 @@ async function renderColheitaBase(variant) {
           <div><span>Desconto</span><b>${fmtNum(descPct, 2)}%</b></div>
           <div><span>Sacas</span><b>${fmtNum(v.sacas, 2)}</b></div>
           <div><span>Frete</span><b>${fmtMoney(v.sub_total_frete)}</b></div>
-          <div><span>Compra</span><b>${compraSilo === null || compraSilo === undefined ? '-' : fmtMoney(compraSilo)}</b></div>
+          <div><span>Custo op. silo / sc</span><b>${fmtMoney(abatSilo)}</b></div>
+          <div><span>Custo op. terceiros / sc</span><b>${fmtMoney(abatTerc)}</b></div>
         </div>
       </div>`
     }
@@ -6713,19 +6701,12 @@ async function renderColheitaBase(variant) {
 
         const rows = items
           .map((it) => {
-            const delta = Number(it.delta_valor_final_total_com_frete)
+            const delta = Number(it.delta_abatimento_operacional_silo_total)
             const deltaTxt =
-              it.delta_valor_final_total_com_frete === null || !Number.isFinite(delta)
+              it.delta_abatimento_operacional_silo_total === null || !Number.isFinite(delta)
                 ? '-'
                 : `${delta >= 0 ? '+' : ''}${fmtMoney(delta)}`
             const badge = it.is_atual ? ' <span class="hint">(atual)</span>' : ''
-
-            const finalSemFrete = Number(it.valor_final_total_sem_frete)
-            const finalComFrete =
-              it.valor_final_total_com_frete === null ||
-              it.valor_final_total_com_frete === undefined
-                ? null
-                : Number(it.valor_final_total_com_frete)
 
             return `<tr>
               <td data-sort="${escapeHtml(String(it.destino_local || ''))}">${escapeHtml(it.destino_local || '')}${badge}</td>
@@ -6733,21 +6714,21 @@ async function renderColheitaBase(variant) {
               <td>${fmtPctFromFrac(it.umidade_desc_pct || 0, 2)}</td>
               <td data-sort="${escapeHtml(String(it.sub_total_secagem || 0))}">${fmtMoney(Number(it.sub_total_secagem || 0))}</td>
               <td data-sort="${escapeHtml(String(it.sub_total_custo_silo || 0))}">${fmtMoney(Number(it.sub_total_custo_silo || 0))}</td>
-              <td data-sort="${escapeHtml(String(it.preco_compra_por_saca || 0))}">${fmtMoney(Number(it.preco_compra_por_saca || 0))}/sc</td>
-              <td data-sort="${escapeHtml(String(it.preco_liquido_sem_frete_por_saca || 0))}"><b>${fmtMoney(Number(it.preco_liquido_sem_frete_por_saca || 0))}</b>/sc</td>
-              <td data-sort="${escapeHtml(String(finalSemFrete || 0))}"><b>${fmtMoney(finalSemFrete || 0)}</b></td>
-              <td data-sort="${escapeHtml(String(finalComFrete || -1e18))}"><b>${finalComFrete === null ? '-' : fmtMoney(finalComFrete)}</b></td>
+              <td data-sort="${escapeHtml(String(it.frete_por_saca || 0))}">${it.frete_por_saca === null ? '-' : `${fmtMoney(Number(it.frete_por_saca || 0))}/sc`}</td>
+              <td data-sort="${escapeHtml(String(it.abatimento_operacional_silo_por_saca || 0))}"><b>${it.abatimento_operacional_silo_por_saca === null ? '-' : `${fmtMoney(Number(it.abatimento_operacional_silo_por_saca || 0))}/sc`}</b></td>
+              <td data-sort="${escapeHtml(String(it.abatimento_operacional_terceiros_por_saca || 0))}"><b>${it.abatimento_operacional_terceiros_por_saca === null ? '-' : `${fmtMoney(Number(it.abatimento_operacional_terceiros_por_saca || 0))}/sc`}</b></td>
+              <td data-sort="${escapeHtml(String(it.abatimento_operacional_silo_total || -1e18))}"><b>${it.abatimento_operacional_silo_total === null ? '-' : fmtMoney(Number(it.abatimento_operacional_silo_total || 0))}</b></td>
               <td data-sort="${escapeHtml(String(delta || 0))}">${escapeHtml(deltaTxt)}</td>
             </tr>`
           })
           .join('')
 
         openDialog({
-          title: 'Comparar destinos (sacas)',
+          title: 'Comparar destinos (operacional)',
           size: 'wide',
           submitLabel: 'Fechar',
           bodyHtml: `
-            <div class="hint">Compara quanto sobra no silo por destino (mesma safra/plantio). Sacas = (peso_limpo/seco / 60). “Liquido s/ frete” = compra - secagem - custos do silo. “Total c/ frete” desconta tambem o frete (motorista x destino).</div>
+            <div class="hint">Compara apenas fatores operacionais por destino (mesma safra/plantio): sacas geradas, desconto de umidade, secagem, custo silo, frete e abatimento operacional total por saca.</div>
             <div class="table-wrap" style="margin-top:12px">
               <table>
                 <thead>
@@ -6757,11 +6738,11 @@ async function renderColheitaBase(variant) {
                     <th>Desc. umidade</th>
                     <th>Secagem (R$)</th>
                     <th>Custos silo (R$)</th>
-                    <th>Preco compra (R$/sc)</th>
-                    <th>Liquido s/ frete (R$/sc)</th>
-                    <th>Total s/ frete (R$)</th>
-                    <th>Total c/ frete (R$)</th>
-                    <th>Delta vs atual (c/ frete)</th>
+                    <th>Frete (R$/sc)</th>
+                    <th>Custo op. silo (R$/sc)</th>
+                    <th>Custo op. terceiros (R$/sc)</th>
+                    <th>Custo op. silo total (R$)</th>
+                    <th>Delta vs atual</th>
                   </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -6943,47 +6924,6 @@ async function renderColheitaBase(variant) {
         const calcHtml = `
           <span class="pill"><span class="dot"></span><span>Peso bruto: <b>${fmtKg(p.peso_bruto_kg)}</b></span></span>
           ${
-            p.valor_compra_por_saca !== null && p.valor_compra_por_saca !== undefined
-              ? `<span class="pill"><span class="dot"></span><span>Compra (Silo): <b>${fmtMoney(p.valor_compra_por_saca)}</b>/sc</span></span>`
-              : ''
-          }
-          ${
-            p.valor_compra_por_saca !== null && p.valor_compra_por_saca !== undefined
-              ? `<span class="pill"><span class="dot"></span><span>Compra (Silo) liquida: <b>${fmtMoney(p.valor_compra_silo_liquida_por_saca)}</b>/sc</span></span>`
-              : ''
-          }
-          ${
-            p.valor_compra_por_saca !== null && p.valor_compra_por_saca !== undefined
-              ? `<span class="pill"><span class="dot"></span><span>Venda (Terceiros) bruto ideal: <b>${fmtMoney(p.valor_venda_terceiros_bruto_ideal_por_saca)}</b>/sc</span></span>`
-              : ''
-          }
-           ${
-             Array.isArray(p.valor_compra_detalhes) && p.valor_compra_detalhes.length
-               ? `<details class="prev-details" ${p.valor_compra_detalhes.length > 1 ? 'open' : ''}>
-                    <summary>
-                      Tratativa de precos (acumulado): antes <b>${fmtNum(p.valor_compra_entrega_antes || 0, 2)}</b> sc | depois <b>${fmtNum(p.valor_compra_entrega_depois || 0, 2)}</b> sc
-                    </summary>
-                    <div style="margin-top:8px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(15,26,22,.10)">
-                      <div class="table-wrap" style="margin:0">
-                        <table>
-                          <thead><tr><th>De (acum.)</th><th>Ate (acum.)</th><th>Sacas</th><th>Preco (R$/sc)</th></tr></thead>
-                          <tbody>
-                            ${p.valor_compra_detalhes
-                              .map((d) => `<tr>
-                                <td>${fmtNum(d.de_acumulado || 0, 2)}</td>
-                                <td>${fmtNum(d.ate_acumulado || 0, 2)}</td>
-                                <td>${fmtNum(d.sacas || 0, 2)}</td>
-                                <td>${fmtMoney(d.preco_por_saca || 0)}</td>
-                              </tr>`)
-                              .join('')}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </details>`
-               : ''
-           }
-          ${
             p.secagem_custo_por_saca && Number(p.secagem_custo_por_saca) > 0
               ? `<span class="pill"><span class="dot warn"></span><span>Secagem: <b>${fmtMoney(p.sub_total_secagem)}</b> (R$ ${fmtNum(p.secagem_custo_por_saca, 2)}/sc)</span></span>`
               : ''
@@ -6998,6 +6938,8 @@ async function renderColheitaBase(variant) {
               ? `<span class="pill"><span class="dot warn"></span><span>Custos (Terceiros): <b>${fmtMoney(p.sub_total_custo_terceiros)}</b> (R$ ${fmtNum(p.custo_terceiros_por_saca, 2)}/sc limpa | abat.: ${fmtMoney(p.abatimento_por_saca_terceiros)}/sc)</span></span>`
               : ''
           }
+          <span class="pill"><span class="dot warn"></span><span>Custo operacional (Silo): <b>${fmtMoney(p.abatimento_por_saca_silo)}</b>/sc</span></span>
+          <span class="pill"><span class="dot warn"></span><span>Custo operacional (Terceiros): <b>${fmtMoney(p.abatimento_por_saca_terceiros)}</b>/sc</span></span>
           <span class="pill"><span class="dot warn"></span><span>Umidade: <b>${fmtKg(p.umidade_kg)}</b> (sugerido: ${fmtNum(p.umidade_desc_pct_sugerida * 100, 2)}% | aplicado: ${fmtNum(p.umidade_desc_pct * 100, 2)}% | origem: ${escapeHtml(p.umidade_origem)})</span></span>
           <span class="pill"><span class="dot warn"></span><span>Impureza: <b>${fmtKg(p.impureza_kg)}</b> (${fmtPctFromFrac(p.impureza_pct)} - ${fmtPctFromFrac(p.impureza_limite_pct)})</span></span>
           <span class="pill"><span class="dot warn"></span><span>Ardidos: <b>${fmtKg(p.ardidos_kg)}</b> (${fmtPctFromFrac(p.ardidos_pct)} - ${fmtPctFromFrac(p.ardidos_limite_pct)})</span></span>
@@ -7831,15 +7773,7 @@ async function renderRelatorios() {
         const custoTercPorSaca = Number(v.custo_terceiros_por_saca || 0)
 
         const valorCompraApplied = Number(v.valor_compra_por_saca_aplicado)
-        const valorCompraRule =
-          v.regra_valor_compra_por_saca === null || v.regra_valor_compra_por_saca === undefined
-            ? null
-            : Number(v.regra_valor_compra_por_saca)
-        const valorCompra = Number.isFinite(valorCompraApplied)
-          ? valorCompraApplied
-          : Number.isFinite(valorCompraRule)
-            ? valorCompraRule
-            : null
+        const valorCompra = Number.isFinite(valorCompraApplied) ? valorCompraApplied : null
 
         const compraSilo = valorCompra !== null && Number.isFinite(valorCompra) ? valorCompra : null
         const siloLiquida =

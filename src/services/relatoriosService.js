@@ -375,15 +375,7 @@ export const relatoriosService = {
       const custoTercPorSaca = Number(v.custo_terceiros_por_saca || 0)
 
       const valorCompraApplied = Number(v.valor_compra_por_saca_aplicado)
-      const valorCompraRule =
-        v.regra_valor_compra_por_saca === null || v.regra_valor_compra_por_saca === undefined
-          ? null
-          : Number(v.regra_valor_compra_por_saca)
-      const valorCompra = Number.isFinite(valorCompraApplied)
-        ? valorCompraApplied
-        : Number.isFinite(valorCompraRule)
-          ? valorCompraRule
-          : null
+      const valorCompra = Number.isFinite(valorCompraApplied) ? valorCompraApplied : null
 
       const compraSilo = valorCompra !== null && Number.isFinite(valorCompra) ? valorCompra : null
       const siloLiquida =
