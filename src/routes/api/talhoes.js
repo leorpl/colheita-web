@@ -24,7 +24,7 @@ function withGeometryArea(row) {
 }
 
 talhoesRouter.get('/', requirePerm(Modules.TALHOES, Actions.VIEW), (_req, res) => {
-  res.json(talhaoRepo.list().map(withGeometryArea))
+  res.json(talhaoRepo.listWithGeometry().map(withGeometryArea))
 })
 
 talhoesRouter.post(

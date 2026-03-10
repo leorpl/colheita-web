@@ -1957,6 +1957,14 @@ async function renderTalhoes() {
         }
       : null
 
+    if (hectaresEl && initialState) {
+      const manualArea = asNumberOrNull(initialState.hectares)
+      const geoArea = Number(initialState.geometry_area_ha || 0)
+      if (Number.isFinite(manualArea) && Number.isFinite(geoArea) && geoArea > 0 && Math.abs(manualArea - geoArea) >= 0.01) {
+        hectaresEl.dataset.userEdited = '1'
+      }
+    }
+
     const currentGeometryArea = () => {
       if (!geometryState?.candidates?.length) return null
       const cur = geometryState.candidates[Math.max(0, Math.min(Number(geometryState.selectedIndex || 0), geometryState.candidates.length - 1))]
