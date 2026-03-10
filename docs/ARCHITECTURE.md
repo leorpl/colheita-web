@@ -89,6 +89,7 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 - GET /api/participantes/:id
 - GET /api/politicas-custos
 - GET /api/politicas-custos/:id
+- GET /api/public/talhoes-geometrias
 - GET /api/public/talhoes/:id
 - GET /api/public/talhoes/:id/resumo
 - GET /api/quitacoes-motoristas/:id
@@ -142,6 +143,7 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 - POST /api/talhao-acordos
 - POST /api/talhao-safra
 - POST /api/talhoes
+- POST /api/talhoes/geometry-preview
 - POST /api/tipos-plantio
 - POST /api/users
 - POST /api/vendas-sacas
@@ -201,6 +203,7 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 - `src/services/quitacaoMotoristasService.js`
 - `src/services/relatoriosService.js`
 - `src/services/roleSyncService.js`
+- `src/services/talhaoGeometryService.js`
 - `src/services/viagemService.js`
 - `src/services/xlsxExportService.js`
 - `src/services/xlsxExportService.test.js`

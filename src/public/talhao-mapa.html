@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NazcaTraker - Mapa do Talhão</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      body{background:linear-gradient(180deg,var(--bg0),var(--bg1))}
+      .wrap{max-width:1180px;margin:0 auto;padding:16px}
+      .map-page{height:calc(100dvh - 120px);min-height:420px;border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.12);box-shadow:var(--shadow2)}
+      @media (max-width:560px){.wrap{padding:12px}.map-page{height:calc(100dvh - 108px);min-height:360px}}
+    </style>
+  </head>
+  <body>
+    <div class="bg"><div class="grain"></div><div class="halo"></div></div>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-logo" src="/logo.png" alt="Fazenda Nazca" />
+        <div>
+          <div class="brand-title">NazcaTraker</div>
+          <div class="brand-sub">Mapa do talhão</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="btn ghost" id="btnCloseMap" type="button">Fechar</button>
+      </div>
+    </header>
+    <div class="wrap">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title" id="mapTitle">Mapa dos talhões</div>
+            <div class="panel-sub" id="mapSub">Carregando...</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="mapRoot" class="map-page"></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/talhao-mapa.js"></script>
+  </body>
+  </html>

@@ -39,6 +39,9 @@ export const TalhaoSchemas = {
     calagem: S.OptText120,
     gessagem: S.OptText120,
     fosforo_corretivo: S.OptText120,
+    geometry_geojson: z.unknown().optional().nullable(),
+    geometry_props_json: z.unknown().optional().nullable(),
+    geometry_source_name: z.preprocess(emptyToNull, z.string().trim().max(255).nullable().optional()),
   }),
 }
 

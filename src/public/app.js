@@ -1046,8 +1046,112 @@ function legendHtml(parts) {
     .join('')}</div>`
 }
 
-const DEFAULT_MAPS_URL =
-  'https://www.google.com/maps/d/edit?mid=1I31t4h-O1Scw04_yJqcTAs8EqUid5IE&usp=sharing'
+let _leafletReady = null
+async function ensureLeaflet() {
+  if (window.L) return window.L
+  if (_leafletReady) return _leafletReady
+  _leafletReady = new Promise((resolve, reject) => {
+    const cssHref = '/vendor/leaflet/leaflet.css'
+    if (!document.querySelector(`link[href="${cssHref}"]`)) {
+      const link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = cssHref
+      document.head.appendChild(link)
+    }
+    const scriptSrc = '/vendor/leaflet/leaflet.js'
+    if (document.querySelector(`script[src="${scriptSrc}"]`)) {
+      const wait = () => window.L ? resolve(window.L) : setTimeout(wait, 30)
+      wait()
+      return
+    }
+    const script = document.createElement('script')
+    script.src = scriptSrc
+    script.async = true
+    script.onload = () => resolve(window.L)
+    script.onerror = () => reject(new Error('Nao foi possivel carregar o mapa.'))
+    document.head.appendChild(script)
+  })
+  return _leafletReady
+}
+
+function geometryBoundsFromFeature(feature) {
+  const pts = []
+  const walk = (arr) => {
+    if (!Array.isArray(arr)) return
+    if (typeof arr[0] === 'number' && typeof arr[1] === 'number') {
+      pts.push([Number(arr[1]), Number(arr[0])])
+      return
+    }
+    for (const x of arr) walk(x)
+  }
+  walk(feature?.geometry?.coordinates)
+  return pts
+}
+
+function normalizeGeometryMatchText(v) {
+  return String(v || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .trim()
+    .toUpperCase()
+}
+
+function findBestGeometryCandidateIndex(candidates, talhaoCodigo) {
+  const code = normalizeGeometryMatchText(talhaoCodigo)
+  if (!code || !Array.isArray(candidates) || !candidates.length) return 0
+
+  const propKeys = ['FIELD_NAME', 'field_name', 'NAME', 'name', 'NOME', 'nome', 'CODIGO', 'codigo', 'ID', 'id']
+  const idx = candidates.findIndex((c) => {
+    const label = normalizeGeometryMatchText(c?.label)
+    if (label && label === code) return true
+    const props = c?.properties || {}
+    return propKeys.some((k) => normalizeGeometryMatchText(props[k]) === code)
+  })
+  return idx >= 0 ? idx : 0
+}
+
+async function mountTalhaoGeometryMap(container, feature, { emptyText = 'Nenhum poligono carregado.' } = {}) {
+  if (!container) return null
+  if (container._leafletMap) {
+    try {
+      container._leafletMap.remove()
+    } catch {
+      // ignore
+    }
+    container._leafletMap = null
+  }
+  container.innerHTML = ''
+  if (!feature?.geometry) {
+    container.innerHTML = `<div class="map-empty">${escapeHtml(emptyText)}</div>`
+    return null
+  }
+  const L = await ensureLeaflet()
+  const map = L.map(container, { zoomControl: true, attributionControl: true })
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri',
+    maxZoom: 20,
+  }).addTo(map)
+  const layer = L.geoJSON(feature, {
+    style: {
+      color: '#d19a2b',
+      weight: 3,
+      opacity: 0.95,
+      fillColor: '#d19a2b',
+      fillOpacity: 0.18,
+    },
+  }).addTo(map)
+  const bounds = layer.getBounds()
+  if (bounds?.isValid?.()) map.fitBounds(bounds.pad(0.18))
+  else {
+    const pts = geometryBoundsFromFeature(feature)
+    if (pts.length) map.fitBounds(pts, { padding: [16, 16] })
+    else map.setView([-20.195, -45.878], 15)
+  }
+  setTimeout(() => map.invalidateSize(), 60)
+  container._leafletMap = map
+  return { map, layer }
+}
 
 function talhaoPublicUrl({ id, baseOrigin }) {
   const origin = String(baseOrigin || '').trim().replace(/\/+$/, '')
@@ -1646,6 +1750,167 @@ async function renderSafras() {
 }
 
 async function renderTalhoes() {
+  function talhaoGeometrySection() {
+    return `
+      <div class="field col12">
+        <div class="label">Georreferenciamento do talhão</div>
+        <div class="geo-upload-box">
+          <div class="pill" id="geomModeBadge"><span class="dot"></span><span>Modo: link externo</span></div>
+          <div class="field col12">
+            <div class="label">Mapa (URL opcional)</div>
+            <input type="url" name="maps_url" placeholder="https://www.google.com/maps/..." />
+            <div class="hint" id="geomMapsHint">Use um link de mapa externo <b>ou</b> o upload do arquivo georreferenciado. Se houver geometria salva, o mapa interno do talhão será usado.</div>
+          </div>
+          <div class="hint">Envie preferencialmente um <code class="mono">.zip</code> com o shapefile original completo (.shp, .shx, .dbf, .prj e opcionalmente .cpg). O sistema converte para GeoJSON e mostra o polígono no mapa.</div>
+          <div class="form-grid" style="margin:0">
+            <div class="field col8">
+              <div class="label">Arquivo georreferenciado (.zip)</div>
+              <input type="file" name="geometry_zip" accept=".zip" />
+            </div>
+            <div class="field col4" style="justify-content:flex-end">
+              <div class="label">Ações</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn ghost" type="button" id="btnProcessGeometry">Processar arquivo</button>
+                <button class="btn ghost" type="button" id="btnClearGeometry">Limpar geometria</button>
+              </div>
+            </div>
+            <div class="field col12" id="geomSelectWrap" style="display:none">
+              <div class="label">Polígono detectado</div>
+              <select name="geometry_feature_idx"></select>
+            </div>
+          </div>
+          <div class="hint" id="geomHint">Nenhuma geometria carregada.</div>
+          <div class="geo-map" id="geomMap"></div>
+        </div>
+      </div>
+    `.trim()
+  }
+
+  function bindTalhaoGeometryUi(initialState = null) {
+    const fileEl = dlgBody.querySelector('input[name="geometry_zip"]')
+    const btnProcess = dlgBody.querySelector('#btnProcessGeometry')
+    const btnClear = dlgBody.querySelector('#btnClearGeometry')
+    const selWrap = dlgBody.querySelector('#geomSelectWrap')
+    const sel = dlgBody.querySelector('select[name="geometry_feature_idx"]')
+    const hintEl = dlgBody.querySelector('#geomHint')
+    const mapsEl = dlgBody.querySelector('input[name="maps_url"]')
+    const mapsHintEl = dlgBody.querySelector('#geomMapsHint')
+    const modeBadgeEl = dlgBody.querySelector('#geomModeBadge')
+    const mapEl = dlgBody.querySelector('#geomMap')
+    const codigoEl = dlgBody.querySelector('input[name="codigo"]')
+
+    if (mapsEl) mapsEl.value = initialState?.maps_url || ''
+
+    let geometryState = initialState
+      ? {
+          source_name: initialState.geometry_source_name || 'geometria-salva.geojson',
+          candidates: [{ label: initialState.geometry_source_name || 'Geometria salva', feature: initialState.geometry_geojson, properties: initialState.geometry_props_json || {} }],
+          selectedIndex: 0,
+        }
+      : null
+
+    const redraw = async () => {
+      const hasGeom = geometryState && Array.isArray(geometryState.candidates) && geometryState.candidates.length
+      if (mapsEl) mapsEl.disabled = Boolean(hasGeom)
+      if (modeBadgeEl) {
+        modeBadgeEl.innerHTML = hasGeom
+          ? '<span class="dot warn"></span><span>Modo: arquivo georreferenciado</span>'
+          : '<span class="dot"></span><span>Modo: link externo</span>'
+      }
+      if (mapsHintEl) {
+        mapsHintEl.innerHTML = hasGeom
+          ? 'Geometria ativa: o link de mapa externo foi desabilitado. Clique em <b>Limpar geometria</b> para voltar a usar URL opcional.'
+          : 'Use um link de mapa externo <b>ou</b> o upload do arquivo georreferenciado. Se houver geometria salva, o mapa interno do talhão será usado.'
+      }
+      if (!hasGeom) {
+        if (selWrap) selWrap.style.display = 'none'
+        if (hintEl) hintEl.textContent = 'Nenhuma geometria carregada.'
+        await mountTalhaoGeometryMap(mapEl, null, { emptyText: 'Faça upload de um .zip com o shapefile para visualizar o polígono.' })
+        return
+      }
+      const idx = Math.max(0, Math.min(Number(geometryState.selectedIndex || 0), geometryState.candidates.length - 1))
+      geometryState.selectedIndex = idx
+      const cur = geometryState.candidates[idx]
+      if (selWrap) selWrap.style.display = geometryState.candidates.length > 1 ? '' : 'none'
+      if (sel) {
+        sel.innerHTML = geometryState.candidates
+          .map((c, i) => `<option value="${i}">${escapeHtml(String(c.label || `Polígono ${i + 1}`))}</option>`)
+          .join('')
+        sel.value = String(idx)
+      }
+      if (hintEl) {
+        const propKeys = Object.keys(cur.properties || {}).slice(0, 4)
+        const propTxt = propKeys.length ? ` | atributos: ${propKeys.map((k) => `${k}=${String(cur.properties[k])}`).join(', ')}` : ''
+        const codeTxt = codigoEl?.value ? ` | código talhão: ${String(codigoEl.value).trim()}` : ''
+        hintEl.textContent = `${geometryState.source_name || 'arquivo.zip'} | ${geometryState.candidates.length} polígono(s) detectado(s)${codeTxt}${propTxt}`
+      }
+      await mountTalhaoGeometryMap(mapEl, cur.feature, { emptyText: 'Nenhuma geometria carregada.' })
+    }
+
+    btnProcess?.addEventListener('click', async () => {
+      const file = fileEl?.files?.[0]
+      if (!file) {
+        toast('Erro', 'Selecione um arquivo .zip com o shapefile.')
+        return
+      }
+      const fd = new FormData()
+      fd.append('file', file)
+      try {
+        const out = await fetch('/api/talhoes/geometry-preview', { method: 'POST', body: fd, credentials: 'same-origin' })
+        const text = await out.text()
+        const data = text ? JSON.parse(text) : null
+        if (!out.ok) throw new Error(data?.message || `Erro ${out.status}`)
+        geometryState = {
+          source_name: data.source_name,
+          candidates: Array.isArray(data.candidates) ? data.candidates : [],
+          selectedIndex: findBestGeometryCandidateIndex(
+            Array.isArray(data.candidates) ? data.candidates : [],
+            codigoEl?.value || '',
+          ),
+        }
+        await redraw()
+        const matched = Number(geometryState.selectedIndex || 0) >= 0
+          ? geometryState.candidates?.[geometryState.selectedIndex]
+          : null
+        const matchTxt = matched ? ` Polígono selecionado: ${matched.label || `Polígono ${Number(geometryState.selectedIndex || 0) + 1}`}.` : ''
+        toast('OK', `Geometria processada.${matchTxt}`)
+      } catch (e) {
+        toast('Erro', String(e?.message || e))
+      }
+    })
+
+    btnClear?.addEventListener('click', async () => {
+      geometryState = null
+      if (fileEl) fileEl.value = ''
+      if (mapsEl) mapsEl.disabled = false
+      await redraw()
+    })
+
+    sel?.addEventListener('change', async () => {
+      if (!geometryState) return
+      geometryState.selectedIndex = Number(sel.value || 0)
+      await redraw()
+    })
+
+    redraw().catch(() => {})
+
+    return () => {
+      if (!geometryState || !geometryState.candidates?.length) {
+        return {
+          geometry_geojson: null,
+          geometry_props_json: null,
+          geometry_source_name: null,
+        }
+      }
+      const cur = geometryState.candidates[Number(geometryState.selectedIndex || 0)]
+      return {
+        geometry_geojson: cur?.feature || null,
+        geometry_props_json: cur?.properties || null,
+        geometry_source_name: geometryState.source_name || null,
+      }
+    }
+  }
+
   await renderCrudPage({
     route: 'talhoes',
     title: 'Talhões',
@@ -1653,6 +1918,7 @@ async function renderTalhoes() {
     fetchPath: '/api/talhoes',
     columns: [
       { key: 'id', label: 'ID' },
+      { key: 'codigo', label: 'Codigo' },
       {
         key: 'local',
         label: 'Local',
@@ -1750,6 +2016,7 @@ async function renderTalhoes() {
       }
     },
     onCreate: () => {
+      let getGeometryData = () => ({ geometry_geojson: null, geometry_props_json: null, geometry_source_name: null })
       openDialog({
         title: 'Novo talhão',
         bodyHtml: `
@@ -1763,14 +2030,18 @@ async function renderTalhoes() {
             ${formField({ label: 'Contrato', name: 'contrato', placeholder: 'Contrato', span: 'col6' })}
             ${formField({ label: 'Irrigacao', name: 'irrigacao', placeholder: 'SIM/NAO', span: 'col4' })}
             ${formField({ label: 'Foto (URL)', name: 'foto_url', placeholder: 'https://...', span: 'col8' })}
-            ${formField({ label: 'Mapa (URL)', name: 'maps_url', value: DEFAULT_MAPS_URL, placeholder: 'https://www.google.com/maps/d/edit?mid=...', span: 'col12' })}
             ${formField({ label: 'Tipo de solo', name: 'tipo_solo', placeholder: 'Argiloso...', span: 'col4' })}
             ${formField({ label: 'Calagem', name: 'calagem', placeholder: 'Info', span: 'col4' })}
             ${formField({ label: 'Gessagem', name: 'gessagem', placeholder: 'Info', span: 'col4' })}
             ${formField({ label: 'Fosforo corretivo', name: 'fosforo_corretivo', placeholder: 'Info', span: 'col4' })}
+            ${talhaoGeometrySection()}
             ${textareaField({ label: 'Observacoes', name: 'observacoes' })}
           </div>`,
+        onReady: () => {
+          getGeometryData = bindTalhaoGeometryUi()
+        },
         onSubmit: async (obj) => {
+          const geom = getGeometryData()
           await api('/api/talhoes', {
             method: 'POST',
             body: {
@@ -1783,11 +2054,12 @@ async function renderTalhoes() {
               contrato: obj.contrato || null,
               irrigacao: obj.irrigacao || null,
               foto_url: obj.foto_url || null,
-              maps_url: (obj.maps_url || DEFAULT_MAPS_URL) || null,
+              maps_url: geom.geometry_geojson ? null : (obj.maps_url || null),
               tipo_solo: obj.tipo_solo || null,
               calagem: obj.calagem || null,
               gessagem: obj.gessagem || null,
               fosforo_corretivo: obj.fosforo_corretivo || null,
+              ...geom,
               observacoes: obj.observacoes || null,
             },
           })
@@ -1798,6 +2070,11 @@ async function renderTalhoes() {
     },
     onEdit: async (it) => {
       const full = await api(`/api/talhoes/${it.id}`)
+      let getGeometryData = () => ({
+        geometry_geojson: full.geometry_geojson || null,
+        geometry_props_json: full.geometry_props_json || null,
+        geometry_source_name: full.geometry_source_name || null,
+      })
       openDialog({
         title: `Editar talhão #${it.id}`,
         bodyHtml: `
@@ -1811,18 +2088,22 @@ async function renderTalhoes() {
             ${formField({ label: 'Contrato', name: 'contrato', value: full.contrato ?? '', span: 'col6' })}
             ${formField({ label: 'Irrigacao', name: 'irrigacao', value: full.irrigacao ?? '', span: 'col4' })}
             ${formField({ label: 'Foto (URL)', name: 'foto_url', value: full.foto_url ?? '', span: 'col8' })}
-            ${formField({ label: 'Mapa (URL)', name: 'maps_url', value: full.maps_url ?? DEFAULT_MAPS_URL, span: 'col12' })}
             ${formField({ label: 'Tipo de solo', name: 'tipo_solo', value: full.tipo_solo ?? '', span: 'col4' })}
             ${formField({ label: 'Calagem', name: 'calagem', value: full.calagem ?? '', span: 'col4' })}
             ${formField({ label: 'Gessagem', name: 'gessagem', value: full.gessagem ?? '', span: 'col4' })}
             ${formField({ label: 'Fosforo corretivo', name: 'fosforo_corretivo', value: full.fosforo_corretivo ?? '', span: 'col4' })}
+            ${talhaoGeometrySection()}
             ${textareaField({ label: 'Observacoes', name: 'observacoes', value: full.observacoes ?? '' })}
             <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
               <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(full.created_at || ''))}" data-created-by="${escapeHtml(String(full.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(full.updated_at || ''))}" data-updated-by="${escapeHtml(String(full.updated_by_user_id || ''))}">Carregando...</div>
               <button class="btn ghost small" type="button" data-act="audit" data-module="talhoes" data-record-id="${escapeHtml(String(it.id))}">Histórico</button>
             </div>
           </div>`,
+        onReady: () => {
+          getGeometryData = bindTalhaoGeometryUi(full)
+        },
         onSubmit: async (obj) => {
+          const geom = getGeometryData()
           await api(`/api/talhoes/${it.id}`, {
             method: 'PUT',
             body: {
@@ -1835,11 +2116,12 @@ async function renderTalhoes() {
               contrato: obj.contrato || null,
               irrigacao: obj.irrigacao || null,
               foto_url: obj.foto_url || null,
-              maps_url: (obj.maps_url || DEFAULT_MAPS_URL) || null,
+              maps_url: geom.geometry_geojson ? null : (obj.maps_url || null),
               tipo_solo: obj.tipo_solo || null,
               calagem: obj.calagem || null,
               gessagem: obj.gessagem || null,
               fosforo_corretivo: obj.fosforo_corretivo || null,
+              ...geom,
               observacoes: obj.observacoes || null,
             },
           })

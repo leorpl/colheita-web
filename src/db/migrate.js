@@ -44,6 +44,9 @@ export function migrate() {
       posse TEXT,
       contrato TEXT,
       observacoes TEXT,
+      geometry_geojson TEXT,
+      geometry_props_json TEXT,
+      geometry_source_name TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT
     );
@@ -904,6 +907,15 @@ export function migrate() {
   }
   if (!hasColumn('talhao', 'fosforo_corretivo')) {
     db.exec("ALTER TABLE talhao ADD COLUMN fosforo_corretivo TEXT")
+  }
+  if (!hasColumn('talhao', 'geometry_geojson')) {
+    db.exec("ALTER TABLE talhao ADD COLUMN geometry_geojson TEXT")
+  }
+  if (!hasColumn('talhao', 'geometry_props_json')) {
+    db.exec("ALTER TABLE talhao ADD COLUMN geometry_props_json TEXT")
+  }
+  if (!hasColumn('talhao', 'geometry_source_name')) {
+    db.exec("ALTER TABLE talhao ADD COLUMN geometry_source_name TEXT")
   }
 
   // incremental columns for destino

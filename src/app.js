@@ -26,6 +26,7 @@ export function createApp() {
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = path.dirname(__filename)
   const publicDir = path.join(__dirname, 'public')
+  const leafletDir = path.join(__dirname, '..', 'node_modules', 'leaflet', 'dist')
 
   app.disable('x-powered-by')
 
@@ -143,6 +144,7 @@ export function createApp() {
       },
     }),
   )
+  app.use('/vendor/leaflet', express.static(leafletDir, { maxAge: 0 }))
 
   app.use('/', pagesRouter)
   // Always try to attach req.user (session cookie); authorization happens inside /api router.

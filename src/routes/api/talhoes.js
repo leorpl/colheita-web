@@ -1,20 +1,34 @@
 import { Router } from 'express'
+import multer from 'multer'
 import { talhaoRepo } from '../../repositories/talhaoRepo.js'
-import { notFound } from '../../errors.js'
+import { notFound, unprocessable } from '../../errors.js'
 import { validateBody, validateParams } from '../../middleware/validate.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { S, TalhaoSchemas } from '../../validation/apiSchemas.js'
 import { auditService } from '../../services/auditService.js'
 import { deleteDependencyService } from '../../services/deleteDependencyService.js'
+import { parseTalhaoGeometryZip } from '../../services/talhaoGeometryService.js'
 
 export const talhoesRouter = Router()
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } })
 
 const TalhaoBody = TalhaoSchemas.Body
 
 talhoesRouter.get('/', requirePerm(Modules.TALHOES, Actions.VIEW), (_req, res) => {
   res.json(talhaoRepo.list())
 })
+
+talhoesRouter.post(
+  '/geometry-preview',
+  requirePerm(Modules.TALHOES, Actions.UPDATE),
+  upload.single('file'),
+  async (req, res) => {
+    if (!req.file?.buffer) throw unprocessable('Arquivo .zip nao enviado')
+    const out = await parseTalhaoGeometryZip(req.file.buffer, req.file.originalname)
+    res.json(out)
+  },
+)
 
 talhoesRouter.post(
   '/',

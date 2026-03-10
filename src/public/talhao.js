@@ -29,6 +29,55 @@ function safeHttpUrl(url) {
   return ''
 }
 
+let _leafletReady = null
+async function ensureLeaflet() {
+  if (window.L) return window.L
+  if (_leafletReady) return _leafletReady
+  _leafletReady = new Promise((resolve, reject) => {
+    const cssHref = '/vendor/leaflet/leaflet.css'
+    if (!document.querySelector(`link[href="${cssHref}"]`)) {
+      const link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = cssHref
+      document.head.appendChild(link)
+    }
+    const src = '/vendor/leaflet/leaflet.js'
+    const script = document.createElement('script')
+    script.src = src
+    script.async = true
+    script.onload = () => resolve(window.L)
+    script.onerror = () => reject(new Error('Nao foi possivel carregar o mapa.'))
+    document.head.appendChild(script)
+  })
+  return _leafletReady
+}
+
+async function renderGeometryMap(el, feature) {
+  if (!el || !feature?.geometry) return false
+  if (el._leafletMap) {
+    try {
+      el._leafletMap.remove()
+    } catch {
+      // ignore
+    }
+    el._leafletMap = null
+  }
+  const L = await ensureLeaflet()
+  const map = L.map(el, { zoomControl: true })
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri',
+    maxZoom: 20,
+  }).addTo(map)
+  const layer = L.geoJSON(feature, {
+    style: { color: '#d19a2b', weight: 3, opacity: 0.95, fillColor: '#d19a2b', fillOpacity: 0.18 },
+  }).addTo(map)
+  const bounds = layer.getBounds()
+  if (bounds?.isValid?.()) map.fitBounds(bounds.pad(0.18))
+  setTimeout(() => map.invalidateSize(), 60)
+  el._leafletMap = map
+  return true
+}
+
 async function api(path) {
   const res = await fetch(path)
   const text = await res.text()
@@ -39,9 +88,6 @@ async function api(path) {
   }
   return data
 }
-
-const DEFAULT_MAPS_URL =
-  'https://www.google.com/maps/d/edit?mid=1I31t4h-O1Scw04_yJqcTAs8EqUid5IE&ll=-20.193727536387307%2C-45.874922749999996&z=17'
 
 const DEFAULT_MAPS_EMBED_URL =
   'https://www.google.com/maps/d/embed?mid=1I31t4h-O1Scw04_yJqcTAs8EqUid5IE&ehbc=2E312F'
@@ -77,9 +123,9 @@ btnPrint.onclick = () => window.print()
 async function loadHeader() {
   const talhao = await api(`/api/public/talhoes/${id}`)
   const fotoUrl = safeHttpUrl(talhao.foto_url)
-  // Forcar o mapa padrao (publico) para todos os talhoes.
-  const mapsUrl = DEFAULT_MAPS_URL
-  const mapsEmbed = DEFAULT_MAPS_EMBED_URL
+  const internalMapUrl = `${location.origin}/talhao-mapa.html?focus_id=${encodeURIComponent(id)}`
+  const mapsUrl = talhao.geometry_geojson ? internalMapUrl : safeHttpUrl(talhao.maps_url)
+  const mapsEmbed = talhao.geometry_geojson ? '' : DEFAULT_MAPS_EMBED_URL
   tTitle.textContent = `${talhao.codigo} - ${talhao.nome || ''}`.trim()
   tSub.textContent = `${talhao.local || ''}${talhao.situacao ? ` | ${talhao.situacao}` : ''}${talhao.hectares ? ` | ${fmtNum(talhao.hectares, 2)} ha` : ''}`
 
@@ -119,19 +165,21 @@ async function loadHeader() {
         : ''
     }
 
-    <div style="${fotoUrl ? 'margin-top:14px' : ''};font-family:var(--serif);font-size:16px;color:rgba(255,255,255,.94)">Mapa do talhao</div>
+    <div id="mapa" style="${fotoUrl ? 'margin-top:14px' : ''};font-family:var(--serif);font-size:16px;color:rgba(255,255,255,.94)">Mapa do talhao</div>
     <div style="margin-top:10px">
       ${
-        mapsEmbed
-          ? `<div class="map-wrap">
+        talhao.geometry_geojson
+          ? `<div class="map-wrap"><div class="photo" id="talhaoGeomMap"></div></div>`
+          : mapsEmbed
+            ? `<div class="map-wrap">
               <iframe class="photo" data-role="map-frame" src="${escapeHtml(mapsEmbed)}" loading="lazy" width="640" height="480"></iframe>
               <div class="map-ph" data-role="map-ph">Carregando mapa...</div>
-            </div>`
-          : `<div class="photo" style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.65);font-size:12px">Mapa indisponivel</div>`
+             </div>`
+            : `<div class="photo" style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.65);font-size:12px">Mapa indisponivel</div>`
       }
     </div>
     <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
-      ${mapsUrl ? `<a class="btn ghost" href="${escapeHtml(mapsUrl)}" target="_blank" rel="noreferrer">Abrir mapa</a>` : ''}
+      ${mapsUrl ? `<a class="btn ghost" href="${escapeHtml(mapsUrl)}" target="_blank" rel="noreferrer">${talhao.geometry_geojson ? 'Abrir mapa dos talhões' : 'Abrir mapa'}</a>` : ''}
     </div>
 
     <div class="hint" style="margin-top:10px">Atualizado em: ${escapeHtml(talhao.updated_at || talhao.created_at || '')}</div>
@@ -150,6 +198,21 @@ async function loadHeader() {
           }),
         )
       })
+    }
+  }
+
+  const geomMap = mediaEl.querySelector('#talhaoGeomMap')
+  if (geomMap && talhao.geometry_geojson) {
+    try {
+      await renderGeometryMap(geomMap, talhao.geometry_geojson)
+    } catch {
+      geomMap.replaceWith(
+        Object.assign(document.createElement('div'), {
+          className: 'photo',
+          style: 'display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.65);font-size:12px',
+          textContent: 'Nao foi possivel renderizar o poligono do talhao.',
+        }),
+      )
     }
   }
 

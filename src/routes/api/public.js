@@ -10,6 +10,21 @@ import { S, PublicSchemas } from '../../validation/apiSchemas.js'
 
 export const publicRouter = Router()
 
+publicRouter.get('/talhoes-geometrias', (_req, res) => {
+  const rows = talhaoRepo
+    .listWithGeometry()
+    .filter((t) => t.geometry_geojson?.geometry)
+    .map((t) => ({
+      id: t.id,
+      codigo: t.codigo,
+      nome: t.nome,
+      local: t.local,
+      geometry_geojson: t.geometry_geojson,
+      geometry_source_name: t.geometry_source_name,
+    }))
+  res.json(rows)
+})
+
 publicRouter.get('/talhoes/:id', validateParams(S.IdParam), (req, res) => {
   const t = talhaoRepo.get(req.params.id)
   if (!t) throw notFound('Talhao nao encontrado')
@@ -23,6 +38,9 @@ publicRouter.get('/talhoes/:id', validateParams(S.IdParam), (req, res) => {
     hectares: t.hectares,
     maps_url: t.maps_url,
     foto_url: t.foto_url,
+    geometry_geojson: t.geometry_geojson,
+    geometry_props_json: t.geometry_props_json,
+    geometry_source_name: t.geometry_source_name,
     created_at: t.created_at,
     updated_at: t.updated_at,
   })

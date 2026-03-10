@@ -757,6 +757,9 @@ code.mono{font-family:var(--mono);font-size:12px}
 .help{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:6px;border-radius:999px;border:1px solid rgba(15,26,22,.18);background:rgba(255,255,255,.72);color:rgba(15,26,22,.7);font-family:var(--mono);font-size:12px;line-height:1;cursor:pointer}
 .help:hover{background:rgba(209,154,43,.18);border-color:rgba(209,154,43,.35)}
 .help-pop{position:fixed;z-index:9999;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.96);border:1px solid rgba(15,26,22,.16);box-shadow:var(--shadow2);color:var(--text);font-size:13px;line-height:1.35;white-space:normal}
+.geo-map{width:100%;height:320px;border-radius:14px;border:1px solid rgba(15,26,22,.14);overflow:hidden;background:rgba(15,26,22,.08)}
+.map-empty{display:flex;align-items:center;justify-content:center;min-height:180px;padding:16px;border:1px dashed rgba(15,26,22,.16);border-radius:14px;color:var(--muted);background:rgba(255,255,255,.52);text-align:center}
+.geo-upload-box{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid rgba(15,26,22,.12);border-radius:14px;background:rgba(255,255,255,.48)}
 
 .mobile-cards{display:flex;flex-direction:column;gap:10px}
 .mobile-card{border:1px solid rgba(15,26,22,.12);border-radius:14px;background:rgba(255,255,255,.74);padding:12px}
