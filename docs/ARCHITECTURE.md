@@ -35,6 +35,7 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 
 - DELETE /api/acl/users/:id/overrides/:module
 - DELETE /api/contratos-silo/arquivos/:id
+- DELETE /api/contratos-silo/one
 - DELETE /api/custos-lancamentos/:id
 - DELETE /api/destino-regras/plantio/:id
 - DELETE /api/destinos/:id

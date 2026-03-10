@@ -60,6 +60,39 @@ contratosSiloRouter.get(
   },
 )
 
+contratosSiloRouter.delete(
+  '/one',
+  requirePerm(Modules.REGRAS_DESTINO, Actions.DELETE),
+  validateQuery(OneQuery),
+  (req, res) => {
+    const oldRow = contratoSiloRepo.getOne({
+      safra_id: req.query.safra_id,
+      destino_id: req.query.destino_id,
+      tipo_plantio: req.query.tipo_plantio,
+    })
+    if (!oldRow) return res.status(204).send()
+
+    contratoSiloRepo.replaceFaixas(
+      {
+        safra_id: req.query.safra_id,
+        destino_id: req.query.destino_id,
+        tipo_plantio: req.query.tipo_plantio,
+        faixas: [],
+        observacoes: null,
+      },
+      { user_id: req.user?.id },
+    )
+
+    auditService.log(req, {
+      module_name: 'contratos-silo',
+      record_id: oldRow.id,
+      action_type: 'delete',
+      old_values: oldRow,
+    })
+    res.status(204).send()
+  },
+)
+
 contratosSiloRouter.post(
   '/',
   requirePerm(Modules.REGRAS_DESTINO, Actions.UPDATE),

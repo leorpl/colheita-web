@@ -3513,7 +3513,18 @@ async function renderRegrasDestino() {
           ? async (r) => {
               if (!r) return
               if (Number(r.orphan_contract) === 1) {
-                toast('Erro', 'Este item é um contrato órfão. Abra para completar/remover a regra/contrato correspondente.')
+                const msg = `Excluir o contrato órfão?\n\nSafra: ${r.safra_nome}\nDestino: ${r.destino_local}\nPlantio: ${r.tipo_plantio}\nFaixas: ${Number(r.contrato_faixas_count || 0)}`
+                if (!(await confirmAction(msg, { title: 'Confirmar', confirmLabel: 'Excluir contrato órfão' }))) return
+                const qp = new URLSearchParams({
+                  safra_id: String(r.safra_id),
+                  destino_id: String(r.destino_id),
+                  tipo_plantio: String(r.tipo_plantio || ''),
+                })
+                await api(`/api/contratos-silo/one?${qp.toString()}`, {
+                  method: 'DELETE',
+                })
+                toast('Excluído', 'Contrato órfão removido.')
+                renderRegrasDestino()
                 return
               }
               const id = Number(r.id)

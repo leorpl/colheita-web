@@ -1,6 +1,6 @@
 {
-  "signature": "463b9d6d80fd346914a753a0d4ed33b7abaeee8220479b825eb9e18982c44637",
-  "generated_at": "2026-03-09T18:33:17.277Z",
+  "signature": "f5b9d326e4a8df1d2c50cfe1cee859d1948390a4fee06c7af4d4624e65e9014b",
+  "generated_at": "2026-03-10T13:07:00.737Z",
   "runtime": {
     "node": "v24.14.0",
     "platform": "win32"
@@ -75,6 +75,10 @@
       {
         "method": "DELETE",
         "path": "/api/contratos-silo/arquivos/:id"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/contratos-silo/one"
       },
       {
         "method": "DELETE",
@@ -1070,7 +1074,7 @@
   },
   "docs_hashes": {
     "PROJECT_CONTEXT.md": "96cd04c1d524e7402a38879d293764a45a16f7d6647fb2d1377f6ff272c98631",
-    "ARCHITECTURE.md": "82972139b1137eea94596bb23f5475ed7ed32623f63f79a19d68497b5f6188c9",
+    "ARCHITECTURE.md": "c6fe2f6796ce5e88fb8bce088bd19f830a93b1d5ef4c8dc04bb806b31592bdf5",
     "TASKS_OFICIAL.md": "d0c2ef8c8bf922f3e9aa39c3d36a95ebe8961c167386dd80ec429c6d0375bbe1",
     "CHANGELOG.md": "7cc29ac5007e79134959ffd97f3df04bb1b6641bf5f42cfb40c7abc790661f46",
     "LIÇÕESAPRENDIDAS.MD": "5e863f52bd7d6b74e2fab0fa93c353f7934def57125701fe19949bd280629408"
