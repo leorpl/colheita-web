@@ -8,6 +8,7 @@
 // - docs/TASKS_OFICIAL.md
 // - docs/CHANGELOG.md
 // - docs/LIÇÕESAPRENDIDAS.MD
+// - docs/RELEASE_CHECKLIST.md
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -508,14 +509,102 @@ function renderChangelog(ctx) {
 }
 
 function renderLicoesAprendidas(ctx) {
-  const lines = []
-  lines.push('# LIÇÕES APRENDIDAS (NazcaTraker)')
-  lines.push('')
-  lines.push('Gerado automaticamente a partir de sinais no codigo. Complementar manualmente quando necessario.')
-  lines.push('')
+  const autoLines = []
+  autoLines.push('## Sinais automáticos atuais')
+  autoLines.push('')
   for (const l of ctx.lessons.length ? ctx.lessons : ['(nenhuma registrada automaticamente)']) {
-    lines.push(`- ${l}`)
+    autoLines.push(`- ${l}`)
   }
+  autoLines.push('')
+
+  const file = path.join(DOCS_DIR, 'LIÇÕESAPRENDIDAS.MD')
+  const existing = readText(file)
+  const markerStart = '<!-- AUTO-LESSONS:START -->'
+  const markerEnd = '<!-- AUTO-LESSONS:END -->'
+  const autoBlock = [markerStart, ...autoLines, markerEnd, ''].join('\n')
+
+  if (!existing) {
+    return [
+      '# LIÇÕES APRENDIDAS (NazcaTraker)',
+      '',
+      'Memória técnica do projeto. Entradas manuais nunca devem ser apagadas; a seção automática abaixo é mantida pelo self-heal.',
+      '',
+      '## Regras de uso',
+      '',
+      '- Nunca apagar registros históricos.',
+      '- Sempre acrescentar novas entradas manuais quando houver bug recorrente, decisão arquitetural, padrão obrigatório ou correção que não pode regredir.',
+      '- Ao trabalhar no projeto, consultar este arquivo antes de implementar mudanças sensíveis.',
+      '',
+      autoBlock,
+    ].join('\n')
+  }
+
+  if (existing.includes(markerStart) && existing.includes(markerEnd)) {
+    return existing.replace(new RegExp(`${markerStart}[\s\S]*?${markerEnd}`), autoBlock.trimEnd())
+  }
+
+  return `${existing.trimEnd()}\n\n${autoBlock}`
+}
+
+function renderReleaseChecklist(ctx) {
+  const lines = []
+  lines.push('# RELEASE CHECKLIST')
+  lines.push('')
+  lines.push('Checklist operacional para deploy do NazcaTraker. Atualizado automaticamente; complemente com detalhes do ambiente quando necessario.')
+  lines.push('')
+  lines.push('## Pré-deploy')
+  lines.push('')
+  lines.push('1. Fazer backup do banco SQLite (`DB_PATH`).')
+  lines.push('2. Confirmar variáveis de ambiente do `.env` / `.env.example` e defaults seguros.')
+  lines.push('3. Rodar `npm install` e validar dependências novas/removidas.')
+  lines.push('4. Rodar `npm test`.')
+  lines.push('5. Rodar `npm run context:check`.')
+  lines.push('6. Revisar `docs/PROJECT_CONTEXT.md`, `docs/ARCHITECTURE.md` e `docs/LIÇÕESAPRENDIDAS.MD`.')
+  lines.push('')
+  lines.push('## Banco / SQLite')
+  lines.push('')
+  lines.push(`- Banco atual: SQLite (${ctx.db.tables.length} tabelas detectadas).`)
+  lines.push('- Confirmar path de `DB_PATH`, permissão de escrita e espaço em disco.')
+  lines.push('- Evitar operações destrutivas sem backup validado.')
+  lines.push('')
+  lines.push('## Rotas críticas para smoke test')
+  lines.push('')
+  const criticalRouteHints = [
+    '/api/auth/login',
+    '/api/auth/reset',
+    '/api/users',
+    '/api/viagens',
+    '/api/relatorios',
+    '/api/contratos-silo',
+    '/api/talhoes',
+    '/api/fretes',
+    '/api/audit-logs',
+  ]
+  for (const p of criticalRouteHints) {
+    const found = ctx.apiRoutes.some((r) => r.path.startsWith(p))
+    lines.push(`- ${found ? '[x]' : '[ ]'} ${p}`)
+  }
+  lines.push('')
+  lines.push('## Segurança')
+  lines.push('')
+  lines.push('- Confirmar autenticação, troca/reset de senha, permissões e cookies seguros.')
+  lines.push('- Revisar uploads críticos (contratos, georreferenciamento, exportações) e limites de arquivo.')
+  lines.push('- Garantir ausência de segredos hardcoded e revisão do `.env.example`.')
+  lines.push('')
+  lines.push('## Deploy')
+  lines.push('')
+  lines.push('1. Fazer pull da versão.')
+  lines.push('2. Instalar dependências.')
+  lines.push('3. Reiniciar o processo (`npm start`, PM2 ou serviço equivalente).')
+  lines.push('4. Validar login e fluxo principal de colheita.')
+  lines.push('5. Validar relatórios, exportações e uploads.')
+  lines.push('6. Validar auditoria e mensagens de erro em modais/dialogs.')
+  lines.push('')
+  lines.push('## Status sugerido')
+  lines.push('')
+  lines.push('- `PRONTO PARA DEPLOY` quando checklist estiver verde e sem bloqueios críticos.')
+  lines.push('- `ATENÇÃO NECESSÁRIA` quando houver pendências importantes mas controladas.')
+  lines.push('- `DEPLOY NÃO RECOMENDADO` quando houver falha em testes, contexto ou rotas críticas.')
   lines.push('')
   return lines.join('\n')
 }
@@ -771,6 +860,7 @@ function buildExpectedDocs(cur) {
     'CHANGELOG.md': renderChangelog(cur),
     // Lessons learned (requested filename uses unicode)
     'LIÇÕESAPRENDIDAS.MD': renderLicoesAprendidas(cur),
+    'RELEASE_CHECKLIST.md': renderReleaseChecklist(cur),
   }
 }
 

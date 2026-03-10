@@ -157,6 +157,9 @@ body.nav-collapsed .nav{display:none}
 .toolbar-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
 .panel-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;justify-content:flex-end;min-width:0}
 .field{display:flex;flex-direction:column;gap:6px}
+.field.field-warn input{border-color:rgba(209,154,43,.75);background:rgba(209,154,43,.10);box-shadow:0 0 0 1px rgba(209,154,43,.18) inset}
+.field-note{font-size:11px;line-height:1.35;color:var(--muted)}
+.field-note.warn{color:#9a6a13}
 .label{font-size:12px;color:var(--muted)}
 
 /* Forms: consistent grid sizing */
@@ -758,6 +761,7 @@ code.mono{font-family:var(--mono);font-size:12px}
 .help:hover{background:rgba(209,154,43,.18);border-color:rgba(209,154,43,.35)}
 .help-pop{position:fixed;z-index:9999;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.96);border:1px solid rgba(15,26,22,.16);box-shadow:var(--shadow2);color:var(--text);font-size:13px;line-height:1.35;white-space:normal}
 .geo-map{width:100%;height:320px;border-radius:14px;border:1px solid rgba(15,26,22,.14);overflow:hidden;background:rgba(15,26,22,.08)}
+.geo-map.big{height:420px}
 .map-empty{display:flex;align-items:center;justify-content:center;min-height:180px;padding:16px;border:1px dashed rgba(15,26,22,.16);border-radius:14px;color:var(--muted);background:rgba(255,255,255,.52);text-align:center}
 .geo-upload-box{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid rgba(15,26,22,.12);border-radius:14px;background:rgba(255,255,255,.48)}
 
@@ -775,6 +779,7 @@ code.mono{font-family:var(--mono);font-size:12px}
 .mobile-kv b{font-size:13px;color:rgba(14,21,18,.90)}
 .mobile-empty{padding:14px;border:1px dashed rgba(15,26,22,.16);border-radius:14px;background:rgba(255,255,255,.52);color:var(--muted)}
 .row-pendente td{background:rgba(180,35,24,.035)}
+.crud-mobile-cards{display:none}
 
 /* Rateio de talhoes (viagem) */
 .rateio-card{
@@ -918,6 +923,8 @@ code.mono{font-family:var(--mono);font-size:12px}
   .dlg-head{padding:12px 14px}
   .dlg-body{padding:12px 14px}
   .dlg-actions{padding:10px 14px calc(14px + env(safe-area-inset-bottom, 0px))}
+  .dlg-body .form-grid{display:grid;grid-template-columns:1fr;gap:10px}
+  .dlg-body .field{min-width:0}
   .dlg .col3{grid-column:span 12}
   .dlg .col4{grid-column:span 12}
   th.actions,td.actions{position:static;left:auto;box-shadow:none;border-right:none}
@@ -987,6 +994,8 @@ code.mono{font-family:var(--mono);font-size:12px}
   #tblSaldoTalhoes td:nth-child(2){display:none}
   #colheitaCards,#aCardsList{display:flex !important}
   #tblColheita,#aTable{display:none}
+  .crud-desktop-wrap{display:none}
+  .crud-mobile-cards{display:flex}
   .mobile-card-actions .btn{width:auto;flex:1 1 calc(50% - 6px)}
   .mobile-kv{grid-template-columns:1fr}
 

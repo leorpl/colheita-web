@@ -124,7 +124,7 @@ async function loadHeader() {
   const talhao = await api(`/api/public/talhoes/${id}`)
   const fotoUrl = safeHttpUrl(talhao.foto_url)
   const internalMapUrl = `${location.origin}/talhao-mapa.html?focus_id=${encodeURIComponent(id)}`
-  const mapsUrl = talhao.geometry_geojson ? internalMapUrl : safeHttpUrl(talhao.maps_url)
+  const mapsUrl = talhao.geometry_geojson || talhao.maps_url ? internalMapUrl : ''
   const mapsEmbed = talhao.geometry_geojson ? '' : DEFAULT_MAPS_EMBED_URL
   tTitle.textContent = `${talhao.codigo} - ${talhao.nome || ''}`.trim()
   tSub.textContent = `${talhao.local || ''}${talhao.situacao ? ` | ${talhao.situacao}` : ''}${talhao.hectares ? ` | ${fmtNum(talhao.hectares, 2)} ha` : ''}`
@@ -179,7 +179,7 @@ async function loadHeader() {
       }
     </div>
     <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
-      ${mapsUrl ? `<a class="btn ghost" href="${escapeHtml(mapsUrl)}" target="_blank" rel="noreferrer">${talhao.geometry_geojson ? 'Abrir mapa dos talhões' : 'Abrir mapa'}</a>` : ''}
+      ${mapsUrl ? `<a class="btn ghost" href="${escapeHtml(mapsUrl)}" target="_blank" rel="noreferrer">Abrir mapa</a>` : ''}
     </div>
 
     <div class="hint" style="margin-top:10px">Atualizado em: ${escapeHtml(talhao.updated_at || talhao.created_at || '')}</div>

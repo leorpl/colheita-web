@@ -429,6 +429,16 @@ function bindAuditButtons(rootEl) {
 }
 
 function toast(title, message) {
+  const titleTxt = String(title || '').trim().toLowerCase()
+  const isDialogBlockingTitle = ['erro', 'aviso', 'atenção', 'atencao', 'alerta'].includes(titleTxt)
+  if (dlg?.open && isDialogBlockingTitle) {
+    showDialogOverlay({
+      title: String(title || 'Aviso'),
+      primaryLabel: 'Entendi',
+      bodyHtml: `<div>${escapeHtml(String(message || ''))}</div>`,
+    })
+    return
+  }
   toastEl.innerHTML = `<div class="t">${escapeHtml(title)}</div><div class="m">${escapeHtml(message)}</div>`
   toastEl.classList.add('show')
   window.clearTimeout(toastEl._t)
@@ -735,8 +745,12 @@ function openDialog({ title, bodyHtml, onSubmit, onReady, submitLabel = 'Salvar'
         return
       }
 
-      // fallback
-      toast('Erro', msg)
+      // fallback: when inside dialog, errors must stay in the dialog top layer.
+      showDialogOverlay({
+        title: 'Erro',
+        primaryLabel: 'Entendi',
+        bodyHtml: `<div>${escapeHtml(msg)}</div>`,
+      })
     }
   }
 
@@ -1153,6 +1167,67 @@ async function mountTalhaoGeometryMap(container, feature, { emptyText = 'Nenhum 
   return { map, layer }
 }
 
+async function mountTalhaoBulkPreviewMap(container, preview) {
+  if (!container) return null
+  if (container._leafletMap) {
+    try {
+      container._leafletMap.remove()
+    } catch {
+      // ignore
+    }
+    container._leafletMap = null
+  }
+  container.innerHTML = ''
+  const matched = Array.isArray(preview?.matched) ? preview.matched : []
+  const unmatched = Array.isArray(preview?.unmatched_polygons) ? preview.unmatched_polygons : []
+  const all = []
+  matched.forEach((m) => {
+    if (m?.geometry_geojson?.geometry) {
+      all.push({
+        type: 'Feature',
+        properties: { title: `${m.talhao_codigo} - ${m.talhao_nome || ''}`, matched: true },
+        geometry: m.geometry_geojson.geometry,
+      })
+    }
+  })
+  unmatched.forEach((p) => {
+    if (p?.feature?.geometry) {
+      all.push({
+        type: 'Feature',
+        properties: { title: String(p.candidate_label || 'Polígono não associado'), matched: false },
+        geometry: p.feature.geometry,
+      })
+    }
+  })
+  if (!all.length) {
+    container.innerHTML = '<div class="map-empty">Nenhum polígono para visualizar no preview.</div>'
+    return null
+  }
+  const L = await ensureLeaflet()
+  const map = L.map(container, { zoomControl: true })
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri',
+    maxZoom: 20,
+  }).addTo(map)
+  const layer = L.geoJSON({ type: 'FeatureCollection', features: all }, {
+    style: (f) => ({
+      color: f?.properties?.matched ? '#1e6a4d' : '#b42318',
+      weight: f?.properties?.matched ? 3 : 2,
+      opacity: 0.95,
+      fillColor: f?.properties?.matched ? '#1e6a4d' : '#b42318',
+      fillOpacity: f?.properties?.matched ? 0.18 : 0.10,
+    }),
+    onEachFeature: (feature, lyr) => {
+      lyr.bindTooltip(String(feature?.properties?.title || 'Polígono'))
+    },
+  }).addTo(map)
+  const bounds = layer.getBounds()
+  if (bounds?.isValid?.()) map.fitBounds(bounds.pad(0.18))
+  setTimeout(() => map.invalidateSize(), 60)
+  container._leafletMap = map
+  return { map, layer }
+}
+
 function talhaoPublicUrl({ id, baseOrigin }) {
   const origin = String(baseOrigin || '').trim().replace(/\/+$/, '')
   const safeOrigin = origin || location.origin
@@ -1474,6 +1549,7 @@ async function renderCrudPage({
   onHeaderAction,
   extraActions,
   onAction,
+  preTableHtml,
   hintHtml,
   showDefaultHint = true,
 }) {
@@ -1555,6 +1631,58 @@ async function renderCrudPage({
     })
     .join('')
 
+  function cardTitleForCrudItem(it) {
+    const candidates = [it.codigo, it.nome, it.local, it.safra, it.username, it.email]
+      .map((v) => String(v || '').trim())
+      .filter(Boolean)
+    return candidates[0] || `Registro #${it.id || '-'}`
+  }
+
+  function cardSubtitleForCrudItem(it) {
+    return [it.nome, it.local, it.situacao, it.role]
+      .map((v) => String(v || '').trim())
+      .filter(Boolean)
+      .join(' • ')
+  }
+
+  const mobileCards = items
+    .map((it) => {
+      const extraBtns = (extraActions || [])
+        .map((a) => `<button class="btn ghost small" data-act="${escapeHtml(String(a.act || ''))}" data-id="${it.id}">${escapeHtml(String(a.label || a.act || 'Ação'))}</button>`)
+        .join('')
+      const body = columns
+        .filter((c) => String(c.key || '') !== 'id')
+        .map((c) => {
+          const shown = c.format ? c.format(it[c.key], it) : it[c.key] ?? ''
+          const k = String(c.key || '')
+          const isStatus = k === 'painel' || k === 'ativo' || k === 'situacao' || k === 'status'
+          let cell = c.html === true ? String(shown ?? '') : escapeHtml(shown)
+          if (isStatus) {
+            const s = String(shown || '').trim().toUpperCase()
+            if (s === 'SIM' || s === 'ATIVO' || s === 'OK') cell = pillBadge({ label: shown || 'OK', tone: 'ok' })
+            else if (!s) cell = pillBadge({ label: 'NÃO', tone: 'muted' })
+            else cell = pillBadge({ label: shown, tone: 'muted' })
+          }
+          return `<div><span>${escapeHtml(c.label)}</span><b>${cell}</b></div>`
+        })
+        .join('')
+      return `<div class="mobile-card crud-mobile-card">
+        <div class="mobile-card-head">
+          <div>
+            <div class="mobile-card-title">${escapeHtml(cardTitleForCrudItem(it))}</div>
+            <div class="mobile-card-sub">${escapeHtml(cardSubtitleForCrudItem(it))}</div>
+          </div>
+          <div class="mobile-card-actions">
+            ${extraBtns}
+            <button class="btn ghost small" data-act="edit" data-id="${it.id}">Editar</button>
+            <button class="btn ghost small danger" data-act="del" data-id="${it.id}">Excluir</button>
+          </div>
+        </div>
+        <div class="mobile-kv">${body}</div>
+      </div>`
+    })
+    .join('')
+
   const headActionsHtml = (headerActions || [])
     .map((a) => {
       const act = String(a.act || '')
@@ -1582,8 +1710,9 @@ async function renderCrudPage({
         ${headActionsHtml || addBtnHtml ? `<div style="display:flex;gap:10px;flex-wrap:wrap">${headActionsHtml}${addBtnHtml}</div>` : ''}
       </div>
       <div class="panel-body">
-        <div class="table-wrap">
-          <table class="grid-table">
+        ${preTableHtml || ''}
+        <div class="table-wrap crud-desktop-wrap">
+          <table class="grid-table crud-desktop-table">
             <thead>
               <tr><th class="actions">Ações</th>${th}</tr>
             </thead>
@@ -1592,6 +1721,7 @@ async function renderCrudPage({
             </tbody>
           </table>
         </div>
+        <div class="mobile-cards crud-mobile-cards">${mobileCards || `<div class="mobile-empty">Nenhum registro.</div>`}</div>
         <div class="hint" style="margin-top:10px">Registros: <b>${escapeHtml(String(items.length))}</b></div>
         ${hintHtml ? `<div class="hint">${hintHtml}</div>` : ''}
         ${showDefaultHint ? defaultHintHtml : ''}
@@ -1750,6 +1880,22 @@ async function renderSafras() {
 }
 
 async function renderTalhoes() {
+  const situacaoOptions = [
+    { value: '', label: '-' },
+    { value: 'ATIVO', label: 'ATIVO' },
+    { value: 'INATIVO', label: 'INATIVO' },
+    { value: 'ARRENDADO', label: 'ARRENDADO' },
+    { value: 'EXPERIMENTAL', label: 'EXPERIMENTAL' },
+  ]
+  const posseOptions = [
+    { value: '', label: '-' },
+    { value: 'PROPRIO', label: 'PROPRIO' },
+    { value: 'ARRENDADO', label: 'ARRENDADO' },
+    { value: 'PARCERIA', label: 'PARCERIA' },
+    { value: 'COMODATO', label: 'COMODATO' },
+    { value: 'OUTRO', label: 'OUTRO' },
+  ]
+
   function talhaoGeometrySection() {
     return `
       <div class="field col12">
@@ -1761,11 +1907,11 @@ async function renderTalhoes() {
             <input type="url" name="maps_url" placeholder="https://www.google.com/maps/..." />
             <div class="hint" id="geomMapsHint">Use um link de mapa externo <b>ou</b> o upload do arquivo georreferenciado. Se houver geometria salva, o mapa interno do talhão será usado.</div>
           </div>
-          <div class="hint">Envie preferencialmente um <code class="mono">.zip</code> com o shapefile original completo (.shp, .shx, .dbf, .prj e opcionalmente .cpg). O sistema converte para GeoJSON e mostra o polígono no mapa.</div>
+          <div class="hint">Envie preferencialmente um <code class="mono">.zip</code> com o shapefile original completo (.shp, .shx, .dbf, .prj e opcionalmente .cpg). Também aceitamos <code class="mono">.kml</code>, <code class="mono">.kmz</code>, <code class="mono">.gpx</code>, <code class="mono">.geojson</code> e <code class="mono">.json</code>.</div>
           <div class="form-grid" style="margin:0">
             <div class="field col8">
-              <div class="label">Arquivo georreferenciado (.zip)</div>
-              <input type="file" name="geometry_zip" accept=".zip" />
+              <div class="label">Arquivo georreferenciado</div>
+              <input type="file" name="geometry_zip" accept=".zip,.kml,.kmz,.gpx,.geojson,.json" />
             </div>
             <div class="field col4" style="justify-content:flex-end">
               <div class="label">Ações</div>
@@ -1798,16 +1944,48 @@ async function renderTalhoes() {
     const modeBadgeEl = dlgBody.querySelector('#geomModeBadge')
     const mapEl = dlgBody.querySelector('#geomMap')
     const codigoEl = dlgBody.querySelector('input[name="codigo"]')
+    const hectaresEl = dlgBody.querySelector('input[name="hectares"]')
+    const hectaresFieldEl = hectaresEl?.closest('.field') || null
 
     if (mapsEl) mapsEl.value = initialState?.maps_url || ''
 
     let geometryState = initialState
       ? {
           source_name: initialState.geometry_source_name || 'geometria-salva.geojson',
-          candidates: [{ label: initialState.geometry_source_name || 'Geometria salva', feature: initialState.geometry_geojson, properties: initialState.geometry_props_json || {} }],
+          candidates: [{ label: initialState.geometry_source_name || 'Geometria salva', feature: initialState.geometry_geojson, properties: initialState.geometry_props_json || {}, area_ha: initialState.geometry_area_ha || null }],
           selectedIndex: 0,
         }
       : null
+
+    const currentGeometryArea = () => {
+      if (!geometryState?.candidates?.length) return null
+      const cur = geometryState.candidates[Math.max(0, Math.min(Number(geometryState.selectedIndex || 0), geometryState.candidates.length - 1))]
+      const area = Number(cur?.area_ha)
+      return Number.isFinite(area) && area > 0 ? area : null
+    }
+
+    const syncHectaresWarning = () => {
+      if (!hectaresEl || !hectaresFieldEl) return
+      const geoArea = currentGeometryArea()
+      const manualArea = asNumberOrNull(hectaresEl.value)
+      const warn = Number.isFinite(geoArea) && Number.isFinite(manualArea) && Math.abs(manualArea - geoArea) >= 0.01
+      hectaresFieldEl.classList.toggle('field-warn', warn)
+      hectaresFieldEl.title = warn ? `Área informada difere do polígono (${fmtNum(geoArea, 2)} ha)` : ''
+    }
+
+    if (hectaresEl) {
+      hectaresEl.addEventListener('focus', () => {
+        hectaresEl.dataset.editing = '1'
+      })
+      hectaresEl.addEventListener('input', () => {
+        hectaresEl.dataset.userEdited = '1'
+        syncHectaresWarning()
+      })
+      hectaresEl.addEventListener('blur', () => {
+        hectaresEl.dataset.editing = '0'
+        syncHectaresWarning()
+      })
+    }
 
     const redraw = async () => {
       const hasGeom = geometryState && Array.isArray(geometryState.candidates) && geometryState.candidates.length
@@ -1842,15 +2020,26 @@ async function renderTalhoes() {
         const propKeys = Object.keys(cur.properties || {}).slice(0, 4)
         const propTxt = propKeys.length ? ` | atributos: ${propKeys.map((k) => `${k}=${String(cur.properties[k])}`).join(', ')}` : ''
         const codeTxt = codigoEl?.value ? ` | código talhão: ${String(codigoEl.value).trim()}` : ''
-        hintEl.textContent = `${geometryState.source_name || 'arquivo.zip'} | ${geometryState.candidates.length} polígono(s) detectado(s)${codeTxt}${propTxt}`
+        const areaTxt = Number.isFinite(Number(cur.area_ha)) && Number(cur.area_ha) > 0 ? ` | área: ${fmtNum(Number(cur.area_ha), 2)} ha` : ''
+        hintEl.textContent = `${geometryState.source_name || 'arquivo.zip'} | ${geometryState.candidates.length} polígono(s) detectado(s)${codeTxt}${areaTxt}${propTxt}`
       }
+      if (hectaresEl && Number.isFinite(Number(cur.area_ha)) && Number(cur.area_ha) > 0) {
+        const manualArea = asNumberOrNull(hectaresEl.value)
+        if (
+          hectaresEl.dataset.editing !== '1' &&
+          (hectaresEl.dataset.userEdited !== '1' || manualArea === null || manualArea <= 0)
+        ) {
+          hectaresEl.value = fmtNumInput(Number(cur.area_ha), 2)
+        }
+      }
+      syncHectaresWarning()
       await mountTalhaoGeometryMap(mapEl, cur.feature, { emptyText: 'Nenhuma geometria carregada.' })
     }
 
     btnProcess?.addEventListener('click', async () => {
       const file = fileEl?.files?.[0]
-      if (!file) {
-        toast('Erro', 'Selecione um arquivo .zip com o shapefile.')
+        if (!file) {
+          toast('Erro', 'Selecione um arquivo georreferenciado.')
         return
       }
       const fd = new FormData()
@@ -1883,6 +2072,7 @@ async function renderTalhoes() {
       geometryState = null
       if (fileEl) fileEl.value = ''
       if (mapsEl) mapsEl.disabled = false
+      if (hectaresFieldEl) hectaresFieldEl.classList.remove('field-warn')
       await redraw()
     })
 
@@ -1911,11 +2101,35 @@ async function renderTalhoes() {
     }
   }
 
+  const talhoesItems = await api('/api/talhoes')
+  const totalTalhoes = talhoesItems.length
+  const areaTotal = talhoesItems.reduce((acc, t) => acc + Number(t.hectares || 0), 0)
+  const ativos = talhoesItems.filter((t) => String(t.situacao || '').trim().toUpperCase() === 'ATIVO')
+  const areaAtiva = ativos.reduce((acc, t) => acc + Number(t.hectares || 0), 0)
+
   await renderCrudPage({
     route: 'talhoes',
     title: 'Talhões',
     subtitle: 'Cadastre o talhão e seus hectares.',
     fetchPath: '/api/talhoes',
+    items: talhoesItems,
+    preTableHtml: `
+      <div class="grid" style="margin-bottom:12px">
+        <div class="stat span4">
+          <div class="stat-k">Talhões cadastrados</div>
+          <div class="stat-v">${escapeHtml(String(totalTalhoes))}</div>
+        </div>
+        <div class="stat span4">
+          <div class="stat-k">Área total</div>
+          <div class="stat-v">${escapeHtml(fmtNum(areaTotal, 2))} ha</div>
+        </div>
+        <div class="stat span4">
+          <div class="stat-k">Área ativa</div>
+          <div class="stat-v">${escapeHtml(fmtNum(areaAtiva, 2))} ha</div>
+          <div class="stat-h">${escapeHtml(String(ativos.length))} talhão(ões) ativos</div>
+        </div>
+      </div>
+    `,
     columns: [
       { key: 'id', label: 'ID' },
       { key: 'codigo', label: 'Codigo' },
@@ -1935,12 +2149,189 @@ async function renderTalhoes() {
         format: (v) => fmtNum(v, 2),
         sort: (v) => Number(v) || 0,
       },
+      {
+        key: 'geometry_area_ha',
+        label: 'Area georef. (ha)',
+        format: (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? fmtNum(v, 2) : '-'),
+        sort: (v) => Number(v) || 0,
+      },
+      {
+        key: 'area_diff_status',
+        label: 'Conferencia area',
+        html: true,
+        format: (_v, it) => {
+          const area = Number(it.hectares || 0)
+          const geo = Number(it.geometry_area_ha || 0)
+          if (!(Number.isFinite(geo) && geo > 0)) return pillBadge({ label: 'Sem georef.', tone: 'muted' })
+          if (Math.abs(area - geo) >= 0.01) return pillBadge({ label: 'Divergente', tone: 'warn' })
+          return pillBadge({ label: 'OK', tone: 'ok' })
+        },
+      },
       { key: 'situacao', label: 'Situacao' },
     ],
     extraActions: [
       { act: 'view', label: 'Visualizar', className: 'ghost' },
       { act: 'qr', label: 'QR Code', className: 'ghost' },
     ],
+    headerActions: [
+      { act: 'map-all', label: 'Abrir mapa dos talhões', className: 'ghost' },
+      { act: 'geo-bulk', label: 'Atualizar georreferências', className: 'ghost' },
+    ],
+    onHeaderAction: async (act) => {
+      if (act === 'map-all') {
+        window.open('/talhao-mapa.html', '_blank', 'noopener')
+        return
+      }
+      if (act !== 'geo-bulk') return
+
+      let preview = null
+      openDialog({
+        title: 'Atualizar georreferências dos talhões',
+        size: 'wide',
+        submitLabel: 'Salvar alterações',
+        bodyHtml: `
+          <div class="form-grid">
+            <div class="field col12">
+            <div class="hint">Envie um arquivo georreferenciado (<code class="mono">.zip</code> shapefile, <code class="mono">.kml</code>, <code class="mono">.kmz</code>, <code class="mono">.gpx</code>, <code class="mono">.geojson</code> ou <code class="mono">.json</code>). O sistema localizará automaticamente os polígonos pelo <b>código do talhão</b> e mostrará um preview antes de salvar.</div>
+            </div>
+            <div class="field col8">
+              <div class="label">Arquivo georreferenciado</div>
+              <input type="file" name="geo_bulk_zip" accept=".zip,.kml,.kmz,.gpx,.geojson,.json" />
+            </div>
+            <div class="field col4" style="justify-content:flex-end">
+              <div class="label">Ações</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn ghost" type="button" id="btnGeoBulkPreview">Analisar arquivo</button>
+              </div>
+            </div>
+            <div class="field col12">
+              <div id="geoBulkPreview"><div class="map-empty">Nenhum arquivo analisado ainda.</div></div>
+            </div>
+          </div>
+        `,
+        onReady: () => {
+          const fileEl = dlgBody.querySelector('input[name="geo_bulk_zip"]')
+          const previewEl = dlgBody.querySelector('#geoBulkPreview')
+          const btnPreview = dlgBody.querySelector('#btnGeoBulkPreview')
+          let selectedTalhaoIds = new Set()
+
+          const getSelectedMatches = () => {
+            const matched = Array.isArray(preview?.matched) ? preview.matched : []
+            return matched.filter((m) => selectedTalhaoIds.has(Number(m.talhao_id)))
+          }
+
+          const renderPreview = () => {
+            if (!preview) {
+              previewEl.innerHTML = '<div class="map-empty">Nenhum arquivo analisado ainda.</div>'
+              return
+            }
+            const selectedMatches = getSelectedMatches()
+            previewEl.innerHTML = `
+              <div class="grid">
+                <div class="stat span4"><div class="stat-k">Polígonos detectados</div><div class="stat-v">${escapeHtml(String(preview.detected_count || 0))}</div></div>
+                <div class="stat span4"><div class="stat-k">Talhões a atualizar</div><div class="stat-v">${escapeHtml(String(selectedMatches.length || 0))}</div><div class="stat-h">de ${escapeHtml(String(preview.matched_count || 0))} correspondências</div></div>
+                <div class="stat span4"><div class="stat-k">Sem correspondência</div><div class="stat-v">${escapeHtml(String((preview.unmatched_talhoes || []).length + (preview.unmatched_polygons || []).length))}</div></div>
+                <div class="span12">
+                  <div class="sec"><div class="sec-title">Visualização do que será alterado</div><div class="sec-line"></div></div>
+                  <div class="hint" style="margin-top:6px">Verde = polígono associado a um talhão. Vermelho = polígono não localizado.</div>
+                  <div class="geo-map big" id="geoBulkPreviewMap" style="margin-top:8px"></div>
+                </div>
+                <div class="span12">
+                  <div class="sec"><div class="sec-title">Talhões que serão atualizados</div><div class="sec-line"></div></div>
+                  <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+                    <button class="btn ghost small" type="button" id="btnGeoSelAll">Marcar todos</button>
+                    <button class="btn ghost small" type="button" id="btnGeoSelNone">Desmarcar todos</button>
+                  </div>
+                  <div class="table-wrap" style="margin-top:8px">
+                    <table>
+                      <thead><tr><th class="actions"></th><th>Código</th><th>Talhão</th><th>Polígono</th><th>Nova área (ha)</th></tr></thead>
+                      <tbody>${(preview.matched || []).length ? preview.matched.map((m) => `<tr><td class="actions"><input type="checkbox" data-role="geo-match" data-talhao-id="${escapeHtml(String(m.talhao_id))}" ${selectedTalhaoIds.has(Number(m.talhao_id)) ? 'checked' : ''} /></td><td><code class="mono">${escapeHtml(String(m.talhao_codigo || ''))}</code></td><td>${escapeHtml(String(m.talhao_nome || ''))}</td><td>${escapeHtml(String(m.candidate_label || ''))}</td><td class="t-right">${escapeHtml(fmtNum(Number(m.area_ha || 0), 2))}</td></tr>`).join('') : '<tr><td colspan="5" class="hint">Nenhum talhão será atualizado.</td></tr>'}</tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="span6">
+                  <div class="sec"><div class="sec-title">Polígonos não localizados</div><div class="sec-line"></div></div>
+                  <div class="table-wrap" style="margin-top:8px">
+                    <table>
+                      <thead><tr><th>Polígono</th><th>Chaves</th></tr></thead>
+                      <tbody>${(preview.unmatched_polygons || []).length ? preview.unmatched_polygons.map((p) => `<tr><td>${escapeHtml(String(p.candidate_label || ''))}</td><td>${escapeHtml(String((p.match_keys || []).join(', ')))}</td></tr>`).join('') : '<tr><td colspan="2" class="hint">Todos os polígonos foram associados.</td></tr>'}</tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="span6">
+                  <div class="sec"><div class="sec-title">Talhões sem atualização</div><div class="sec-line"></div></div>
+                  <div class="table-wrap" style="margin-top:8px">
+                    <table>
+                      <thead><tr><th>Código</th><th>Motivo</th></tr></thead>
+                      <tbody>${(preview.unmatched_talhoes || []).length ? preview.unmatched_talhoes.map((t) => `<tr><td><code class="mono">${escapeHtml(String(t.codigo || ''))}</code></td><td>${escapeHtml(String(t.reason || ''))}</td></tr>`).join('') : '<tr><td colspan="2" class="hint">Todos os talhões tiveram correspondência.</td></tr>'}</tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            `
+            const mapEl = previewEl.querySelector('#geoBulkPreviewMap')
+            mountTalhaoBulkPreviewMap(mapEl, {
+              ...preview,
+              matched: selectedMatches,
+            }).catch(() => {
+              if (mapEl) mapEl.innerHTML = '<div class="map-empty">Não foi possível renderizar o mapa de preview.</div>'
+            })
+            previewEl.querySelectorAll('input[data-role="geo-match"]').forEach((el) => {
+              el.addEventListener('change', () => {
+                const id = Number(el.getAttribute('data-talhao-id'))
+                if (!Number.isFinite(id) || id <= 0) return
+                if (el.checked) selectedTalhaoIds.add(id)
+                else selectedTalhaoIds.delete(id)
+                renderPreview()
+              })
+            })
+            previewEl.querySelector('#btnGeoSelAll')?.addEventListener('click', () => {
+              selectedTalhaoIds = new Set((preview.matched || []).map((m) => Number(m.talhao_id)))
+              renderPreview()
+            })
+            previewEl.querySelector('#btnGeoSelNone')?.addEventListener('click', () => {
+              selectedTalhaoIds = new Set()
+              renderPreview()
+            })
+          }
+          btnPreview?.addEventListener('click', async () => {
+            const file = fileEl?.files?.[0]
+            if (!file) {
+              toast('Erro', 'Selecione um arquivo georreferenciado.')
+              return
+            }
+            const fd = new FormData()
+            fd.append('file', file)
+            const res = await fetch('/api/talhoes/geometry-bulk-preview', { method: 'POST', body: fd, credentials: 'same-origin' })
+            const text = await res.text()
+            const data = text ? JSON.parse(text) : null
+            if (!res.ok) throw new Error(data?.message || `Erro ${res.status}`)
+            preview = data
+            selectedTalhaoIds = new Set((preview.matched || []).map((m) => Number(m.talhao_id)))
+            renderPreview()
+            toast('OK', `Análise concluída: ${preview.matched_count || 0} talhão(ões) serão atualizados.`)
+          })
+        },
+        onSubmit: async () => {
+          const fileEl = dlgBody.querySelector('input[name="geo_bulk_zip"]')
+          const file = fileEl?.files?.[0]
+          if (!file) throw new Error('Selecione um arquivo georreferenciado.')
+          if (!preview) throw new Error('Analise o arquivo antes de salvar.')
+          const selectedMatches = (preview.matched || []).filter((m) => dlgBody.querySelector(`input[data-role="geo-match"][data-talhao-id="${m.talhao_id}"]`)?.checked)
+          if (!(selectedMatches.length > 0)) throw new Error('Nenhum talhão está marcado para atualização.')
+          if (!(await confirmAction(`Serão atualizados ${selectedMatches.length} talhão(ões) com base no arquivo ${preview.source_name || 'enviado'} e o campo de hectares será recalculado pela área do polígono correspondente. Deseja continuar?`, { title: 'Confirmar atualização', confirmLabel: 'Salvar alterações' }))) return
+          const fd = new FormData()
+          fd.append('file', file)
+          fd.append('selected_ids_json', JSON.stringify(selectedMatches.map((m) => Number(m.talhao_id))))
+          const res = await fetch('/api/talhoes/geometry-bulk-apply', { method: 'POST', body: fd, credentials: 'same-origin' })
+          const text = await res.text()
+          const data = text ? JSON.parse(text) : null
+          if (!res.ok) throw new Error(data?.message || `Erro ${res.status}`)
+          toast('OK', `Georreferências atualizadas em ${data.updated_count || 0} talhão(ões).`)
+          renderTalhoes()
+        },
+      })
+    },
     onAction: async (act, it) => {
       if (act === 'view') {
         window.open(
@@ -2024,9 +2415,9 @@ async function renderTalhoes() {
             ${formField({ label: 'Codigo', name: 'codigo', placeholder: 'NZ_06_MORRINHO', span: 'col6' })}
             ${formField({ label: 'Local', name: 'local', placeholder: 'Nazca', span: 'col6' })}
             ${formField({ label: 'Nome', name: 'nome', placeholder: 'Morrinho', span: 'col6' })}
-            ${formField({ label: 'Situacao', name: 'situacao', placeholder: 'ATIVO', span: 'col6' })}
+            ${selectField({ label: 'Situacao', name: 'situacao', options: situacaoOptions, value: 'ATIVO', span: 'col6' })}
             ${formField({ label: 'Hectares', name: 'hectares', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0', span: 'col6' })}
-            ${formField({ label: 'Posse', name: 'posse', placeholder: 'PROPRIO / ARRENDADO', span: 'col6' })}
+            ${selectField({ label: 'Posse', name: 'posse', options: posseOptions, value: '', span: 'col6' })}
             ${formField({ label: 'Contrato', name: 'contrato', placeholder: 'Contrato', span: 'col6' })}
             ${formField({ label: 'Irrigacao', name: 'irrigacao', placeholder: 'SIM/NAO', span: 'col4' })}
             ${formField({ label: 'Foto (URL)', name: 'foto_url', placeholder: 'https://...', span: 'col8' })}
@@ -2082,9 +2473,9 @@ async function renderTalhoes() {
             ${formField({ label: 'Codigo', name: 'codigo', value: full.codigo, span: 'col6' })}
             ${formField({ label: 'Local', name: 'local', value: full.local ?? '', span: 'col6' })}
             ${formField({ label: 'Nome', name: 'nome', value: full.nome ?? '', span: 'col6' })}
-            ${formField({ label: 'Situacao', name: 'situacao', value: full.situacao ?? '', span: 'col6' })}
+            ${selectField({ label: 'Situacao', name: 'situacao', options: situacaoOptions, value: full.situacao ?? '', span: 'col6' })}
             ${formField({ label: 'Hectares', name: 'hectares', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: String(full.hectares ?? ''), span: 'col6' })}
-            ${formField({ label: 'Posse', name: 'posse', value: full.posse ?? '', span: 'col6' })}
+            ${selectField({ label: 'Posse', name: 'posse', options: posseOptions, value: full.posse ?? '', span: 'col6' })}
             ${formField({ label: 'Contrato', name: 'contrato', value: full.contrato ?? '', span: 'col6' })}
             ${formField({ label: 'Irrigacao', name: 'irrigacao', value: full.irrigacao ?? '', span: 'col4' })}
             ${formField({ label: 'Foto (URL)', name: 'foto_url', value: full.foto_url ?? '', span: 'col8' })}

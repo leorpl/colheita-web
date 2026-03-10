@@ -143,6 +143,8 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 - POST /api/talhao-acordos
 - POST /api/talhao-safra
 - POST /api/talhoes
+- POST /api/talhoes/geometry-bulk-apply
+- POST /api/talhoes/geometry-bulk-preview
 - POST /api/talhoes/geometry-preview
 - POST /api/tipos-plantio
 - POST /api/users

@@ -1,6 +1,6 @@
 {
-  "signature": "9d838f9c27e867881ccdd2377986c4e83ac40320a95cd10b7a40e2897d169ae6",
-  "generated_at": "2026-03-10T14:59:22.665Z",
+  "signature": "49cd29116e3872fa2526fb2a6b8da23e3d89841630caa3978795824f4cd97dbf",
+  "generated_at": "2026-03-10T17:05:41.820Z",
   "runtime": {
     "node": "v24.14.0",
     "platform": "win32"
@@ -11,12 +11,16 @@
       "name": "colheita-web",
       "version": "1.1.0",
       "dependencies": {
+        "@tmcw/togeojson": "^7.1.2",
+        "@turf/area": "^7.3.4",
+        "@xmldom/xmldom": "^0.8.11",
         "better-sqlite3": "^12.6.2",
         "compression": "^1.8.1",
         "cors": "^2.8.6",
         "dotenv": "^17.3.1",
         "express": "^5.2.1",
         "helmet": "^8.1.0",
+        "jszip": "^3.10.1",
         "leaflet": "^1.9.4",
         "multer": "^2.1.1",
         "nodemailer": "^6.10.1",
@@ -510,6 +514,14 @@
       {
         "method": "POST",
         "path": "/api/talhoes"
+      },
+      {
+        "method": "POST",
+        "path": "/api/talhoes/geometry-bulk-apply"
+      },
+      {
+        "method": "POST",
+        "path": "/api/talhoes/geometry-bulk-preview"
       },
       {
         "method": "POST",
@@ -1086,9 +1098,10 @@
   },
   "docs_hashes": {
     "PROJECT_CONTEXT.md": "96cd04c1d524e7402a38879d293764a45a16f7d6647fb2d1377f6ff272c98631",
-    "ARCHITECTURE.md": "54927181c14dfd628af965722c5710e5f08ad7340e0bd85229230787e2eac209",
+    "ARCHITECTURE.md": "ec39dde2b9f6ad5d99c8325dde4203d82e3b34c1fd4f78922f1581226861602e",
     "TASKS_OFICIAL.md": "d0c2ef8c8bf922f3e9aa39c3d36a95ebe8961c167386dd80ec429c6d0375bbe1",
     "CHANGELOG.md": "7cc29ac5007e79134959ffd97f3df04bb1b6641bf5f42cfb40c7abc790661f46",
-    "LIÇÕESAPRENDIDAS.MD": "5e863f52bd7d6b74e2fab0fa93c353f7934def57125701fe19949bd280629408"
+    "LIÇÕESAPRENDIDAS.MD": "30f62df514d76838e953f305c705d819ef02484ee17a3ae9c512dc0e17efdb17",
+    "RELEASE_CHECKLIST.md": "2969bceba556de1c6c07eb5c9a47cc1412f9f0e9d026b241bbf9d6dd68606712"
   }
 }

@@ -40,13 +40,27 @@ async function ensureLeaflet() {
 async function run() {
   const qs = new URLSearchParams(location.search)
   const focusId = Number(qs.get('focus_id'))
+  const focusTalhao = Number.isFinite(focusId) && focusId > 0 ? await api(`/api/public/talhoes/${focusId}`).catch(() => null) : null
+  const externalBtn = document.querySelector('#btnExternalMap')
+  const externalUrl = focusTalhao?.maps_url && /^https?:\/\//.test(String(focusTalhao.maps_url || '')) ? String(focusTalhao.maps_url) : ''
+  if (externalBtn && externalUrl) {
+    externalBtn.href = externalUrl
+    externalBtn.style.display = ''
+  }
   const talhoes = await api('/api/public/talhoes-geometrias')
-  if (!Array.isArray(talhoes) || !talhoes.length) throw new Error('Nenhum talhão com geometria salva.')
+  if (!Array.isArray(talhoes) || !talhoes.length) {
+    if (externalUrl) throw new Error('Este talhão não possui polígono salvo. Use o link externo para abrir o mapa de referência.')
+    throw new Error('Nenhum talhão com geometria salva.')
+  }
   const focused = talhoes.find((t) => Number(t.id) === focusId) || null
   document.querySelector('#mapTitle').textContent = focused
     ? `Mapa dos talhões - foco em ${focused.codigo}`
-    : 'Mapa dos talhões'
-  document.querySelector('#mapSub').textContent = 'Clique em um polígono para abrir o registro de referência do talhão.'
+    : focusTalhao?.codigo
+      ? `Mapa dos talhões - ${focusTalhao.codigo}`
+      : 'Mapa dos talhões'
+  document.querySelector('#mapSub').textContent = externalUrl
+    ? 'Clique em um polígono para abrir o registro do talhão ou use o link externo de referência.'
+    : 'Clique em um polígono para abrir o registro de referência do talhão.'
   const root = document.querySelector('#mapRoot')
   const L = await ensureLeaflet()
   const map = L.map(root, { zoomControl: true })
