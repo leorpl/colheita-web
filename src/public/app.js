@@ -9737,7 +9737,9 @@ async function renderAuditoria() {
           <div class="a-card danger" data-card="deletes"><div class="k">Exclusões</div><div class="v">-</div><div class="h">Deletes e inativações</div></div>
         </div>
 
-        <div class="audit-filters" style="margin-top:12px">
+        <details class="audit-filter-box" id="auditFilterBox" open style="margin-top:12px">
+          <summary>Filtros da auditoria</summary>
+          <div class="audit-filters">
           <div class="row">
             <div class="field"><div class="label">Início</div><input type="date" id="aDe" value="${escapeHtml(initial.de)}" /></div>
             <div class="field"><div class="label">Fim</div><input type="date" id="aAte" value="${escapeHtml(initial.ate)}" /></div>
@@ -9764,7 +9766,7 @@ async function renderAuditoria() {
               <button class="btn ghost" id="btn7" type="button">7d</button>
               <button class="btn ghost" id="btn30" type="button">30d</button>
             </div>
-            <div class="field" style="display:flex;gap:10px">
+            <div class="field audit-submit-row" style="display:flex;gap:10px">
               <button class="btn" id="btnFetch" type="button">Filtrar</button>
             </div>
           </div>
@@ -9776,9 +9778,10 @@ async function renderAuditoria() {
             <span class="chip" data-chip="deletes">Apenas exclusões</span>
             <span class="chip" data-chip="critical">Apenas críticos</span>
           </div>
-        </div>
+          </div>
+        </details>
 
-        <div class="table-wrap sticky" style="margin-top:12px">
+        <div class="table-wrap sticky audit-desktop-wrap" style="margin-top:12px">
           <table class="grid-table zebra" id="aTable">
             <thead>
               <tr>
@@ -9825,6 +9828,7 @@ async function renderAuditoria() {
   const elQ = view.querySelector('#aQ')
   const elCrit = view.querySelector('#aCrit')
   const elLimit = view.querySelector('#aLimit')
+  const auditFilterBox = view.querySelector('#auditFilterBox')
   const body = view.querySelector('#aBody')
   const countEl = view.querySelector('#aCount')
 
@@ -9832,6 +9836,7 @@ async function renderAuditoria() {
   if (elMod) elMod.value = initial.module_name
   if (elAct) elAct.value = initial.action_type
   if (elCrit) elCrit.value = initial.critical === '1' ? '1' : ''
+  if (auditFilterBox && window.innerWidth <= 560) auditFilterBox.open = false
 
   let offset = 0
   let sort_key = 'id'

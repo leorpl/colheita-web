@@ -720,6 +720,10 @@ code.mono{font-family:var(--mono);font-size:12px}
 .a-card.warn:hover{border-color:rgba(209,154,43,.42)}
 
 .audit-filters{border:1px solid rgba(15,26,22,.12);border-radius:18px;background:rgba(255,255,255,.78);box-shadow:0 10px 22px rgba(0,0,0,.04);padding:12px 12px}
+.audit-filter-box{border:1px solid rgba(15,26,22,.12);border-radius:18px;background:rgba(255,255,255,.60);box-shadow:0 10px 22px rgba(0,0,0,.04);overflow:hidden}
+.audit-filter-box > summary{cursor:pointer;list-style:none;padding:12px 14px;font-weight:600;color:rgba(14,21,18,.88);background:rgba(255,255,255,.66)}
+.audit-filter-box > summary::-webkit-details-marker{display:none}
+.audit-filter-box[open] > summary{border-bottom:1px solid rgba(15,26,22,.10)}
 .audit-filters .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .audit-filters .row .field{min-width:140px}
 .audit-filters .row .grow{flex:1;min-width:220px}
@@ -934,7 +938,8 @@ code.mono{font-family:var(--mono);font-size:12px}
   .filters > .field,.filters > *{flex:1 1 100%;min-width:0}
   .audit-actions,.dlg-actions,.dlg-overlay-actions{justify-content:stretch}
   .dlg-actions .btn,.dlg-overlay-actions .btn{width:100%}
-  .dlg .dlg-card{width:100vw;max-height:100dvh;border-radius:0}
+  .dlg{margin:0;width:100vw;max-width:100vw;max-height:100dvh;padding:0}
+  .dlg .dlg-card{width:100%;max-width:100%;max-height:100dvh;border-radius:0}
   .dlg-head{padding:12px 14px}
   .dlg-body{padding:12px 14px}
   .dlg-actions{padding:10px 14px calc(14px + env(safe-area-inset-bottom, 0px))}
@@ -964,10 +969,19 @@ code.mono{font-family:var(--mono);font-size:12px}
   .dlg .geo-upload-box{padding:10px}
   .dlg .table-wrap{border-radius:12px}
   .dlg select,.dlg input,.dlg textarea,.dlg .btn{min-height:44px}
+  .dlg .rateio-head-left,
+  .dlg .card-actions .mini,
+  .dlg .card-actions .mini select,
+  .dlg .rateio-cardx select[name="talhao_sort"]{min-width:0;width:100%}
+  .dlg .rateio-cardx .rateio-grid,
+  .dlg .form-card .rateio-grid{grid-template-columns:1fr}
   .dlg .col3{grid-column:span 12}
   .dlg .col4{grid-column:span 12}
   th.actions,td.actions{position:static;left:auto;box-shadow:none;border-right:none}
-  .audit-filters .row .field,.audit-filters .row .grow{flex:1 1 100%}
+  .audit-filters .row .field{flex:1 1 calc(50% - 10px);min-width:0}
+  .audit-filters .row .grow,
+  .audit-submit-row,
+  .audit-quick-range{flex:1 1 100% !important;width:100%}
   .pwd-wrap,.pct-row{flex-wrap:wrap;align-items:stretch}
   .pwd-wrap .pwd-toggle{width:100%}
   .pct-read{min-width:0;text-align:left}
@@ -1003,6 +1017,7 @@ code.mono{font-family:var(--mono);font-size:12px}
 
   .audit-quick-range{width:100%;display:flex;gap:10px;flex-wrap:wrap}
   .audit-quick-range .btn{flex:1 1 calc(50% - 6px)}
+  .audit-filter-box{border-radius:14px}
   .audit-filters{position:static;z-index:auto;padding:10px}
   .audit-cards{gap:10px}
   .pager{align-items:stretch}
@@ -1037,7 +1052,7 @@ code.mono{font-family:var(--mono);font-size:12px}
   #tblSaldoTalhoes th:nth-child(2),
   #tblSaldoTalhoes td:nth-child(2){display:none}
   #colheitaCards,#aCardsList{display:flex !important}
-  #tblColheita,#aTable{display:none}
+  #tblColheita,#aTable,.audit-desktop-wrap{display:none}
   .crud-desktop-wrap{display:none}
   .crud-mobile-cards{display:flex}
   .mobile-card-actions .btn{width:auto;flex:1 1 calc(50% - 6px)}
