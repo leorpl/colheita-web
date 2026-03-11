@@ -64,6 +64,30 @@ export async function renderComunicacaoRoute({ activeNav, setView, escapeHtml, t
     })
     .join('')
 
+  const cardsHtml = modules
+    .map((m) => {
+      const r = getRow(m.key)
+      const dis = canUpdate ? '' : 'disabled'
+      return `
+        <div class="mobile-card">
+          <div class="mobile-card-head">
+            <div>
+              <div class="mobile-card-title"><code class="mono">${escapeHtml(m.key)}</code></div>
+              <div class="mobile-card-sub">${escapeHtml(m.label)}</div>
+            </div>
+          </div>
+          <div class="mobile-kv">
+            <div><span>Criar</span><b><input ${dis} type="checkbox" name="${escapeHtml(`c_${m.key}`)}" ${Number(r.notify_create) === 1 ? 'checked' : ''} /></b></div>
+            <div><span>Alterar</span><b><input ${dis} type="checkbox" name="${escapeHtml(`u_${m.key}`)}" ${Number(r.notify_update) === 1 ? 'checked' : ''} /></b></div>
+            <div><span>Excluir</span><b><input ${dis} type="checkbox" name="${escapeHtml(`d_${m.key}`)}" ${Number(r.notify_delete) === 1 ? 'checked' : ''} /></b></div>
+            <div><span>Status</span><b><input ${dis} type="checkbox" name="${escapeHtml(`s_${m.key}`)}" ${Number(r.notify_status_change) === 1 ? 'checked' : ''} /></b></div>
+            <div><span>Segurança</span><b><input ${dis} type="checkbox" name="${escapeHtml(`sec_${m.key}`)}" ${Number(r.notify_security_events) === 1 ? 'checked' : ''} /></b></div>
+          </div>
+        </div>
+      `.trim()
+    })
+    .join('')
+
   const webmailUrl = webmail?.url || ''
   const webmailLabel = webmail?.label || 'Webmail da fazenda'
   const webmailHint = webmail?.hint || ''
@@ -96,7 +120,8 @@ export async function renderComunicacaoRoute({ activeNav, setView, escapeHtml, t
               <div class="hint" style="margin-top:6px">Escolha o que voce quer receber por e-mail. (Envio imediato; resumo diario pode ser adicionado depois.)</div>
               ${!canUpdate ? `<div class="pill" style="margin-top:10px"><span class="dot muted"></span><span>Somente leitura: sem permissao para alterar preferencias.</span></div>` : ''}
               <form id="notifForm" style="margin-top:10px">
-                <div class="table-wrap rule-wrap">
+                <div class="mobile-cards notif-mobile-cards" style="display:none">${cardsHtml}</div>
+                <div class="table-wrap rule-wrap notif-desktop-wrap">
                   <table>
                     <thead><tr><th>Modulo</th><th class="t-center">Criar</th><th class="t-center">Alterar</th><th class="t-center">Excluir</th><th class="t-center">Status</th><th class="t-center">Seguranca</th></tr></thead>
                     <tbody>${rowsHtml}</tbody>
@@ -117,6 +142,7 @@ export async function renderComunicacaoRoute({ activeNav, setView, escapeHtml, t
   const form = viewEl.querySelector('#notifForm')
   const btnSave = viewEl.querySelector('#btnNotifSave')
   const btnDef = viewEl.querySelector('#btnNotifDefaults')
+  const mobileCards = viewEl.querySelector('.notif-mobile-cards')
 
   function applyDefaults() {
     const isAdmin = String(currentMe?.role || '').toLowerCase() === 'admin'
@@ -167,5 +193,11 @@ export async function renderComunicacaoRoute({ activeNav, setView, escapeHtml, t
       await api('/api/notifications/preferences', { method: 'PUT', body: { prefs: out } })
       toast('OK', 'Preferencias salvas.')
     }
+  }
+
+  if (mobileCards) {
+    mobileCards.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+      el.disabled = !canUpdate
+    })
   }
 }

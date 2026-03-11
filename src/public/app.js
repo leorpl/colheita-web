@@ -2913,6 +2913,29 @@ async function renderUsuarios() {
     })
     .join('')
 
+  const mobileCards = (users || [])
+    .map((u) => `<div class="mobile-card">
+      <div class="mobile-card-head">
+        <div>
+          <div class="mobile-card-title">${escapeHtml(u.username)}</div>
+          <div class="mobile-card-sub">${escapeHtml(u.nome || u.email || '')}</div>
+        </div>
+        <div class="mobile-card-actions">
+          <button class="btn ghost small" data-act="uedit" data-id="${u.id}">Editar</button>
+          <button class="btn ghost small" data-act="upwd" data-id="${u.id}">Senha</button>
+          <button class="btn ghost small danger" data-act="udel" data-id="${u.id}">Excluir</button>
+        </div>
+      </div>
+      <div class="mobile-kv">
+        <div><span>E-mail</span><b>${escapeHtml(u.email || '-')}</b></div>
+        <div><span>Nome</span><b>${escapeHtml(u.nome || '-')}</b></div>
+        <div><span>Role</span><b>${escapeHtml(u.role)}</b></div>
+        <div><span>Motorista</span><b>${escapeHtml(u.motorista_id ? motoristaLabel(u.motorista_id) : '-')}</b></div>
+        <div><span>Ativo</span><b>${u.active ? pillBadge({ label: 'SIM', tone: 'ok' }) : pillBadge({ label: 'NAO', tone: 'muted' })}</b></div>
+      </div>
+    </div>`)
+    .join('')
+
   setView(`
     <section class="panel">
       <div class="panel-head">
@@ -2923,12 +2946,13 @@ async function renderUsuarios() {
           <button class="btn" id="btnUAdd">Novo usuário</button>
       </div>
       <div class="panel-body">
-        <div class="table-wrap">
+        <div class="table-wrap users-desktop-wrap">
           <table>
             <thead><tr><th class="actions"></th><th>Login</th><th>E-mail</th><th>Nome</th><th>Role</th><th>Motorista</th><th>Ativo</th></tr></thead>
             <tbody>${rows || `<tr><td colspan="7">Nenhum usuario.</td></tr>`}</tbody>
           </table>
         </div>
+        <div class="mobile-cards users-mobile-cards" style="display:none">${mobileCards || '<div class="mobile-empty">Nenhum usuario.</div>'}</div>
         <div class="hint">Boas praticas: use \`admin\` só para cadastro e manutencao; operadores nao precisam ver valores de pagamento.</div>
       </div>
     </section>
@@ -7904,7 +7928,8 @@ async function renderAreaColhida() {
           </div>
 
           <div class="span12">
-            <div class="table-wrap">
+            <div class="mobile-cards area-mobile-cards" id="acCards" style="display:none;margin-bottom:10px"></div>
+            <div class="table-wrap area-desktop-wrap">
               <table>
                 <thead>
                   <tr>
@@ -7931,6 +7956,7 @@ async function renderAreaColhida() {
   const form = view.querySelector('#acFilters')
   const btn = view.querySelector('#btnAcRun')
   const body = view.querySelector('#acBody')
+  const cards = view.querySelector('#acCards')
 
   async function run() {
     const fd = new FormData(form)
@@ -8021,7 +8047,7 @@ async function renderAreaColhida() {
       rangeEl.style.setProperty('--fill', `rgb(${r}, ${g}, ${b})`)
     }
 
-    body.querySelectorAll('input[data-act="pct-range"]').forEach((el) => {
+    ;[body, cards].forEach((root) => root?.querySelectorAll('input[data-act="pct-range"]').forEach((el) => {
       el.oninput = () => updateRowUi(el)
       el.onchange = debounce(async () => {
         const talhao_id = Number(el.dataset.talhao)
@@ -8036,9 +8062,9 @@ async function renderAreaColhida() {
       }, 250)
 
       updateRowUi(el)
-    })
+    }))
 
-    body.querySelectorAll('input[data-act="area-ha-input"]').forEach((inp) => {
+    ;[body, cards].forEach((root) => root?.querySelectorAll('input[data-act="area-ha-input"]').forEach((inp) => {
       const tr = inp.closest('tr')
       const rangeEl = tr?.querySelector('input[data-act="pct-range"]')
       const hectares = Number(inp.dataset.hectares || 0)
@@ -8085,9 +8111,9 @@ async function renderAreaColhida() {
           inp.blur()
         }
       })
-    })
+    }))
 
-    body.querySelectorAll('button[data-act="ac-hist"]').forEach((b) => {
+    ;[body, cards].forEach((root) => root?.querySelectorAll('button[data-act="ac-hist"]').forEach((b) => {
       b.onclick = async () => {
         const talhao_id = Number(b.dataset.talhao)
         const name = String(b.dataset.nome || '').trim() || `#${talhao_id}`
@@ -8118,7 +8144,7 @@ async function renderAreaColhida() {
           toast('Histórico', msg.includes('nao encontrada') ? 'Ainda não há alterações registradas.' : msg)
         }
       }
-    })
+    }))
   }
 
   btn.onclick = run
@@ -8179,7 +8205,8 @@ async function renderQuitacaoMotoristas() {
           </div>
 
            <div class="span12">
-             <div class="table-wrap">
+             <div class="mobile-cards quit-mobile-cards" id="qCardsResumo" style="display:none;margin-bottom:10px"></div>
+             <div class="table-wrap quit-desktop-wrap">
               <table class="grid-table">
                 <thead>
                   <tr><th class="actions">Ações</th><th>Motorista</th><th class="t-right">Qtd</th><th class="t-right">Frete</th><th class="t-right">Quitado</th><th class="t-right">Falta</th></tr>
@@ -8190,7 +8217,8 @@ async function renderQuitacaoMotoristas() {
           </div>
 
            <div class="span12">
-             <div class="table-wrap">
+             <div class="mobile-cards quit-mobile-cards" id="qCardsLanc" style="display:none;margin-bottom:10px"></div>
+             <div class="table-wrap quit-desktop-wrap">
               <table class="grid-table">
                 <thead>
                   <tr><th colspan="7">Lancamentos de quitacao no periodo</th></tr>
@@ -8209,6 +8237,8 @@ async function renderQuitacaoMotoristas() {
   const btn = view.querySelector('#btnQRun')
   const qBody = view.querySelector('#qBody')
   const qLanc = view.querySelector('#qLanc')
+  const qCardsResumo = view.querySelector('#qCardsResumo')
+  const qCardsLanc = view.querySelector('#qCardsLanc')
   const qTotFrete = view.querySelector('#qTotFrete')
   const qTotPago = view.querySelector('#qTotPago')
   const qTotSaldo = view.querySelector('#qTotSaldo')
@@ -8266,7 +8296,7 @@ async function renderQuitacaoMotoristas() {
       qLanc.innerHTML = `<tr><td colspan="7">Nenhuma quitacao registrada neste periodo.</td></tr>`
     }
 
-    qLanc.querySelectorAll('button[data-act="qedit"]').forEach((b) => {
+    ;[qLanc, qCardsLanc].forEach((root) => root?.querySelectorAll('button[data-act="qedit"]').forEach((b) => {
       b.onclick = () => {
         const id = Number(b.dataset.id)
         const q = (r.quitacoes || []).find((x) => Number(x.id) === id)
@@ -8375,9 +8405,9 @@ async function renderQuitacaoMotoristas() {
         if (selMot) selMot.onchange = refreshMot
         refreshMot()
       }
-    })
+    }))
 
-    qLanc.querySelectorAll('button[data-act="qdel"]').forEach((b) => {
+    ;[qLanc, qCardsLanc].forEach((root) => root?.querySelectorAll('button[data-act="qdel"]').forEach((b) => {
       b.onclick = async () => {
         const id = Number(b.dataset.id)
         if (!(await confirmDanger(`Excluir a quitacao #${id}?`))) return
@@ -8385,9 +8415,9 @@ async function renderQuitacaoMotoristas() {
         toast('Excluído', 'Quitação removida.')
         run()
       }
-    })
+    }))
 
-    qBody.querySelectorAll('button[data-act="pay"]').forEach((b) => {
+    ;[qBody, qCardsResumo].forEach((root) => root?.querySelectorAll('button[data-act="pay"]').forEach((b) => {
       b.onclick = () => {
         const motorista_id = Number(b.dataset.id)
         const nome = b.dataset.nome || ''
@@ -8483,7 +8513,7 @@ async function renderQuitacaoMotoristas() {
           }
         }
       }
-    })
+    }))
   }
 
   btn.onclick = run
@@ -9907,6 +9937,58 @@ async function renderAuditoria() {
         </tr>`
       })
       .join('')
+
+    if (qCardsLanc) {
+      qCardsLanc.innerHTML = (r.quitacoes || []).map((q) => `<div class="mobile-card">
+        <div class="mobile-card-head"><div><div class="mobile-card-title">${escapeHtml(q.motorista_nome)}</div><div class="mobile-card-sub">${escapeHtml(q.data_pagamento)} • ${escapeHtml(q.de)} a ${escapeHtml(q.ate)}</div></div><div class="mobile-card-actions"><button class="btn ghost small" data-act="qedit" data-id="${q.id}">Editar</button><button class="btn ghost small danger" data-act="qdel" data-id="${q.id}">Excluir</button></div></div>
+        <div class="mobile-kv"><div><span>Valor</span><b>${fmtMoney(q.valor)}</b></div><div><span>Forma</span><b>${escapeHtml(q.forma_pagamento || '-')}</b></div><div><span>Obs</span><b>${escapeHtml(q.observacoes || '-')}</b></div></div>
+      </div>`).join('')
+    }
+
+    if (qCardsResumo) {
+      qCardsResumo.innerHTML = r.items.map((it) => {
+        const falta = Number(it.saldo || 0)
+        const faltaBadge = falta <= 0 ? pillBadge({ label: 'OK', tone: 'ok' }) : pillBadge({ label: fmtMoney(falta), tone: 'warn' })
+        return `<div class="mobile-card">
+          <div class="mobile-card-head"><div><div class="mobile-card-title">${escapeHtml(it.motorista_nome)}</div><div class="mobile-card-sub">${escapeHtml(it.motorista_placa || '')}</div></div><div class="mobile-card-actions"><button class="btn ghost small" data-act="pay" data-id="${it.motorista_id}" data-nome="${escapeHtml(it.motorista_nome)}" data-falta="${escapeHtml(String(falta))}">Registrar</button></div></div>
+          <div class="mobile-kv"><div><span>Qtd</span><b>${escapeHtml(String(it.quantidade || 0))}</b></div><div><span>Frete</span><b>${fmtMoney(it.valor_frete)}</b></div><div><span>Quitado</span><b>${fmtMoney(it.valor_pago)}</b></div><div><span>Falta</span><b>${faltaBadge}</b></div></div>
+        </div>`
+      }).join('')
+    }
+
+    if (cards) {
+      cards.innerHTML = items
+        .map((t) => {
+          const hectares = Number(t.hectares || 0)
+          const pct = Number(t.pct_area_colhida ?? 0)
+          const areaColhidaHa = hectares * pct
+          const sacas = Number(t.sacas || 0)
+          const prodAdj = Number(t.produtividade_ajustada_sacas_ha || 0)
+          return `<div class="mobile-card">
+            <div class="mobile-card-head">
+              <div>
+                <div class="mobile-card-title">${escapeHtml(t.talhao_nome || '')}</div>
+                <div class="mobile-card-sub">${escapeHtml(t.talhao_local || '')}</div>
+              </div>
+              <div class="mobile-card-actions"><button class="btn ghost small" type="button" data-act="ac-hist" data-talhao="${escapeHtml(String(t.talhao_id))}" data-nome="${escapeHtml(String(t.talhao_nome || ''))}">Histórico</button></div>
+            </div>
+            <div class="mobile-kv">
+              <div><span>Área</span><b>${fmtNum(hectares, 2)} ha</b></div>
+              <div><span>Sacas</span><b>${fmtNum(sacas, 2)}</b></div>
+              <div><span>Prod. ajustada</span><b><span data-act="prod-adj">${fmtNum(prodAdj, 2)}</span> sc/ha</b></div>
+            </div>
+            <div class="field" style="margin-top:10px">
+              <div class="label">Área colhida (ha)</div>
+              <input class="ha-input" type="text" inputmode="decimal" pattern="[0-9.,]*" value="${fmtNumInput(areaColhidaHa, 2)}" data-act="area-ha-input" data-talhao="${t.talhao_id}" data-hectares="${escapeHtml(String(hectares))}" />
+            </div>
+            <div class="pct-row" style="margin-top:10px">
+              <span class="pct-read" data-act="pct-read">${fmtNum(pct * 100, 1)}%</span>
+              <input class="pct-range" type="range" min="0" max="100" step="0.1" value="${(pct * 100).toFixed(1)}" data-act="pct-range" data-talhao="${t.talhao_id}" data-hectares="${escapeHtml(String(hectares))}" data-sacas="${escapeHtml(String(sacas))}" />
+            </div>
+          </div>`
+        })
+        .join('')
+    }
 
     if (cardsListEl) {
       cardsListEl.innerHTML = items

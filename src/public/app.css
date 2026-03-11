@@ -81,6 +81,7 @@ body.nav-collapsed .nav{display:none}
 
 .nav{
   position:sticky;top:82px;align-self:start;
+  display:flex;flex-direction:column;
   border-radius:var(--radius);
   padding:12px;
   background:rgba(255,255,255,.08);
@@ -91,7 +92,7 @@ body.nav-collapsed .nav{display:none}
   overscroll-behavior:contain;
   scrollbar-gutter:stable;
 }
-.nav nav{display:flex;flex-direction:column;gap:4px}
+.nav nav{display:flex;flex-direction:column;gap:4px;min-height:0;padding-bottom:24px}
 .nav-section{margin:10px 8px 4px;color:rgba(255,255,255,.55);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
 .nav-item{
   display:flex;align-items:center;gap:10px;
@@ -871,6 +872,7 @@ code.mono{font-family:var(--mono);font-size:12px}
     top:74px;
     left:12px;
     bottom:12px;
+    height:calc(100dvh - 86px);
     width:min(320px, calc(100vw - 24px));
     max-height:none;
     z-index:25;
@@ -1011,6 +1013,8 @@ code.mono{font-family:var(--mono);font-size:12px}
   .crud-mobile-cards{display:flex}
   .mobile-card-actions .btn{width:auto;flex:1 1 calc(50% - 6px)}
   .mobile-kv{grid-template-columns:1fr}
+  .users-mobile-cards,.quit-mobile-cards,.area-mobile-cards,.notif-mobile-cards{display:flex !important}
+  .users-desktop-wrap,.quit-desktop-wrap,.area-desktop-wrap,.notif-desktop-wrap{display:none !important}
 
   /* Colheita: keep Placa + Destino side-by-side */
   .dlg .transport-destino{grid-column:span 6}
