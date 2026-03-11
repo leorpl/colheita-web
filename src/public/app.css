@@ -940,6 +940,21 @@ code.mono{font-family:var(--mono);font-size:12px}
   .dlg-actions{padding:10px 14px calc(14px + env(safe-area-inset-bottom, 0px))}
   .dlg-body .form-grid{display:grid;grid-template-columns:1fr;gap:10px}
   .dlg-body .field{min-width:0}
+  .dlg .form-card .form-grid{padding:12px}
+  .dlg .form-card .card-body{padding:12px}
+  .dlg .card-head,
+  .dlg .card-actions,
+  .dlg .panel-actions,
+  .dlg .rateio-head-right,
+  .dlg .contract-pane-head,
+  .dlg .upload-row{flex-direction:column;align-items:stretch;justify-content:flex-start}
+  .dlg .card-actions .btn,
+  .dlg .contract-pane-head .btn,
+  .dlg .upload-row .btn,
+  .dlg .panel-actions .btn{width:100%}
+  .dlg .pill-row{align-items:stretch}
+  .dlg .pill-row .pill{width:100%}
+  .dlg .geo-upload-box{padding:10px}
   .dlg .col3{grid-column:span 12}
   .dlg .col4{grid-column:span 12}
   th.actions,td.actions{position:static;left:auto;box-shadow:none;border-right:none}
