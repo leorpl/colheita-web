@@ -938,6 +938,13 @@ code.mono{font-family:var(--mono);font-size:12px}
   .dlg-head{padding:12px 14px}
   .dlg-body{padding:12px 14px}
   .dlg-actions{padding:10px 14px calc(14px + env(safe-area-inset-bottom, 0px))}
+  .dlg .dlg-body > .form-grid{
+    padding:12px;
+    border:1px solid rgba(15,26,22,.12);
+    border-radius:18px;
+    background:rgba(255,255,255,.82);
+    box-shadow:0 12px 26px rgba(0,0,0,.06);
+  }
   .dlg-body .form-grid{display:grid;grid-template-columns:1fr;gap:10px}
   .dlg-body .field{min-width:0}
   .dlg .form-card .form-grid{padding:12px}
@@ -955,6 +962,8 @@ code.mono{font-family:var(--mono);font-size:12px}
   .dlg .pill-row{align-items:stretch}
   .dlg .pill-row .pill{width:100%}
   .dlg .geo-upload-box{padding:10px}
+  .dlg .table-wrap{border-radius:12px}
+  .dlg select,.dlg input,.dlg textarea,.dlg .btn{min-height:44px}
   .dlg .col3{grid-column:span 12}
   .dlg .col4{grid-column:span 12}
   th.actions,td.actions{position:static;left:auto;box-shadow:none;border-right:none}
@@ -994,6 +1003,11 @@ code.mono{font-family:var(--mono);font-size:12px}
 
   .audit-quick-range{width:100%;display:flex;gap:10px;flex-wrap:wrap}
   .audit-quick-range .btn{flex:1 1 calc(50% - 6px)}
+  .audit-filters{position:static;z-index:auto;padding:10px}
+  .audit-cards{gap:10px}
+  .pager{align-items:stretch}
+  .pager > div{width:100%}
+  .pager select,.pager .btn{width:100%}
   #aTable th:nth-child(5),
   #aTable td:nth-child(5),
   #aTable th:nth-child(8),

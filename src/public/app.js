@@ -2419,7 +2419,9 @@ async function renderTalhoes() {
       openDialog({
         title: 'Novo talhão',
         bodyHtml: `
-          <div class="form-grid">
+          <div class="form-card">
+            <div class="card-head"><div class="card-title">Cadastro do talhão</div></div>
+            <div class="form-grid">
             ${formField({ label: 'Codigo', name: 'codigo', placeholder: 'NZ_06_MORRINHO', span: 'col6' })}
             ${formField({ label: 'Local', name: 'local', placeholder: 'Nazca', span: 'col6' })}
             ${formField({ label: 'Nome', name: 'nome', placeholder: 'Morrinho', span: 'col6' })}
@@ -2435,6 +2437,7 @@ async function renderTalhoes() {
             ${formField({ label: 'Fosforo corretivo', name: 'fosforo_corretivo', placeholder: 'Info', span: 'col4' })}
             ${talhaoGeometrySection()}
             ${textareaField({ label: 'Observacoes', name: 'observacoes' })}
+            </div>
           </div>`,
         onReady: () => {
           getGeometryData = bindTalhaoGeometryUi()
@@ -2477,7 +2480,9 @@ async function renderTalhoes() {
       openDialog({
         title: `Editar talhão #${it.id}`,
         bodyHtml: `
-          <div class="form-grid">
+          <div class="form-card">
+            <div class="card-head"><div class="card-title">Dados do talhão</div></div>
+            <div class="form-grid">
             ${formField({ label: 'Codigo', name: 'codigo', value: full.codigo, span: 'col6' })}
             ${formField({ label: 'Local', name: 'local', value: full.local ?? '', span: 'col6' })}
             ${formField({ label: 'Nome', name: 'nome', value: full.nome ?? '', span: 'col6' })}
@@ -2496,6 +2501,7 @@ async function renderTalhoes() {
             <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
               <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(full.created_at || ''))}" data-created-by="${escapeHtml(String(full.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(full.updated_at || ''))}" data-updated-by="${escapeHtml(String(full.updated_by_user_id || ''))}">Carregando...</div>
               <button class="btn ghost small" type="button" data-act="audit" data-module="talhoes" data-record-id="${escapeHtml(String(it.id))}">Histórico</button>
+            </div>
             </div>
           </div>`,
         onReady: () => {
@@ -2764,7 +2770,9 @@ async function renderMotoristas() {
       openDialog({
         title: 'Novo motorista',
         bodyHtml: `
-          <div class="form-grid">
+          <div class="form-card">
+            <div class="card-head"><div class="card-title">Cadastro do motorista</div></div>
+            <div class="form-grid">
             ${formField({ label: 'Nome', name: 'nome', placeholder: 'Marcelo', span: 'col6' })}
             ${formField({ label: 'Placa', name: 'placa', placeholder: 'MSD6914', span: 'col6' })}
             ${formField({ label: 'CPF/RG', name: 'cpf', placeholder: '000.000.000-00', span: 'col6' })}
@@ -2772,6 +2780,7 @@ async function renderMotoristas() {
             ${formField({ label: 'PIX/Conta', name: 'pix_conta', placeholder: 'Chave', span: 'col6' })}
             ${formField({ label: 'Tipo veiculo', name: 'tipo_veiculo', placeholder: 'Carreta', span: 'col6' })}
             ${formField({ label: 'Capacidade (kg)', name: 'capacidade_kg', type: 'text', inputmode: 'numeric', pattern: '[0-9.,]*', value: '', span: 'col6' })}
+            </div>
           </div>`,
         onSubmit: async (obj) => {
           await api('/api/motoristas', {
@@ -2796,7 +2805,9 @@ async function renderMotoristas() {
       openDialog({
         title: `Editar motorista #${it.id}`,
         bodyHtml: `
-          <div class="form-grid">
+          <div class="form-card">
+            <div class="card-head"><div class="card-title">Dados do motorista</div></div>
+            <div class="form-grid">
             ${formField({ label: 'Nome', name: 'nome', value: full.nome, span: 'col6' })}
             ${formField({ label: 'Placa', name: 'placa', value: full.placa ?? '', span: 'col6' })}
             ${formField({ label: 'CPF/RG', name: 'cpf', value: full.cpf ?? '', span: 'col6' })}
@@ -2807,6 +2818,7 @@ async function renderMotoristas() {
             <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
               <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(full.created_at || ''))}" data-created-by="${escapeHtml(String(full.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(full.updated_at || ''))}" data-updated-by="${escapeHtml(String(full.updated_by_user_id || ''))}">Carregando...</div>
               <button class="btn ghost small" type="button" data-act="audit" data-module="motoristas" data-record-id="${escapeHtml(String(it.id))}">Histórico</button>
+            </div>
             </div>
           </div>`,
         onSubmit: async (obj) => {
@@ -3149,7 +3161,9 @@ async function renderUsuarios() {
       title: 'Novo usuário',
       submitLabel: 'Criar',
       bodyHtml: `
-          <div class="form-grid">
+          <div class="form-card">
+            <div class="card-head"><div class="card-title">Cadastro do usuário</div></div>
+            <div class="form-grid">
             ${formField({ label: 'Login (usuario ou e-mail)', name: 'username', placeholder: 'joao', span: 'col6' })}
             ${formField({ label: 'E-mail (obrigatório)', name: 'email', placeholder: 'joao@empresa.com', span: 'col6' })}
             ${formField({ label: 'Nome', name: 'nome', placeholder: 'Joao', span: 'col6' })}
@@ -3180,6 +3194,7 @@ async function renderUsuarios() {
               </div>
             </div>
             <div class="field col12"><div class="hint">Senha min: 8 caracteres. Para motorista, vincule ao cadastro existente.</div></div>
+            </div>
           </div>
       `,
       onSubmit: async (obj) => {
@@ -3227,7 +3242,9 @@ async function renderUsuarios() {
           title: `Editar usuário #${u.id}`,
           submitLabel: 'Salvar',
           bodyHtml: `
-            <div class="form-grid">
+            <div class="form-card">
+              <div class="card-head"><div class="card-title">Dados do usuário</div></div>
+              <div class="form-grid">
               ${formField({ label: 'Login (usuario ou e-mail)', name: 'username', value: u.username, span: 'col6' })}
               ${formField({ label: 'E-mail (obrigatório)', name: 'email', value: u.email || '', span: 'col6' })}
               ${formField({ label: 'Nome', name: 'nome', value: u.nome || '', span: 'col6' })}
@@ -3258,6 +3275,7 @@ async function renderUsuarios() {
               <div class="field col12" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
                 <div class="hint" data-role="trace" data-created-at="${escapeHtml(String(u.created_at || ''))}" data-created-by="${escapeHtml(String(u.created_by_user_id || ''))}" data-updated-at="${escapeHtml(String(u.updated_at || ''))}" data-updated-by="${escapeHtml(String(u.updated_by_user_id || ''))}">Carregando...</div>
                 <button class="btn ghost small" type="button" data-act="audit" data-module="usuarios" data-record-id="${escapeHtml(String(u.id))}">Histórico</button>
+              </div>
               </div>
             </div>
           `,
@@ -3648,7 +3666,9 @@ async function renderFretes() {
       title: title || 'Novo frete',
       submitLabel: 'Salvar',
       bodyHtml: `
-        <div class="form-grid">
+        <div class="form-card">
+          <div class="card-head"><div class="card-title">Cadastro de frete</div></div>
+          <div class="form-grid">
           ${selectField({ label: 'Safra', name: 'safra_id', options: safraOptions, value: safra_id ?? safraOptions[0]?.value, span: 'col6' })}
           ${selectField({ label: 'Motorista', name: 'motorista_id', options: motoristaOptions, value: motorista_id ?? motoristaOptions[0]?.value, span: 'col6' })}
           ${selectField({ label: 'Destino', name: 'destino_id', options: destinoOptions, value: destino_id ?? destinoOptions[0]?.value, span: 'col6' })}
@@ -3663,6 +3683,7 @@ async function renderFretes() {
                 </div>`
               : ''
           }
+          </div>
         </div>`,
       onSubmit: async (obj) => {
         const valor = parseNumberPt(obj.valor_por_saca)
