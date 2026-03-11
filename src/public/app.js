@@ -11,6 +11,7 @@ const btnRefresh = document.querySelector('#btnRefresh')
 const btnToggleNav = document.querySelector('#btnToggleNav')
 const btnAuth = document.querySelector('#btnAuth')
 const btnChangePwd = document.querySelector('#btnChangePwd')
+const btnMobilePreview = document.querySelector('#btnMobilePreview')
 
 const dlg = document.querySelector('#dlg')
 const dlgTitle = document.querySelector('#dlgTitle')
@@ -9964,58 +9965,6 @@ async function renderAuditoria() {
       })
       .join('')
 
-    if (qCardsLanc) {
-      qCardsLanc.innerHTML = (r.quitacoes || []).map((q) => `<div class="mobile-card">
-        <div class="mobile-card-head"><div><div class="mobile-card-title">${escapeHtml(q.motorista_nome)}</div><div class="mobile-card-sub">${escapeHtml(q.data_pagamento)} • ${escapeHtml(q.de)} a ${escapeHtml(q.ate)}</div></div><div class="mobile-card-actions"><button class="btn ghost small" data-act="qedit" data-id="${q.id}">Editar</button><button class="btn ghost small danger" data-act="qdel" data-id="${q.id}">Excluir</button></div></div>
-        <div class="mobile-kv"><div><span>Valor</span><b>${fmtMoney(q.valor)}</b></div><div><span>Forma</span><b>${escapeHtml(q.forma_pagamento || '-')}</b></div><div><span>Obs</span><b>${escapeHtml(q.observacoes || '-')}</b></div></div>
-      </div>`).join('')
-    }
-
-    if (qCardsResumo) {
-      qCardsResumo.innerHTML = r.items.map((it) => {
-        const falta = Number(it.saldo || 0)
-        const faltaBadge = falta <= 0 ? pillBadge({ label: 'OK', tone: 'ok' }) : pillBadge({ label: fmtMoney(falta), tone: 'warn' })
-        return `<div class="mobile-card">
-          <div class="mobile-card-head"><div><div class="mobile-card-title">${escapeHtml(it.motorista_nome)}</div><div class="mobile-card-sub">${escapeHtml(it.motorista_placa || '')}</div></div><div class="mobile-card-actions"><button class="btn ghost small" data-act="pay" data-id="${it.motorista_id}" data-nome="${escapeHtml(it.motorista_nome)}" data-falta="${escapeHtml(String(falta))}">Registrar</button></div></div>
-          <div class="mobile-kv"><div><span>Qtd</span><b>${escapeHtml(String(it.quantidade || 0))}</b></div><div><span>Frete</span><b>${fmtMoney(it.valor_frete)}</b></div><div><span>Quitado</span><b>${fmtMoney(it.valor_pago)}</b></div><div><span>Falta</span><b>${faltaBadge}</b></div></div>
-        </div>`
-      }).join('')
-    }
-
-    if (cards) {
-      cards.innerHTML = items
-        .map((t) => {
-          const hectares = Number(t.hectares || 0)
-          const pct = Number(t.pct_area_colhida ?? 0)
-          const areaColhidaHa = hectares * pct
-          const sacas = Number(t.sacas || 0)
-          const prodAdj = Number(t.produtividade_ajustada_sacas_ha || 0)
-          return `<div class="mobile-card">
-            <div class="mobile-card-head">
-              <div>
-                <div class="mobile-card-title">${escapeHtml(t.talhao_nome || '')}</div>
-                <div class="mobile-card-sub">${escapeHtml(t.talhao_local || '')}</div>
-              </div>
-              <div class="mobile-card-actions"><button class="btn ghost small" type="button" data-act="ac-hist" data-talhao="${escapeHtml(String(t.talhao_id))}" data-nome="${escapeHtml(String(t.talhao_nome || ''))}">Histórico</button></div>
-            </div>
-            <div class="mobile-kv">
-              <div><span>Área</span><b>${fmtNum(hectares, 2)} ha</b></div>
-              <div><span>Sacas</span><b>${fmtNum(sacas, 2)}</b></div>
-              <div><span>Prod. ajustada</span><b><span data-act="prod-adj">${fmtNum(prodAdj, 2)}</span> sc/ha</b></div>
-            </div>
-            <div class="field" style="margin-top:10px">
-              <div class="label">Área colhida (ha)</div>
-              <input class="ha-input" type="text" inputmode="decimal" pattern="[0-9.,]*" value="${fmtNumInput(areaColhidaHa, 2)}" data-act="area-ha-input" data-talhao="${t.talhao_id}" data-hectares="${escapeHtml(String(hectares))}" />
-            </div>
-            <div class="pct-row" style="margin-top:10px">
-              <span class="pct-read" data-act="pct-read">${fmtNum(pct * 100, 1)}%</span>
-              <input class="pct-range" type="range" min="0" max="100" step="0.1" value="${(pct * 100).toFixed(1)}" data-act="pct-range" data-talhao="${t.talhao_id}" data-hectares="${escapeHtml(String(hectares))}" data-sacas="${escapeHtml(String(sacas))}" />
-            </div>
-          </div>`
-        })
-        .join('')
-    }
-
     if (cardsListEl) {
       cardsListEl.innerHTML = items
         .map((r2) => {
@@ -10315,6 +10264,17 @@ async function applyMenuAccess() {
         }
       }
     }
+
+    if (btnMobilePreview) {
+      const isAdmin = String(user?.role || '').toLowerCase() === 'admin'
+      if (!isAdmin) {
+        btnMobilePreview.style.display = 'none'
+        btnMobilePreview.onclick = null
+      } else {
+        btnMobilePreview.style.display = ''
+        btnMobilePreview.onclick = () => openMobilePreviewWindow()
+      }
+    }
   } catch {
     // ignore
   }
@@ -10385,7 +10345,7 @@ btnRefresh.onclick = () => refreshMenuAccessIfNeeded({ force: true }).finally(()
 
 function setNavCollapsed(collapsed) {
   document.body.classList.toggle('nav-collapsed', collapsed)
-   document.body.classList.toggle('nav-open', !collapsed)
+  document.body.classList.toggle('nav-open', !collapsed)
   try {
     localStorage.setItem('nav_collapsed', collapsed ? '1' : '0')
   } catch {
@@ -10396,6 +10356,20 @@ function setNavCollapsed(collapsed) {
     btnToggleNav.textContent = collapsed ? 'Menu' : compact ? 'Fechar' : 'Recolher'
     btnToggleNav.title = collapsed ? 'Expandir menu' : compact ? 'Fechar menu' : 'Recolher menu'
   }
+}
+
+function openMobilePreviewWindow() {
+  const url = `${location.origin}${location.pathname}${location.search}${location.hash || '#/fazenda'}`
+  const features = [
+    'popup=yes',
+    'width=430',
+    'height=900',
+    'left=80',
+    'top=40',
+    'resizable=yes',
+    'scrollbars=yes',
+  ].join(',')
+  window.open(url, '_blank', features)
 }
 
 if (btnToggleNav) {
