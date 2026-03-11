@@ -217,4 +217,22 @@ export const auditLogRepo = {
       criticos: Number(row?.criticos || 0),
     }
   },
+
+  recentLogins(limit = 10) {
+    return db
+      .prepare(
+        `SELECT a.id, a.created_at, a.action_type, a.summary,
+                u.username as changed_by_username,
+                u.nome as changed_by_nome,
+                a.changed_by_name_snapshot,
+                a.ip_address
+         FROM audit_log a
+         LEFT JOIN usuario u ON u.id = a.changed_by_user_id
+         WHERE a.module_name = 'auth'
+           AND a.action_type IN ('login', 'logout', 'login_failed')
+         ORDER BY a.id DESC
+         LIMIT ?`,
+      )
+      .all(Number(limit || 10))
+  },
 }

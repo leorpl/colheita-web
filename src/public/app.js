@@ -8039,6 +8039,44 @@ async function renderAreaColhida() {
       })
       .join('')
 
+    if (cards) {
+      cards.innerHTML = items.length
+        ? items
+            .map((t) => {
+              const hectares = Number(t.hectares || 0)
+              const pct = Number(t.pct_area_colhida ?? 0)
+              const areaColhidaHa = hectares * pct
+              const sacas = Number(t.sacas || 0)
+              const prodAdj = Number(t.produtividade_ajustada_sacas_ha || 0)
+              return `<div class="mobile-card">
+                <div class="mobile-card-head">
+                  <div>
+                    <div class="mobile-card-title">${escapeHtml(t.talhao_nome || '')}</div>
+                    <div class="mobile-card-sub">${escapeHtml(t.talhao_local || '')}</div>
+                  </div>
+                  <div class="mobile-card-actions">
+                    <button class="btn ghost small" type="button" data-act="ac-hist" data-talhao="${escapeHtml(String(t.talhao_id))}" data-nome="${escapeHtml(String(t.talhao_nome || ''))}">Histórico</button>
+                  </div>
+                </div>
+                <div class="mobile-kv">
+                  <div><span>Área</span><b>${fmtNum(hectares, 2)} ha</b></div>
+                  <div><span>Sacas</span><b>${fmtNum(sacas, 2)}</b></div>
+                  <div><span>Prod. ajustada</span><b><span data-act="prod-adj">${fmtNum(prodAdj, 2)}</span> sc/ha</b></div>
+                </div>
+                <div class="field" style="margin-top:10px">
+                  <div class="label">Área colhida (ha)</div>
+                  <input class="ha-input" type="text" inputmode="decimal" pattern="[0-9.,]*" value="${fmtNumInput(areaColhidaHa, 2)}" data-act="area-ha-input" data-talhao="${t.talhao_id}" data-hectares="${escapeHtml(String(hectares))}" />
+                </div>
+                <div class="pct-row" style="margin-top:10px">
+                  <span class="pct-read" data-act="pct-read">${fmtNum(pct * 100, 1)}%</span>
+                  <input class="pct-range" type="range" min="0" max="100" step="0.1" value="${(pct * 100).toFixed(1)}" data-act="pct-range" data-talhao="${t.talhao_id}" data-hectares="${escapeHtml(String(hectares))}" data-sacas="${escapeHtml(String(sacas))}" />
+                </div>
+              </div>`
+            })
+            .join('')
+        : '<div class="mobile-empty">Nenhum talhão para a safra selecionada.</div>'
+    }
+
     function updateRowUi(rangeEl, opts = {}) {
       const tr = rangeEl.closest('tr')
       if (!tr) return
@@ -9738,6 +9776,13 @@ async function renderAuditoria() {
           <div class="a-card danger" data-card="deletes"><div class="k">Exclusões</div><div class="v">-</div><div class="h">Deletes e inativações</div></div>
         </div>
 
+        <div class="panel" style="margin-top:12px">
+          <div class="panel-head"><div><div class="panel-title" style="font-size:18px">Últimos logins</div><div class="panel-sub">Acessos e tentativas recentes com horário.</div></div></div>
+          <div class="panel-body">
+            <div class="mobile-cards" id="aRecentLogins"><div class="mobile-empty">Carregando...</div></div>
+          </div>
+        </div>
+
         <details class="audit-filter-box" id="auditFilterBox" open style="margin-top:12px">
           <summary>Filtros da auditoria</summary>
           <div class="audit-filters">
@@ -9826,6 +9871,7 @@ async function renderAuditoria() {
   const elAct = view.querySelector('#aAct')
   const elRid = view.querySelector('#aRid')
   const cardsListEl = view.querySelector('#aCardsList')
+  const recentLoginsEl = view.querySelector('#aRecentLogins')
   const elQ = view.querySelector('#aQ')
   const elCrit = view.querySelector('#aCrit')
   const elLimit = view.querySelector('#aLimit')
@@ -9916,6 +9962,35 @@ async function renderAuditoria() {
       if (k === 'reset') vEl.textContent = String(s.password_reset)
       if (k === 'deletes') vEl.textContent = String(s.deletes + Number(s?.status_change || 0))
     })
+  }
+
+  async function refreshRecentLogins() {
+    if (!recentLoginsEl) return
+    const rows = await api('/api/audit-logs/recent-logins?limit=8').catch(() => [])
+    if (!Array.isArray(rows) || !rows.length) {
+      recentLoginsEl.innerHTML = '<div class="mobile-empty">Nenhum login recente.</div>'
+      return
+    }
+    recentLoginsEl.innerHTML = rows
+      .map((r) => {
+        const who = r.changed_by_nome || r.changed_by_username || r.changed_by_name_snapshot || '-'
+        const action = r.action_type === 'login' ? 'Login' : r.action_type === 'logout' ? 'Logout' : 'Tentativa inválida'
+        const tone = r.action_type === 'login' ? 'ok' : r.action_type === 'logout' ? 'muted' : 'warn'
+        return `<div class="mobile-card">
+          <div class="mobile-card-head">
+            <div>
+              <div class="mobile-card-title">${escapeHtml(String(who))}</div>
+              <div class="mobile-card-sub">${escapeHtml(fmtDateTimeBr(r.created_at))}</div>
+            </div>
+            <div>${pillBadge({ label: action, tone })}</div>
+          </div>
+          <div class="mobile-kv">
+            <div><span>Horário</span><b>${escapeHtml(fmtDateTimeBr(r.created_at))}</b></div>
+            <div><span>IP</span><b>${escapeHtml(String(r.ip_address || '-'))}</b></div>
+          </div>
+        </div>`
+      })
+      .join('')
   }
 
   async function fetchPage() {
@@ -10021,6 +10096,7 @@ async function renderAuditoria() {
   view.querySelector('#btnARefresh')?.addEventListener('click', () => {
     fetchPage()
     refreshCardsToday()
+    refreshRecentLogins()
   })
   view.querySelector('#btnAClear')?.addEventListener('click', () => {
     setPeriod(last7, today)
@@ -10129,6 +10205,7 @@ async function renderAuditoria() {
   })
 
   refreshCardsToday()
+  refreshRecentLogins()
   fetchPage()
 }
 

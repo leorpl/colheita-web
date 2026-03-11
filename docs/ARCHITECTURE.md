@@ -64,6 +64,7 @@ Este documento e gerado automaticamente a partir do codigo atual. Fonte: `script
 - GET /api/audit-logs/:id
 - GET /api/audit-logs/export.csv
 - GET /api/audit-logs/page
+- GET /api/audit-logs/recent-logins
 - GET /api/audit-logs/stats
 - GET /api/auth/can
 - GET /api/auth/me

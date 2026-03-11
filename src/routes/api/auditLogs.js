@@ -51,6 +51,11 @@ auditLogsRouter.get('/stats', validateQuery(StatsQuery), (req, res) => {
   res.json(auditLogRepo.stats(req.query))
 })
 
+auditLogsRouter.get('/recent-logins', (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit || 10), 1), 50)
+  res.json(auditLogRepo.recentLogins(limit))
+})
+
 auditLogsRouter.get('/export.csv', validateQuery(ListQuery), (req, res) => {
   const rows = auditLogRepo.list({ ...req.query, limit: Math.min(Number(req.query.limit || 2000), 2000) })
 

@@ -1,6 +1,6 @@
 {
-  "signature": "561492b5d942c1246b9e433566d48f75db7fa9bd034afa8817bceb77e1d42807",
-  "generated_at": "2026-03-10T18:53:05.075Z",
+  "signature": "88c649f3eb1b2008b04ae1a6675dc9ef6a6bb1c0373b2407e6eedad945148357",
+  "generated_at": "2026-03-11T10:57:20.336Z",
   "runtime": {
     "node": "v24.14.0",
     "platform": "win32"
@@ -198,6 +198,10 @@
       {
         "method": "GET",
         "path": "/api/audit-logs/page"
+      },
+      {
+        "method": "GET",
+        "path": "/api/audit-logs/recent-logins"
       },
       {
         "method": "GET",
@@ -1110,7 +1114,7 @@
   },
   "docs_hashes": {
     "PROJECT_CONTEXT.md": "96cd04c1d524e7402a38879d293764a45a16f7d6647fb2d1377f6ff272c98631",
-    "ARCHITECTURE.md": "e89c5f0f163361f69877c454c9a7c7cfab39b7f3cc3594aa5b7b2d35f0776cfe",
+    "ARCHITECTURE.md": "66be37c755d3535e4d64ecc08c7d6a087840f6b9ec5c9130cf4573397efbacb2",
     "TASKS_OFICIAL.md": "d0c2ef8c8bf922f3e9aa39c3d36a95ebe8961c167386dd80ec429c6d0375bbe1",
     "CHANGELOG.md": "7cc29ac5007e79134959ffd97f3df04bb1b6641bf5f42cfb40c7abc790661f46",
     "LIÇÕESAPRENDIDAS.MD": "30f62df514d76838e953f305c705d819ef02484ee17a3ae9c512dc0e17efdb17",
