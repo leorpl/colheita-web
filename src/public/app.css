@@ -975,6 +975,21 @@ code.mono{font-family:var(--mono);font-size:12px}
   .dlg .rateio-cardx select[name="talhao_sort"]{min-width:0;width:100%}
   .dlg .rateio-cardx .rateio-grid,
   .dlg .form-card .rateio-grid{grid-template-columns:1fr}
+  .dlg .stack-table-wrap{overflow:visible;border:none;background:transparent}
+  .dlg .stack-table,
+  .dlg .stack-table thead,
+  .dlg .stack-table tbody,
+  .dlg .stack-table tr,
+  .dlg .stack-table td{display:block;width:100%}
+  .dlg .stack-table thead{display:none}
+  .dlg .stack-table tbody{display:flex;flex-direction:column;gap:10px}
+  .dlg .stack-table tr{padding:12px;border:1px solid rgba(15,26,22,.12);border-radius:16px;background:rgba(255,255,255,.82);box-shadow:0 8px 20px rgba(0,0,0,.05)}
+  .dlg .stack-table td{padding:0;border:none;margin-top:10px}
+  .dlg .stack-table td:first-child{margin-top:0}
+  .dlg .stack-table td::before{content:attr(data-label);display:block;margin-bottom:6px;font-size:11px;color:var(--muted);font-weight:600}
+  .dlg .stack-table td.actions::before{display:none}
+  .dlg .stack-table td.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .dlg .stack-table td.actions .btn{width:100%}
   .dlg .col3{grid-column:span 12}
   .dlg .col4{grid-column:span 12}
   th.actions,td.actions{position:static;left:auto;box-shadow:none;border-right:none}

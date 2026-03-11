@@ -4356,8 +4356,8 @@ async function renderRegrasDestino() {
                     </div>
                     <button class="btn ghost" type="button" id="btnAddContrato">Adicionar</button>
                   </div>
-                  <div class="table-wrap">
-                    <table>
+                  <div class="table-wrap stack-table-wrap">
+                    <table class="stack-table">
                       <thead><tr><th class="actions"></th><th>Data entrega</th><th>Sacas</th><th>Preco travado (R$/sc)</th></tr></thead>
                       <tbody id="contratoFaixas"></tbody>
                     </table>
@@ -4371,8 +4371,8 @@ async function renderRegrasDestino() {
                       <div class="hint">Anexe documentos (PDF/JPG/PNG). Disponivel por safra+destino+plantio.</div>
                     </div>
                   </div>
-                  <div class="table-wrap" style="margin-top:8px">
-                    <table>
+                  <div class="table-wrap stack-table-wrap" style="margin-top:8px">
+                    <table class="stack-table">
                       <thead><tr><th>Arquivo</th><th>Upload</th><th>Usuario</th><th class="actions"></th></tr></thead>
                       <tbody id="contratoArquivos"></tbody>
                     </table>
@@ -4419,8 +4419,8 @@ async function renderRegrasDestino() {
                 <input type="file" id="umidadeImportFile" accept=".xlsx,.xls,.csv" style="display:none" />
                 <button class="btn ghost" type="button" id="btnImportUmidade">Importar planilha</button>
               </div>
-             <div class="table-wrap" style="margin-top:8px">
-               <table>
+             <div class="table-wrap stack-table-wrap" style="margin-top:8px">
+                <table class="stack-table">
                   <thead><tr><th class="actions"></th><th>Umid (&gt;)</th><th>Umid (&lt;=)</th><th>Desconto (%)</th><th>Secagem (R$/sc)</th></tr></thead>
                   <tbody id="faixas"></tbody>
                 </table>
@@ -4627,11 +4627,11 @@ async function renderRegrasDestino() {
     const dis = canUpdate ? '' : 'disabled'
     const rmBtn = canUpdate && currentUsedCount === 0 ? '<button class="btn small danger" type="button" data-act="rm">Remover</button>' : ''
     return `<tr>
-      <td class="actions">${rmBtn}</td>
-      <td style="width:90px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_gt" value="${escapeHtml(f.umid_gt)}" /></td>
-      <td style="width:90px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_lte" value="${escapeHtml(f.umid_lte)}" /></td>
-      <td style="width:110px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="desconto_pct" value="${escapeHtml(f.desconto_pct)}" /></td>
-      <td style="width:120px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="custo_secagem_por_saca" value="${escapeHtml(f.custo_secagem_por_saca ?? '')}" /></td>
+      <td class="actions" data-label="Ações">${rmBtn}</td>
+      <td style="width:90px" data-label="Umid (>)"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_gt" value="${escapeHtml(f.umid_gt)}" /></td>
+      <td style="width:90px" data-label="Umid (<=)"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="umid_lte" value="${escapeHtml(f.umid_lte)}" /></td>
+      <td style="width:110px" data-label="Desconto (%)"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="desconto_pct" value="${escapeHtml(f.desconto_pct)}" /></td>
+      <td style="width:120px" data-label="Secagem (R$/sc)"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="custo_secagem_por_saca" value="${escapeHtml(f.custo_secagem_por_saca ?? '')}" /></td>
     </tr>`
   }
 
@@ -4648,10 +4648,10 @@ async function renderRegrasDestino() {
     const dis = canUpdate ? '' : 'disabled'
     const rmBtn = canUpdate ? '<button class="btn small danger" type="button" data-act="rm-contrato">Remover</button>' : ''
     return `<tr>
-      <td class="actions">${rmBtn}</td>
-      <td style="width:150px"><input ${dis} type="date" name="ct_data_entrega" value="${escapeHtml(f.data_entrega || '')}" /></td>
-      <td style="width:160px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_sacas" value="${escapeHtml(f.sacas)}" /></td>
-      <td style="width:160px"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_preco" value="${escapeHtml(f.preco_por_saca)}" /></td>
+      <td class="actions" data-label="Ações">${rmBtn}</td>
+      <td style="width:150px" data-label="Data entrega"><input ${dis} type="date" name="ct_data_entrega" value="${escapeHtml(f.data_entrega || '')}" /></td>
+      <td style="width:160px" data-label="Sacas"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_sacas" value="${escapeHtml(f.sacas)}" /></td>
+      <td style="width:160px" data-label="Preço travado (R$/sc)"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_preco" value="${escapeHtml(f.preco_por_saca)}" /></td>
     </tr>`
   }
 
@@ -4836,10 +4836,10 @@ async function renderRegrasDestino() {
         const title = meta
         return `
           <tr>
-            <td title="${escapeHtml(title)}">${escapeHtml(a.file_name || '')}${meta ? `<div class="hint">${escapeHtml(meta)}</div>` : ''}</td>
-            <td>${escapeHtml(dt)}</td>
-            <td>${escapeHtml(who)}</td>
-            <td class="actions">
+            <td title="${escapeHtml(title)}" data-label="Arquivo">${escapeHtml(a.file_name || '')}${meta ? `<div class="hint">${escapeHtml(meta)}</div>` : ''}</td>
+            <td data-label="Upload">${escapeHtml(dt)}</td>
+            <td data-label="Usuário">${escapeHtml(who)}</td>
+            <td class="actions" data-label="Ações">
               <a class="btn ghost small" href="/api/contratos-silo/arquivos/${escapeHtml(String(a.id))}/download" target="_blank" rel="noreferrer">Baixar</a>
               ${canDeleteFiles ? `<button class="btn ghost small" type="button" data-act="ctdel" data-id="${escapeHtml(String(a.id))}">Excluir</button>` : ''}
             </td>
