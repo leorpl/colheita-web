@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import { talhaoRepo } from '../../repositories/talhaoRepo.js'
-import { notFound, unprocessable } from '../../errors.js'
+import { conflict, notFound, unprocessable } from '../../errors.js'
 import { validateBody, validateParams } from '../../middleware/validate.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
@@ -154,6 +154,12 @@ talhoesRouter.put(
   const id = req.params.id
   const exists = talhaoRepo.get(id)
   if (!exists) throw notFound('Talhao nao encontrado')
+  if (req.body.expected_updated_at && String(exists.updated_at || '') !== String(req.body.expected_updated_at || '')) {
+    throw conflict('Este talhão foi alterado por outra pessoa. Reabra o cadastro antes de salvar novamente.', {
+      code: 'STALE_RECORD',
+      current_updated_at: exists.updated_at || null,
+    })
+  }
   const row = withGeometryArea(talhaoRepo.update(id, req.body, { user_id: req.user?.id }))
   auditService.log(req, { module_name: 'talhoes', record_id: id, action_type: 'update', old_values: exists, new_values: row })
   res.json(row)

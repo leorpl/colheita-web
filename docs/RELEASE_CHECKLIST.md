@@ -1,6 +1,6 @@
 # RELEASE CHECKLIST
 
-Checklist operacional para deploy do NazcaTraker. Atualizado automaticamente; complemente com detalhes do ambiente quando necessario.
+Checklist operacional para deploy do NazcaTracker. Atualizado automaticamente; complemente com detalhes do ambiente quando necessario.
 
 ## Pré-deploy
 

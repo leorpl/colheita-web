@@ -5,6 +5,13 @@ import { initTableSorting } from './lib/tableSort.js'
 import { renderFazendaRoute } from './routes/fazenda.js'
 import { renderComunicacaoRoute } from './routes/comunicacao.js'
 
+function fmtCompactK(n) {
+  const x = Number(n)
+  if (!Number.isFinite(x)) return '-'
+  if (Math.abs(x) >= 1000) return `${fmtNum(x / 1000, 3)}k`
+  return fmtNum(x, 0)
+}
+
 const view = document.querySelector('#view')
 const toastEl = document.querySelector('#toast')
 const btnRefresh = document.querySelector('#btnRefresh')
@@ -22,7 +29,7 @@ const dlgForm = document.querySelector('#dlgForm')
 const FAZENDA_NAZCA_PUBLIC = {
   nome: 'Fazenda Nazca',
   localizacao: {
-    endereco: 'Corguinhos, Iguatama - MG, 38910-000',
+    endereco: 'Iguatama - MG, 38910-000',
     plus_code: 'R43C+VR Iguatama, Minas Gerais',
     maps_url: 'https://www.google.com/maps/place/Fazenda+Nazca/@-20.1952815,-45.877929,17z/data=!4m6!3m5!1s0x94b38bbe4a2e2619:0x600ef49de0667b82!8m2!3d-20.1952815!4d-45.877929!16s%2Fg%2F11ptmc1gd1',
     // Snapshot (26/02/2026): 4,2 (5 avaliacoes)
@@ -512,6 +519,11 @@ async function loadLookups() {
   cache.tiposPlantio = tiposPlantio
 }
 
+async function fetchParticipantes({ include_inactive = true } = {}) {
+  const qp = include_inactive ? '?include_inactive=1' : ''
+  return api(`/api/participantes${qp}`).catch(() => [])
+}
+
 function activeNav(route) {
   document.querySelectorAll('.nav-item').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === route)
@@ -650,6 +662,15 @@ function openDialog({ title, bodyHtml, onSubmit, onReady, submitLabel = 'Salvar'
     const fd = new FormData(dlgForm)
     const obj = Object.fromEntries(fd.entries())
     try {
+      const titleTxt = String(title || '').trim()
+      const needsEditConfirm = /^Editar\b/i.test(titleTxt) || /^Alterar\b/i.test(titleTxt)
+      if (needsEditConfirm) {
+        const ok = await confirmAction('Salvar esta alteração e substituir os dados anteriores?', {
+          title: 'Confirmar alteração',
+          confirmLabel: 'Salvar alterações',
+        })
+        if (!ok) return
+      }
       if (onSubmit) await onSubmit(obj, dlgForm)
       dlg.close('default')
     } catch (err) {
@@ -1435,7 +1456,11 @@ async function renderPainel() {
       const qs = new URLSearchParams({ safra_id: String(safra_id) })
       if (tipoPlantio) qs.set('tipo_plantio', tipoPlantio)
       const des = await api(`/api/relatorios/entregas-por-destino?${qs.toString()}`)
-      const sorted = (des || [])
+      const desRows = Array.isArray(des) ? des : []
+      const totalTravas = desRows.reduce((acc, d) => acc + Number(d.trava_sacas || 0), 0)
+      const totalFaltante = desRows.reduce((acc, d) => acc + Math.max(0, Number(d.trava_sacas || 0) - Number(d.entrega_sacas || 0)), 0)
+      const totalExcedente = desRows.reduce((acc, d) => acc + Math.max(0, Number(d.entrega_sacas || 0) - Number(d.trava_sacas || 0)), 0)
+      const sorted = desRows
         .map((d) => ({ name: d.destino_local, sacas: Number(d.entrega_sacas || 0) }))
         .filter((d) => d.sacas > 0)
         .sort((a, b) => b.sacas - a.sacas)
@@ -1469,7 +1494,7 @@ async function renderPainel() {
 
       const elBars = view.querySelector('#chartBars .chart-body')
       if (elBars) {
-        const all = (des || []).map((d) => {
+        const all = desRows.map((d) => {
           const trava = Number(d.trava_sacas || 0)
           const entrega = Number(d.entrega_sacas || 0)
           const base = trava > 0 ? trava : Math.max(1, entrega)
@@ -1494,7 +1519,11 @@ async function renderPainel() {
           return b.entrega - a.entrega
         })
 
-        elBars.innerHTML = `<div class="bars">${all
+        elBars.innerHTML = `<div class="grid" style="margin-bottom:12px">
+            <div class="stat span4"><div class="stat-k">Total travado</div><div class="stat-v">${fmtCompactK(totalTravas)} sc</div></div>
+            <div class="stat span4"><div class="stat-k">Total faltante</div><div class="stat-v">${fmtCompactK(totalFaltante)} sc</div></div>
+            <div class="stat span4"><div class="stat-k">Total excedente</div><div class="stat-v">${fmtCompactK(totalExcedente)} sc</div></div>
+          </div><div class="bars">${all
           .map((d) => {
             const exced = d.trava > 0 ? Math.max(0, d.entrega - d.trava) : 0
             const ratio = d.trava > 0 ? d.entrega / Math.max(1, d.trava) : null
@@ -1504,13 +1533,13 @@ async function renderPainel() {
             const state = d.trava > 0 ? (exced > 0 ? 'over' : ratio >= 1 ? 'hit' : ratio >= 0.85 ? 'near' : 'ok') : 'none'
             const val =
               d.trava > 0
-                ? `${fmtNum(d.entrega, 2)} / ${fmtNum(d.trava, 2)} sc` +
+                ? `${fmtCompactK(d.entrega)}/${fmtCompactK(d.trava)} sc` +
                   (exced > 0
-                    ? ` | excedente ${fmtNum(exced, 2)} sc`
+                    ? ` | excedente: ${fmtCompactK(exced)} sc`
                     : d.falta > 0
-                      ? ` | saldo ${fmtNum(d.falta, 2)} sc`
+                      ? ` | falta: ${fmtCompactK(d.falta)} sc`
                       : ' | OK')
-                : `${fmtNum(d.entrega, 2)} sc | sem contrato`
+                : `${fmtCompactK(d.entrega)} sc | sem contrato`
 
             const tip =
               d.trava > 0
@@ -1830,11 +1859,12 @@ async function renderSafras() {
         onSubmit: async (obj) => {
           await api('/api/safras', {
             method: 'POST',
-            body: {
-              safra: obj.safra,
-              plantio: obj.plantio || null,
-              data_referencia: obj.data_referencia || null,
-            },
+              body: {
+                safra: obj.safra,
+                plantio: obj.plantio || null,
+                data_referencia: obj.data_referencia || null,
+                expected_updated_at: full.updated_at || null,
+              },
           })
           toast('Salvo', 'Safra cadastrada.')
           renderSafras()
@@ -2462,6 +2492,7 @@ async function renderTalhoes() {
               calagem: obj.calagem || null,
               gessagem: obj.gessagem || null,
               fosforo_corretivo: obj.fosforo_corretivo || null,
+              expected_updated_at: full.updated_at || null,
               ...geom,
               observacoes: obj.observacoes || null,
             },
@@ -2582,13 +2613,14 @@ async function renderDestinos() {
         onSubmit: async (obj) => {
           await api('/api/destinos', {
             method: 'POST',
-            body: {
-              codigo: obj.codigo,
-              local: obj.local,
-              maps_url: obj.maps_url || null,
-              distancia_km: asNumberOrNull(obj.distancia_km),
-              observacoes: obj.observacoes || null,
-            },
+              body: {
+                codigo: obj.codigo,
+                local: obj.local,
+                maps_url: obj.maps_url || null,
+                distancia_km: asNumberOrNull(obj.distancia_km),
+                observacoes: obj.observacoes || null,
+                expected_updated_at: full.updated_at || null,
+              },
           })
           toast('Salvo', 'Destino cadastrado.')
           renderDestinos()
@@ -2786,15 +2818,16 @@ async function renderMotoristas() {
         onSubmit: async (obj) => {
           await api('/api/motoristas', {
             method: 'POST',
-            body: {
-              nome: obj.nome,
-              placa: obj.placa || null,
-              cpf: obj.cpf || null,
-              banco: obj.banco || null,
-              pix_conta: obj.pix_conta || null,
-              tipo_veiculo: obj.tipo_veiculo || null,
-              capacidade_kg: asNumberOrNull(obj.capacidade_kg),
-            },
+              body: {
+                nome: obj.nome,
+                placa: obj.placa || null,
+                cpf: obj.cpf || null,
+                banco: obj.banco || null,
+                pix_conta: obj.pix_conta || null,
+                tipo_veiculo: obj.tipo_veiculo || null,
+                capacidade_kg: asNumberOrNull(obj.capacidade_kg),
+                expected_updated_at: full.updated_at || null,
+              },
           })
           toast('Salvo', 'Motorista cadastrado.')
           renderMotoristas()
@@ -2883,7 +2916,7 @@ async function renderUsuarios() {
     { key: 'colheita', label: 'Colheita' },
     { key: 'area-colhida', label: 'Área colhida' },
     { key: 'relatorios', label: 'Relatórios' },
-    { key: 'producao', label: 'Producao e divisao' },
+    { key: 'producao', label: 'Produção' },
     { key: 'comunicacao', label: 'E-mail e notificacoes' },
     { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { key: 'safras', label: 'Safras' },
@@ -2976,7 +3009,7 @@ async function renderUsuarios() {
     { key: 'colheita', label: 'Colheita' },
     { key: 'area-colhida', label: 'Área colhida' },
     { key: 'relatorios', label: 'Relatórios' },
-    { key: 'producao', label: 'Producao e divisao' },
+    { key: 'producao', label: 'Produção' },
     { key: 'comunicacao', label: 'E-mail e notificacoes' },
     { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { key: 'safras', label: 'Safras' },
@@ -3298,6 +3331,7 @@ async function renderUsuarios() {
                 motorista_id: obj.motorista_id ? Number(obj.motorista_id) : null,
                 active: obj.active === 'true',
                 menus,
+                expected_updated_at: u.updated_at || null,
               },
             })
 
@@ -3403,7 +3437,7 @@ async function renderPerfis() {
     { key: 'colheita', label: 'Colheita' },
     { key: 'area-colhida', label: 'Área colhida' },
     { key: 'relatorios', label: 'Relatórios' },
-    { key: 'producao', label: 'Producao e divisao' },
+    { key: 'producao', label: 'Produção' },
     { key: 'comunicacao', label: 'E-mail e notificacoes' },
     { key: 'quitacao-motoristas', label: 'Quitação motoristas' },
     { key: 'safras', label: 'Safras' },
@@ -3623,7 +3657,7 @@ async function renderTiposPlantio() {
           </div>
         `,
         onSubmit: async (obj) => {
-          await api(`/api/tipos-plantio/${id}`, { method: 'PUT', body: { nome: obj.nome } })
+          await api(`/api/tipos-plantio/${id}`, { method: 'PUT', body: { nome: obj.nome, expected_updated_at: full.updated_at || null } })
           toast('Atualizado', 'Tipo atualizado.')
           renderTiposPlantio()
         },
@@ -4359,7 +4393,7 @@ async function renderRegrasDestino() {
                   </div>
                   <div class="table-wrap stack-table-wrap">
                     <table class="stack-table">
-                      <thead><tr><th class="actions"></th><th>Data entrega</th><th>Sacas</th><th>Preco travado (R$/sc)</th></tr></thead>
+                      <thead><tr><th class="actions"></th><th>Data entrega</th><th>Responsável do contrato</th><th>Sacas</th><th>Preço travado (R$/sc)</th><th>Data pagamento do silo</th></tr></thead>
                       <tbody id="contratoFaixas"></tbody>
                     </table>
                   </div>
@@ -4400,6 +4434,9 @@ async function renderRegrasDestino() {
 
             ${formField({ label: 'Custo p/ saca (Silo) R$/sc limpa', name: 'custo_silo_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col6' })}
             ${formField({ label: 'Custo p/ saca (Terceiros) R$/sc limpa', name: 'custo_terceiros_por_saca', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col6' })}
+            <div class="field col12" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="cobrar_secagem_no_silo" checked /> Cobrar secagem quando vendido para o silo</label>
+            </div>
 
             ${formField({ label: 'Impureza limite (%)', name: 'impureza_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
             ${formField({ label: 'Ardidos limite (%)', name: 'ardidos_limite_pct', type: 'text', inputmode: 'decimal', pattern: '[0-9.,]*', value: '0,00', span: 'col4' })}
@@ -4454,6 +4491,10 @@ async function renderRegrasDestino() {
   const ruleTraceWrap = view.querySelector('#ruleTraceWrap')
   const ruleTrace = view.querySelector('#ruleTrace')
   const btnHistContrato = view.querySelector('#btnHistContrato')
+  const participantesList = await fetchParticipantes({ include_inactive: false }).catch(() => [])
+  const participanteOptions = [{ value: '', label: '-' }].concat(
+    participantesList.map((p) => ({ value: p.id, label: p.nome })),
+  )
 
   // ENTER should validate/normalize without submitting the page.
   form.addEventListener('keydown', (e) => {
@@ -4645,14 +4686,16 @@ async function renderRegrasDestino() {
     })
   }
 
-  function contratoRow(f = { data_entrega: '', sacas: '', preco_por_saca: '' }) {
+  function contratoRow(f = { data_entrega: '', participante_id: '', sacas: '', preco_por_saca: '', data_pagamento_silo: '' }) {
     const dis = canUpdate ? '' : 'disabled'
     const rmBtn = canUpdate ? '<button class="btn small danger" type="button" data-act="rm-contrato">Remover</button>' : ''
     return `<tr>
       <td class="actions" data-label="Ações">${rmBtn}</td>
       <td style="width:150px" data-label="Data entrega"><input ${dis} type="date" name="ct_data_entrega" value="${escapeHtml(f.data_entrega || '')}" /></td>
+      <td style="width:220px" data-label="Responsável do contrato"><select ${dis} name="ct_participante_id">${participanteOptions.map((o) => `<option value="${escapeHtml(String(o.value))}" ${String(o.value) === String(f.participante_id || '') ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}</select></td>
       <td style="width:160px" data-label="Sacas"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_sacas" value="${escapeHtml(f.sacas)}" /></td>
       <td style="width:160px" data-label="Preço travado (R$/sc)"><input ${dis} type="text" inputmode="decimal" pattern="[0-9.,]*" name="ct_preco" value="${escapeHtml(f.preco_por_saca)}" /></td>
+      <td style="width:150px" data-label="Data pagamento do silo"><input ${dis} type="date" name="ct_data_pagamento_silo" value="${escapeHtml(f.data_pagamento_silo || '')}" /></td>
     </tr>`
   }
 
@@ -4791,8 +4834,10 @@ async function renderRegrasDestino() {
             .map((f) =>
               contratoRow({
                 data_entrega: f.data_entrega || '',
+                participante_id: f.participante_id || '',
                 sacas: fmtNum(Number(f.sacas || 0), 2),
                 preco_por_saca: fmtNum(Number(f.preco_por_saca || 0), 2),
+                data_pagamento_silo: f.data_pagamento_silo || '',
               }),
             )
             .join('')
@@ -4898,6 +4943,8 @@ async function renderRegrasDestino() {
       (regra?.quebrados_limite_pct ?? 0) * 100,
       2,
     )
+    const ckSec = form.querySelector('input[name="cobrar_secagem_no_silo"]')
+    if (ckSec) ckSec.checked = Number(regra?.cobrar_secagem_no_silo ?? 1) === 1
 
      const faixas = regra?.umidade_faixas ?? []
      faixasEl.innerHTML = faixas.length
@@ -4960,11 +5007,19 @@ async function renderRegrasDestino() {
     if (contratoEl) {
       contratoEl.querySelectorAll('tr').forEach((tr) => {
         const dataEntrega = String(tr.querySelector('input[name="ct_data_entrega"]')?.value || '').trim() || null
+        const dataPagamentoSilo = String(tr.querySelector('input[name="ct_data_pagamento_silo"]')?.value || '').trim() || null
+        const participanteIdRaw = String(tr.querySelector('select[name="ct_participante_id"]')?.value || '').trim()
         const sacas = parseNumberPt(String(tr.querySelector('input[name="ct_sacas"]')?.value || ''))
         const preco = parseNumberPt(String(tr.querySelector('input[name="ct_preco"]')?.value || ''))
         if (!Number.isFinite(sacas) || sacas <= 0) return
         if (!Number.isFinite(preco) || preco < 0) return
-        contrato_faixas.push({ data_entrega: dataEntrega, sacas, preco_por_saca: preco })
+        contrato_faixas.push({
+          data_entrega: dataEntrega,
+          data_pagamento_silo: dataPagamentoSilo,
+          participante_id: participanteIdRaw ? Number(participanteIdRaw) : null,
+          sacas,
+          preco_por_saca: preco,
+        })
       })
     }
 
@@ -5004,6 +5059,7 @@ async function renderRegrasDestino() {
       tipo_plantio,
       custo_silo_por_saca: numOr0(fd.get('custo_silo_por_saca')),
       custo_terceiros_por_saca: numOr0(fd.get('custo_terceiros_por_saca')),
+      cobrar_secagem_no_silo: form.querySelector('input[name="cobrar_secagem_no_silo"]')?.checked,
       impureza_limite_pct: numOr0(fd.get('impureza_limite_pct')),
       ardidos_limite_pct: numOr0(fd.get('ardidos_limite_pct')),
       queimados_limite_pct: numOr0(fd.get('queimados_limite_pct')),
@@ -5380,6 +5436,19 @@ async function renderColheitaBase(variant) {
 
         <div class="grid" id="totals"></div>
 
+        <div class="pager" style="margin-top:12px">
+          <div class="hint" id="colheitaCount">Carregando...</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <select id="colheitaLimit">
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
+            <button class="btn ghost" id="btnColPrev" type="button">Anterior</button>
+            <button class="btn ghost" id="btnColNext" type="button">Próxima</button>
+          </div>
+        </div>
+
         <div class="mobile-cards" id="colheitaCards" style="margin-top:12px;display:none"></div>
 
         <div class="table-wrap" style="margin-top:12px">
@@ -5416,6 +5485,14 @@ async function renderColheitaBase(variant) {
   const colheitaCardsEl = view.querySelector('#colheitaCards')
   const totalsEl = view.querySelector('#totals')
   const filtersEl = view.querySelector('#filtersForm')
+  const countEl = view.querySelector('#colheitaCount')
+  const limitEl = view.querySelector('#colheitaLimit')
+  const btnPrev = view.querySelector('#btnColPrev')
+  const btnNext = view.querySelector('#btnColNext')
+  let pageOffset = 0
+  let pageLimit = Number(localStorage.getItem('colheita_page_limit') || 50)
+  if (![50, 100, 200].includes(pageLimit)) pageLimit = 50
+  if (limitEl) limitEl.value = String(pageLimit)
 
   // Portal motorista: travar filtro por motorista.
   if (isMotoristaUser) {
@@ -5466,6 +5543,8 @@ async function renderColheitaBase(variant) {
     for (const [k, v] of fd.entries()) {
       if (v !== '') q.set(k, v)
     }
+    q.set('limit', String(pageLimit))
+    q.set('offset', String(pageOffset))
 
     if (isMotoristaUser) {
       if (!Number.isInteger(boundMotoristaId) || boundMotoristaId <= 0) {
@@ -5477,6 +5556,12 @@ async function renderColheitaBase(variant) {
 
     const data = await api(`/api/viagens?${q.toString()}`)
     const viewMode = String(data?.view || q.get('view') || 'legacy')
+    const totalItems = Number(data?.total_items || 0)
+    const from = totalItems ? pageOffset + 1 : 0
+    const to = Math.min(totalItems, pageOffset + Number(data?.items?.length || 0))
+    if (countEl) countEl.innerHTML = `Resultados: <b>${escapeHtml(String(totalItems))}</b> (${escapeHtml(String(from))}–${escapeHtml(String(to))})`
+    if (btnPrev) btnPrev.disabled = pageOffset <= 0
+    if (btnNext) btnNext.disabled = to >= totalItems
 
     const t = data.totals
 
@@ -5743,7 +5828,24 @@ async function renderColheitaBase(variant) {
     }))
   }
 
-  view.querySelector('#btnApply').onclick = refreshList
+  view.querySelector('#btnApply').onclick = () => {
+    pageOffset = 0
+    refreshList()
+  }
+  limitEl?.addEventListener('change', () => {
+    pageLimit = Number(limitEl.value || 50)
+    localStorage.setItem('colheita_page_limit', String(pageLimit))
+    pageOffset = 0
+    refreshList()
+  })
+  btnPrev?.addEventListener('click', () => {
+    pageOffset = Math.max(0, pageOffset - pageLimit)
+    refreshList()
+  })
+  btnNext?.addEventListener('click', () => {
+    pageOffset += pageLimit
+    refreshList()
+  })
   const btnAdd = view.querySelector('#btnAdd')
   if (btnAdd) btnAdd.onclick = () => openViagemDialog({ mode: 'create' })
   await refreshList()
@@ -6450,11 +6552,15 @@ async function renderColheitaBase(variant) {
       const raw = String(inputUmidDesc.value ?? '').trim()
       inputUmidDesc.style.background = ''
       inputUmidDesc.dataset.manual = '0'
+      inputUmidDesc.dataset.compare = ''
       if (!raw) return
 
       const current = Math.round(parseNumberPt(raw) * 100)
       if (!Number.isFinite(current)) return
-      if (current !== suggested) inputUmidDesc.dataset.manual = '1'
+      if (current !== suggested) {
+        inputUmidDesc.dataset.manual = '1'
+        inputUmidDesc.dataset.compare = current > suggested ? 'higher' : 'lower'
+      }
     }
 
     const limitFieldNames = [
@@ -6498,11 +6604,13 @@ async function renderColheitaBase(variant) {
 
         // limpar estilo legado (quando era setado inline)
         el.style.background = ''
+        el.dataset.compare = ''
 
         // manual = diferente do sugerido; se voltar ao sugerido (ou limpar), volta a ser automatico
         const isManual = current !== null && Number.isFinite(current) && current !== suggested
         el.dataset.userEdited = isManual ? '1' : '0'
         el.dataset.manual = isManual ? '1' : '0'
+        if (isManual) el.dataset.compare = current < suggested ? 'higher' : 'lower'
         if (isManual) anyDiff = true
       }
       return anyDiff
@@ -6734,6 +6842,7 @@ async function renderColheitaBase(variant) {
           hora_saida: obj.hora_saida || null,
           data_entrega: obj.data_entrega || null,
           hora_entrega: obj.hora_entrega || null,
+          expected_updated_at: viagem?.updated_at || null,
           carga_total_kg: parseNumberPt(obj.carga_total_kg),
           tara_kg: parseNumberPt(obj.tara_kg),
           umidade_pct: parsePercent100OrZero(obj.umidade_pct, 'umidade_pct'),
@@ -8633,7 +8742,7 @@ async function renderProducao() {
       <section class="panel">
         <div class="panel-head">
           <div>
-            <div class="panel-title">Controle de producao e divisao de sacas</div>
+            <div class="panel-title">Produção</div>
             <div class="panel-sub">Por talhao e por participante (dono/meeiro/parceiro). Custos preferencialmente em sacas (sem dinheiro); opcionalmente em R$ (vira sacas equivalentes).</div>
           </div>
           <div class="panel-actions producao-head-actions">

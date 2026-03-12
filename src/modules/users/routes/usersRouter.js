@@ -6,7 +6,7 @@ import { hashPassword } from '../../../auth/password.js'
 import { usuarioSessaoRepo } from '../../../repositories/usuarioSessaoRepo.js'
 import { requireCan } from '../../../middleware/auth.js'
 import { Actions, Modules } from '../../../auth/acl.js'
-import { notFound } from '../../../errors.js'
+import { conflict, notFound } from '../../../errors.js'
 import { auditService } from '../../../services/auditService.js'
 import { S, CreateBody, UpdateBody, PasswordBody } from '../validators/usersSchemas.js'
 
@@ -66,6 +66,12 @@ usersRouter.put(
     const id = req.params.id
     const exists = usuarioRepo.get(id)
     if (!exists) throw notFound('Usuario nao encontrado')
+    if (req.body.expected_updated_at && String(exists.updated_at || '') !== String(req.body.expected_updated_at || '')) {
+      throw conflict('Este usuário foi alterado por outra pessoa. Reabra o cadastro antes de salvar novamente.', {
+        code: 'STALE_RECORD',
+        current_updated_at: exists.updated_at || null,
+      })
+    }
     const row = usuarioRepo.update(
       id,
       {

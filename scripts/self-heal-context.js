@@ -260,7 +260,7 @@ function extractLessonsHeuristics({ migrateText, viagemServiceText, validateText
 
 function renderProjectContext(ctx) {
   const lines = []
-  lines.push(`# Project Context (NazcaTraker)`)
+  lines.push(`# Project Context (NazcaTracker)`)
   lines.push('')
   lines.push(`Este documento e gerado automaticamente a partir do codigo atual. Fonte: \
 \`scripts/self-heal-context.js\` (${SCRIPT_ID}).`)
@@ -268,7 +268,7 @@ function renderProjectContext(ctx) {
 
   lines.push('## Overview')
   lines.push('')
-  lines.push(`- Produto (UI): NazcaTraker`)
+  lines.push(`- Produto (UI): NazcaTracker`)
   lines.push(`- Stack: Node.js (ESM) + Express + SQLite (better-sqlite3) + UI em JS puro (SPA por hash) + paginas HTML isoladas (login/reset e paginas publicas)`)
   lines.push(`- Objetivo: registrar viagens de colheita (viagem/ficha), aplicar regras/contratos por safra+destino+tipo_plantio, calcular sacas/custos e gerar relatorios`)
   lines.push('')
@@ -337,7 +337,7 @@ function renderProjectContext(ctx) {
 
 function renderArchitecture(ctx) {
   const lines = []
-  lines.push(`# Architecture (NazcaTraker)`)
+  lines.push(`# Architecture (NazcaTracker)`)
   lines.push('')
   lines.push(`Este documento e gerado automaticamente a partir do codigo atual. Fonte: \
 \`scripts/self-heal-context.js\` (${SCRIPT_ID}).`)
@@ -525,7 +525,7 @@ function renderLicoesAprendidas(ctx) {
 
   if (!existing) {
     return [
-      '# LIÇÕES APRENDIDAS (NazcaTraker)',
+      '# LIÇÕES APRENDIDAS (NazcaTracker)',
       '',
       'Memória técnica do projeto. Entradas manuais nunca devem ser apagadas; a seção automática abaixo é mantida pelo self-heal.',
       '',
@@ -550,7 +550,7 @@ function renderReleaseChecklist(ctx) {
   const lines = []
   lines.push('# RELEASE CHECKLIST')
   lines.push('')
-  lines.push('Checklist operacional para deploy do NazcaTraker. Atualizado automaticamente; complemente com detalhes do ambiente quando necessario.')
+  lines.push('Checklist operacional para deploy do NazcaTracker. Atualizado automaticamente; complemente com detalhes do ambiente quando necessario.')
   lines.push('')
   lines.push('## Pré-deploy')
   lines.push('')

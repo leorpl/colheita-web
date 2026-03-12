@@ -1,4 +1,4 @@
-# Architecture (NazcaTraker)
+# Architecture (NazcaTracker)
 
 Este documento e gerado automaticamente a partir do codigo atual. Fonte: `scripts/self-heal-context.js` (self-heal-context/v3).
 

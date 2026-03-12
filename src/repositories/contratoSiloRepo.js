@@ -34,7 +34,7 @@ export const contratoSiloRepo = {
     if (!hdr) return null
     const faixas = db
       .prepare(
-        `SELECT ordem, data_entrega, sacas, preco_por_saca
+        `SELECT ordem, data_entrega, data_pagamento_silo, participante_id, sacas, preco_por_saca
          FROM contrato_silo_faixa
          WHERE contrato_silo_id=?
          ORDER BY ordem ASC`,
@@ -57,7 +57,7 @@ export const contratoSiloRepo = {
   },
 
   // Replace faixas por chave natural. Se faixas vazio, remove contrato.
-  replaceFaixas({ safra_id, destino_id, tipo_plantio, faixas, observacoes }, { user_id } = {}) {
+  replaceFaixas({ safra_id, destino_id, tipo_plantio, faixas, observacoes, data_pagamento_silo, responsavel_tipo, responsavel_nome }, { user_id } = {}) {
     const tp = String(tipo_plantio || '').trim().toUpperCase()
     if (!tp) throw new Error('tipo_plantio obrigatorio')
 
@@ -65,9 +65,11 @@ export const contratoSiloRepo = {
     const norm = list
       .map((f, i) => ({
         ordem: i + 1,
-        data_entrega: f?.data_entrega ? String(f.data_entrega) : null,
-        sacas: Number(f?.sacas || 0),
-        preco_por_saca: Number(f?.preco_por_saca || 0),
+           data_entrega: f?.data_entrega ? String(f.data_entrega) : null,
+           data_pagamento_silo: f?.data_pagamento_silo ? String(f.data_pagamento_silo) : null,
+           participante_id: Number(f?.participante_id || 0) || null,
+           sacas: Number(f?.sacas || 0),
+           preco_por_saca: Number(f?.preco_por_saca || 0),
       }))
       .filter((f) => Number.isFinite(f.sacas) && f.sacas > 0 && Number.isFinite(f.preco_por_saca) && f.preco_por_saca >= 0)
 
@@ -117,16 +119,21 @@ export const contratoSiloRepo = {
         `INSERT INTO contrato_silo (
            safra_id, destino_id, tipo_plantio,
            sacas_contratadas, preco_travado_por_saca,
+           data_pagamento_silo, responsavel_tipo, responsavel_nome,
            observacoes, created_by_user_id, updated_by_user_id, updated_at
-         ) VALUES (
-           @safra_id, @destino_id, @tipo_plantio,
-           @sacas_contratadas, @preco_travado_por_saca,
-           @observacoes, @created_by_user_id, @updated_by_user_id, datetime('now')
-         )
+          ) VALUES (
+            @safra_id, @destino_id, @tipo_plantio,
+            @sacas_contratadas, @preco_travado_por_saca,
+            @data_pagamento_silo, @responsavel_tipo, @responsavel_nome,
+            @observacoes, @created_by_user_id, @updated_by_user_id, datetime('now')
+          )
          ON CONFLICT(safra_id, destino_id, tipo_plantio) DO UPDATE SET
-           sacas_contratadas=excluded.sacas_contratadas,
-           preco_travado_por_saca=excluded.preco_travado_por_saca,
-           observacoes=excluded.observacoes,
+            sacas_contratadas=excluded.sacas_contratadas,
+            preco_travado_por_saca=excluded.preco_travado_por_saca,
+            data_pagamento_silo=excluded.data_pagamento_silo,
+            responsavel_tipo=excluded.responsavel_tipo,
+            responsavel_nome=excluded.responsavel_nome,
+            observacoes=excluded.observacoes,
            updated_by_user_id=@updated_by_user_id,
            updated_at=datetime('now')`,
       ).run({
@@ -135,6 +142,9 @@ export const contratoSiloRepo = {
         tipo_plantio: tp,
         sacas_contratadas: sacas_total,
         preco_travado_por_saca: preco_first,
+        data_pagamento_silo: data_pagamento_silo || null,
+        responsavel_tipo: responsavel_tipo || null,
+        responsavel_nome: responsavel_nome || null,
         observacoes: observacoes ?? null,
         created_by_user_id: user_id ?? null,
         updated_by_user_id: user_id ?? null,
@@ -151,9 +161,9 @@ export const contratoSiloRepo = {
       db.prepare('DELETE FROM contrato_silo_faixa WHERE contrato_silo_id=?').run(hdr.id)
       const ins = db.prepare(
         `INSERT INTO contrato_silo_faixa (
-           contrato_silo_id, ordem, data_entrega, sacas, preco_por_saca, created_by_user_id, updated_by_user_id, updated_at
+           contrato_silo_id, ordem, data_entrega, data_pagamento_silo, participante_id, sacas, preco_por_saca, created_by_user_id, updated_by_user_id, updated_at
           ) VALUES (
-           @contrato_silo_id, @ordem, @data_entrega, @sacas, @preco_por_saca, @created_by_user_id, @updated_by_user_id, datetime('now')
+           @contrato_silo_id, @ordem, @data_entrega, @data_pagamento_silo, @participante_id, @sacas, @preco_por_saca, @created_by_user_id, @updated_by_user_id, datetime('now')
           )`,
       )
       for (const f of norm) {

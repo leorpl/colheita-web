@@ -51,6 +51,7 @@ export const UsersSchemas = {
         .nullable()
         .refine((arr) => !arr || arr.every((m) => Object.values(Menus).includes(m)), 'menus invalidos'),
       active: z.coerce.boolean().optional().default(true),
+      expected_updated_at: z.preprocess(emptyToNull, z.string().trim().max(30).nullable().optional()),
     })
     .superRefine((v, ctx) => {
       // Keep backwards-compat for existing records, but require email for active users.

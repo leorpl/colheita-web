@@ -1,7 +1,7 @@
 import { Router } from 'express'
 
 import { viagemRepo } from '../../../repositories/viagemRepo.js'
-import { forbidden, notFound } from '../../../errors.js'
+import { conflict, forbidden, notFound } from '../../../errors.js'
 import { validateBody, validateQuery, validateParams } from '../../../middleware/validate.js'
 import { viagemService } from '../../../services/viagemService.js'
 import { requireCan } from '../../../middleware/auth.js'
@@ -85,12 +85,16 @@ viagensRouter.get(
       q.motorista_id = Number(req.user.motorista_id)
     }
     const view = String(req.query.view || 'legacy')
-    const items =
+    const allItems =
       view === 'flat' || view === 'grouped'
         ? viagemService.listView({ ...q, view })
         : viagemRepo.list(q)
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 500)
+    const offset = Math.max(Number(req.query.offset || 0), 0)
+    const total_items = Array.isArray(allItems) ? allItems.length : 0
+    const items = Array.isArray(allItems) ? allItems.slice(offset, offset + limit) : []
     const totals = viagemRepo.totals(q)
-    res.json({ items, totals, view })
+    res.json({ items, totals, view, total_items, limit, offset })
   },
 )
 
@@ -123,8 +127,9 @@ viagensRouter.post(
   requireCan(Modules.REGRAS_DESTINO, Actions.UPDATE),
   validateBody(RecalcAllBody),
   (req, res) => {
-    const r = viagemService.recalcularTodas(req.body)
-    auditService.log(req, { module_name: 'colheita', record_id: null, action_type: 'update', notes: 'recalcular-todas' })
+    const r = viagemService.recalcularTodas({ ...req.body, user_id: req.user?.id })
+    const who = req.user?.nome || req.user?.username || `#${req.user?.id || '-'}`
+    auditService.log(req, { module_name: 'colheita', record_id: null, action_type: 'update', notes: `recalcular-todas por ${who}` })
     res.status(201).json(r)
   },
 )
@@ -186,6 +191,12 @@ viagensRouter.put(
     const id = req.params.id
     const exists = viagemRepo.get(id)
     if (!exists) throw notFound('Viagem nao encontrada')
+    if (req.body.expected_updated_at && String(exists.updated_at || '') !== String(req.body.expected_updated_at || '')) {
+      throw conflict('Este registro foi alterado por outra pessoa. Reabra a colheita antes de salvar novamente.', {
+        code: 'STALE_RECORD',
+        current_updated_at: exists.updated_at || null,
+      })
+    }
     const row = viagemService.update(id, req.body, { user_id: req.user?.id })
     auditService.log(req, { module_name: 'colheita', record_id: id, action_type: 'update', old_values: exists, new_values: row })
     res.json(row)

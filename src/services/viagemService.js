@@ -58,12 +58,13 @@ export const viagemService = {
   // Recalcula os campos materializados das colheitas (viagens) usando as regras atuais.
   // Observacao: preserva os valores informados pelo usuario (pesos/percentuais e umidade_desc_pct_manual),
   // e re-aplica regras/contratos/fretes para re-materializar sacas, descontos, custos e compra.
-  recalcularTodas({ safra_id, destino_id, tipo_plantio } = {}) {
+  recalcularTodas({ safra_id, destino_id, tipo_plantio, user_id } = {}) {
     return recalcularTodasViagens({
       buildPayload: (input, opts) => this.buildPayload(input, opts),
       safra_id,
       destino_id,
       tipo_plantio,
+      user_id,
     })
   },
 

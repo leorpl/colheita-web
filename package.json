@@ -1,7 +1,7 @@
 {
   "name": "colheita-web",
   "version": "1.1.0",
-  "description": "NazcaTraker: controle interno de colheita (viagens, descontos, sacas, fretes e relatorios).",
+  "description": "NazcaTracker: controle interno de colheita (viagens, descontos, sacas, fretes e relatorios).",
   "main": "index.js",
   "scripts": {
     "context:selfheal": "node scripts/self-heal-context.js",

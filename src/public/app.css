@@ -348,12 +348,14 @@ tbody tr.hum-high td.actions{background:rgba(255,255,255,.86)}
 .contract-pane-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:8px}
 .contract-pane-head .label{margin:0}
 .contract-pane-head .hint{margin-top:4px}
+.contract-meta-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:10px}
 
 .upload-row{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:end}
 .upload-row .btn{white-space:nowrap}
 .upload-row input[type="file"]{width:100%}
 @media (max-width: 920px){
   .contract-split{grid-template-columns:1fr}
+  .contract-meta-grid{grid-template-columns:1fr}
 }
 @media (max-width: 520px){
   .upload-row{grid-template-columns:1fr}
@@ -372,6 +374,18 @@ input[data-manual="1"],
 select[data-manual="1"],
 textarea[data-manual="1"]{
   background:#fff3c4 !important;
+}
+input[data-compare="higher"],
+select[data-compare="higher"],
+textarea[data-compare="higher"]{
+  background:#ffd8d3 !important;
+  border-color:rgba(180,35,24,.42) !important;
+}
+input[data-compare="lower"],
+select[data-compare="lower"],
+textarea[data-compare="lower"]{
+  background:#fff3c4 !important;
+  border-color:rgba(209,154,43,.42) !important;
 }
 
 /* Grid tables: consistent alignment & density */

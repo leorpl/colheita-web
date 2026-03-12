@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { plantioTipoRepo } from '../../repositories/plantioTipoRepo.js'
-import { notFound } from '../../errors.js'
+import { conflict, notFound } from '../../errors.js'
 import { validateBody, validateParams } from '../../middleware/validate.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
@@ -47,6 +47,9 @@ tiposPlantioRouter.put(
   const id = req.params.id
   const exists = plantioTipoRepo.get(id)
   if (!exists) throw notFound('Tipo de plantio nao encontrado')
+  if (req.body.expected_updated_at && String(exists.updated_at || '') !== String(req.body.expected_updated_at || '')) {
+    throw conflict('Este tipo de plantio foi alterado por outra pessoa. Reabra o cadastro antes de salvar novamente.', { code: 'STALE_RECORD', current_updated_at: exists.updated_at || null })
+  }
   const row = plantioTipoRepo.update(id, req.body, { user_id: req.user?.id })
   auditService.log(req, { module_name: 'tipos-plantio', record_id: id, action_type: 'update', old_values: exists, new_values: row })
   res.json(row)

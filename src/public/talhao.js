@@ -148,6 +148,10 @@ async function loadHeader() {
       <div class="mstat"><div class="mstat-k">Sacas (periodo)</div><div class="mstat-v" id="mSacas">-</div></div>
       <div class="mstat"><div class="mstat-k">Area colhida (%)</div><div class="mstat-v" id="mPct">-</div></div>
       <div class="mstat"><div class="mstat-k">Hectares colhidos</div><div class="mstat-v" id="mHa">-</div></div>
+      <div class="mstat"><div class="mstat-k">Produtividade</div><div class="mstat-v" id="mProd">-</div></div>
+      <div class="mstat"><div class="mstat-k">Produtividade ajustada</div><div class="mstat-v" id="mProdAdj">-</div></div>
+      <div class="mstat"><div class="mstat-k">Produtividade</div><div class="mstat-v" id="mProd">-</div></div>
+      <div class="mstat"><div class="mstat-k">Produtividade ajustada</div><div class="mstat-v" id="mProdAdj">-</div></div>
     </div>
 
  
@@ -259,8 +263,12 @@ async function run() {
 
   const mPct = infoEl.querySelector('#mPct')
   const mHa = infoEl.querySelector('#mHa')
+  const mProd = infoEl.querySelector('#mProd')
+  const mProdAdj = infoEl.querySelector('#mProdAdj')
   if (mPct) mPct.textContent = pct === null ? '-' : `${fmtNum(pct * 100, 2)}%`
   if (mHa) mHa.textContent = haColhida === null ? '-' : `${fmtNum(haColhida, 2)} ha`
+  if (mProd) mProd.textContent = `${fmtNum(Number(r?.produtividade?.sacas_ha || 0), 2)} sc/ha`
+  if (mProdAdj) mProdAdj.textContent = `${fmtNum(Number(r?.produtividade?.sacas_ha_ajustada || 0), 2)} sc/ha`
 
 }
 

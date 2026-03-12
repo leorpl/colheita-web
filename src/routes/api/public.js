@@ -110,6 +110,12 @@ publicRouter.get(
         pct_area_colhida,
         hectares_colhidos,
       },
+      produtividade: {
+        sacas_ha:
+          Number(t.hectares || 0) > 0 ? Number(totals?.sacas || 0) / Number(t.hectares || 1) : 0,
+        sacas_ha_ajustada:
+          Number(hectares_colhidos || 0) > 0 ? Number(totals?.sacas || 0) / Number(hectares_colhidos || 1) : 0,
+      },
     })
   },
 )

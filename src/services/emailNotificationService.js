@@ -125,7 +125,7 @@ export const emailNotificationService = {
     const fields = summarizeFields(a.changed_fields_json)
     const fieldLines = fields.map((f) => `- ${f.key}: ${String(f.from ?? '')} -> ${String(f.to ?? '')}`).join('\n')
 
-    const subject = `[NazcaTraker] ${String(a.module_name || '').toUpperCase()} ${String(a.action_type || '').toUpperCase()}${a.record_id != null ? ` #${a.record_id}` : ''}`
+    const subject = `[NazcaTracker] ${String(a.module_name || '').toUpperCase()} ${String(a.action_type || '').toUpperCase()}${a.record_id != null ? ` #${a.record_id}` : ''}`
 
     const text = [
       `Modulo: ${a.module_name}`,

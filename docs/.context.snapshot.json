@@ -1,6 +1,6 @@
 {
-  "signature": "88c649f3eb1b2008b04ae1a6675dc9ef6a6bb1c0373b2407e6eedad945148357",
-  "generated_at": "2026-03-11T10:57:20.336Z",
+  "signature": "2bf00a8a4b3cdb07c14f5fde488058be1e5dd0e8dfd52d476a36524ef232d190",
+  "generated_at": "2026-03-12T13:54:36.062Z",
   "runtime": {
     "node": "v24.14.0",
     "platform": "win32"
@@ -1109,15 +1109,15 @@
       }
     ],
     "apiSchemasHash": "70291de0dc7be0a3d002bfd9d9e0268bbbcd5e1191d462e8d263bacbeaef4d5c",
-    "migrateHash": "21a840bcb706921df048053288218f5ba5b150fda058e7363786749f4fb0e2f4",
+    "migrateHash": "8e294ab7eef4a7cf6a4b37498900c2596860f733310197e7f95fbfd7b82b949f",
     "apiIndexHash": "f46ee9f41724d6b724400185377c1516951fae7cbfa3273acc589b273b441ebe"
   },
   "docs_hashes": {
-    "PROJECT_CONTEXT.md": "96cd04c1d524e7402a38879d293764a45a16f7d6647fb2d1377f6ff272c98631",
-    "ARCHITECTURE.md": "66be37c755d3535e4d64ecc08c7d6a087840f6b9ec5c9130cf4573397efbacb2",
+    "PROJECT_CONTEXT.md": "b0f674df6af47438bc39c8369dfc6f0d32dad8cb1d45a92453302d260b048a86",
+    "ARCHITECTURE.md": "e83379493f132f3bae71b9ad02d0fc284f54dd5fe1f065d61cf9cb30d34b0fe7",
     "TASKS_OFICIAL.md": "d0c2ef8c8bf922f3e9aa39c3d36a95ebe8961c167386dd80ec429c6d0375bbe1",
     "CHANGELOG.md": "7cc29ac5007e79134959ffd97f3df04bb1b6641bf5f42cfb40c7abc790661f46",
     "LIÇÕESAPRENDIDAS.MD": "30f62df514d76838e953f305c705d819ef02484ee17a3ae9c512dc0e17efdb17",
-    "RELEASE_CHECKLIST.md": "2969bceba556de1c6c07eb5c9a47cc1412f9f0e9d026b241bbf9d6dd68606712"
+    "RELEASE_CHECKLIST.md": "569f6b44d780a4f9dfbdcc04bb516dfed5bca5148d2330b0fdc7d566d28439f5"
   }
 }

@@ -95,6 +95,7 @@ export const ViagemSchemas = {
       avariados_limite_pct: S.Percent100.optional().nullable(),
       esverdiados_limite_pct: S.Percent100.optional().nullable(),
       quebrados_limite_pct: S.Percent100.optional().nullable(),
+      expected_updated_at: z.preprocess(emptyToNull, z.string().trim().max(30).nullable().optional()),
     })
     .superRefine((v, ctx) => {
       if (!(Array.isArray(v.talhoes) && v.talhoes.length) && !v.talhao_id) {
@@ -184,6 +185,8 @@ export const ViagemSchemas = {
     talhao_id: z.coerce.number().int().positive().optional(),
     destino_id: z.coerce.number().int().positive().optional(),
     motorista_id: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().min(1).max(500).optional(),
+    offset: z.coerce.number().int().min(0).max(200000).optional(),
     view: z.enum(['legacy', 'flat', 'grouped']).optional(),
     de: z
       .preprocess((v) => {

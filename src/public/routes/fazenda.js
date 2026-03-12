@@ -20,7 +20,7 @@ export async function renderFazendaRoute({ activeNav, setView, escapeHtml, fazen
           <div class="span12" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
             <img src="/logo.png" alt="${escapeHtml(f.nome)}" style="width:140px;height:140px;object-fit:contain;background:rgba(255,255,255,.75);border:1px solid rgba(15,26,22,.14);border-radius:18px;padding:14px" />
             <div>
-              <div style="font-family:var(--serif);font-size:22px">NazcaTraker</div>
+              <div style="font-family:var(--serif);font-size:22px">NazcaTracker</div>
               <div style="margin-top:6px;color:var(--muted)">Base interna: colheita (safras, talhões, destinos, viagens, descontos e fretes).</div>
               <div style="margin-top:10px" class="pill"><span class="dot warn"></span><span>Fontes publicas: Google Maps / Instagram / Facebook.</span></div>
             </div>

@@ -2,7 +2,7 @@ import { db } from '../../../db/db.js'
 import { unprocessable } from '../../../errors.js'
 import { viagemRepo } from '../../../repositories/viagemRepo.js'
 
-export function recalcularTodasViagens({ buildPayload, safra_id, destino_id, tipo_plantio } = {}) {
+export function recalcularTodasViagens({ buildPayload, safra_id, destino_id, tipo_plantio, user_id } = {}) {
   if (typeof buildPayload !== 'function') {
     throw new Error('buildPayload obrigatorio')
   }
@@ -92,7 +92,7 @@ export function recalcularTodasViagens({ buildPayload, safra_id, destino_id, tip
         }
 
         const payload = buildPayload(input, { current_id: Number(v.id), exclude_id: Number(v.id) })
-        viagemRepo.update(Number(v.id), payload)
+        viagemRepo.update(Number(v.id), payload, { user_id })
         updated++
       } catch (e) {
         skipped++

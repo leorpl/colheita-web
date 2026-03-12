@@ -239,6 +239,7 @@ destinoRegrasRouter.post(
     destino_id: body.destino_id,
     custo_silo_por_saca: Number(body.custo_silo_por_saca || 0),
     custo_terceiros_por_saca: Number(body.custo_terceiros_por_saca || 0),
+    cobrar_secagem_no_silo: body.cobrar_secagem_no_silo === undefined ? 1 : (body.cobrar_secagem_no_silo ? 1 : 0),
     impureza_limite_pct: normalizePercent100(
       body.impureza_limite_pct ?? 0,
       'impureza_limite_pct',
@@ -340,6 +341,7 @@ destinoRegrasRouter.put(
       destino_id: body.destino_id,
       custo_silo_por_saca: Number(body.custo_silo_por_saca || 0),
       custo_terceiros_por_saca: Number(body.custo_terceiros_por_saca || 0),
+      cobrar_secagem_no_silo: body.cobrar_secagem_no_silo === undefined ? 1 : (body.cobrar_secagem_no_silo ? 1 : 0),
       impureza_limite_pct: normalizePercent100(
         body.impureza_limite_pct ?? 0,
         'impureza_limite_pct',

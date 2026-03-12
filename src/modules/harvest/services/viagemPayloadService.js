@@ -151,7 +151,10 @@ export function buildViagemPayload(input, opts = {}, { resolveUmidadeFaixa } = {
   const faixaUmid = resolveUmidadeFaixa({ umidade_pct: payload.umidade_pct, faixas })
 
   const umidade_desc_pct = faixaUmid ? faixaUmid.desconto_pct : 0
-  const secagem_custo_por_saca = faixaUmid ? Number(faixaUmid.custo_secagem_por_saca || 0) : 0
+  const secagem_custo_por_saca =
+    Number(regra?.cobrar_secagem_no_silo ?? 1) === 1 && faixaUmid
+      ? Number(faixaUmid.custo_secagem_por_saca || 0)
+      : 0
 
   const destino_regra_existe = true
   const umidade_faixas_qtd = faixas.length

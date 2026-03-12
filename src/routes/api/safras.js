@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { validateBody, validateParams } from '../../middleware/validate.js'
 import { safraRepo } from '../../repositories/safraRepo.js'
-import { notFound } from '../../errors.js'
+import { conflict, notFound } from '../../errors.js'
 import { requirePerm } from '../../middleware/auth.js'
 import { Actions, Modules } from '../../auth/acl.js'
 import { S, SafraSchemas } from '../../validation/apiSchemas.js'
@@ -48,6 +48,9 @@ safrasRouter.put(
   const id = req.params.id
   const exists = safraRepo.get(id)
   if (!exists) throw notFound('Safra nao encontrada')
+  if (req.body.expected_updated_at && String(exists.updated_at || '') !== String(req.body.expected_updated_at || '')) {
+    throw conflict('Esta safra foi alterada por outra pessoa. Reabra o cadastro antes de salvar novamente.', { code: 'STALE_RECORD', current_updated_at: exists.updated_at || null })
+  }
   const row = safraRepo.update(id, req.body, { user_id: req.user?.id })
   auditService.log(req, { module_name: 'safras', record_id: id, action_type: 'update', old_values: exists, new_values: row })
   res.json(row)

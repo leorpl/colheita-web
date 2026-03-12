@@ -85,7 +85,7 @@ export async function sendPasswordResetEmail({ to, resetUrl }) {
     await transporter.sendMail({
       from,
       to: email,
-      subject: 'Redefinir senha - NazcaTraker',
+      subject: 'Redefinir senha - NazcaTracker',
       text: `Para redefinir sua senha, acesse o link:\n\n${url}\n\nSe voce nao solicitou, ignore este e-mail.`,
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.4">

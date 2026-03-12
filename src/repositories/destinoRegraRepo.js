@@ -23,8 +23,9 @@ export const destinoRegraRepo = {
     db.prepare(
        `INSERT INTO destino_regra (
            safra_id, destino_id, trava_sacas,
-           custo_silo_por_saca, custo_terceiros_por_saca,
-           impureza_limite_pct, ardidos_limite_pct, queimados_limite_pct,
+          custo_silo_por_saca, custo_terceiros_por_saca,
+          cobrar_secagem_no_silo,
+          impureza_limite_pct, ardidos_limite_pct, queimados_limite_pct,
            avariados_limite_pct, esverdiados_limite_pct, quebrados_limite_pct,
            created_by_user_id, updated_by_user_id, updated_at
          ) VALUES (
@@ -63,15 +64,17 @@ export const destinoRegraRepo = {
          avariados_limite_pct, esverdiados_limite_pct, quebrados_limite_pct,
          created_by_user_id, updated_by_user_id, updated_at
        ) VALUES (
-         @safra_id, @destino_id, @tipo_plantio,
-         @custo_silo_por_saca, @custo_terceiros_por_saca,
-         @impureza_limite_pct, @ardidos_limite_pct, @queimados_limite_pct,
+          @safra_id, @destino_id, @tipo_plantio,
+          @custo_silo_por_saca, @custo_terceiros_por_saca,
+          @cobrar_secagem_no_silo,
+          @impureza_limite_pct, @ardidos_limite_pct, @queimados_limite_pct,
          @avariados_limite_pct, @esverdiados_limite_pct, @quebrados_limite_pct,
          @created_by_user_id, @updated_by_user_id, datetime('now')
        )
        ON CONFLICT(safra_id, destino_id, tipo_plantio) DO UPDATE SET
-         custo_silo_por_saca=excluded.custo_silo_por_saca,
-         custo_terceiros_por_saca=excluded.custo_terceiros_por_saca,
+          custo_silo_por_saca=excluded.custo_silo_por_saca,
+          custo_terceiros_por_saca=excluded.custo_terceiros_por_saca,
+          cobrar_secagem_no_silo=excluded.cobrar_secagem_no_silo,
          impureza_limite_pct=excluded.impureza_limite_pct,
          ardidos_limite_pct=excluded.ardidos_limite_pct,
          queimados_limite_pct=excluded.queimados_limite_pct,
@@ -95,8 +98,9 @@ export const destinoRegraRepo = {
        SET safra_id=@safra_id,
            destino_id=@destino_id,
            tipo_plantio=@tipo_plantio,
-           custo_silo_por_saca=@custo_silo_por_saca,
-           custo_terceiros_por_saca=@custo_terceiros_por_saca,
+            custo_silo_por_saca=@custo_silo_por_saca,
+            custo_terceiros_por_saca=@custo_terceiros_por_saca,
+            cobrar_secagem_no_silo=@cobrar_secagem_no_silo,
            impureza_limite_pct=@impureza_limite_pct,
            ardidos_limite_pct=@ardidos_limite_pct,
            queimados_limite_pct=@queimados_limite_pct,

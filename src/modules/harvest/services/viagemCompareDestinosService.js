@@ -222,9 +222,10 @@ export function compararDestinos(input, { resolveUmidadeFaixa } = {}) {
       faixas,
     })
     const umidade_desc_pct = faixaUmid ? Number(faixaUmid.desconto_pct || 0) : 0
-    const secagem_custo_por_saca = faixaUmid
-      ? Number(faixaUmid.custo_secagem_por_saca || 0)
-      : 0
+    const secagem_custo_por_saca =
+      Number(r.cobrar_secagem_no_silo ?? 1) === 1 && faixaUmid
+        ? Number(faixaUmid.custo_secagem_por_saca || 0)
+        : 0
 
     const calc = calcularViagem({
       ...base,

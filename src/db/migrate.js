@@ -926,6 +926,24 @@ export function migrate() {
   if (!hasColumn('contrato_silo_faixa', 'data_entrega')) {
     db.exec('ALTER TABLE contrato_silo_faixa ADD COLUMN data_entrega TEXT')
   }
+  if (!hasColumn('contrato_silo_faixa', 'data_pagamento_silo')) {
+    db.exec('ALTER TABLE contrato_silo_faixa ADD COLUMN data_pagamento_silo TEXT')
+  }
+  if (!hasColumn('contrato_silo_faixa', 'participante_id')) {
+    db.exec('ALTER TABLE contrato_silo_faixa ADD COLUMN participante_id INTEGER')
+  }
+  if (!hasColumn('contrato_silo', 'data_pagamento_silo')) {
+    db.exec('ALTER TABLE contrato_silo ADD COLUMN data_pagamento_silo TEXT')
+  }
+  if (!hasColumn('contrato_silo', 'responsavel_tipo')) {
+    db.exec('ALTER TABLE contrato_silo ADD COLUMN responsavel_tipo TEXT')
+  }
+  if (!hasColumn('contrato_silo', 'responsavel_nome')) {
+    db.exec('ALTER TABLE contrato_silo ADD COLUMN responsavel_nome TEXT')
+  }
+  if (!hasColumn('destino_regra_plantio', 'cobrar_secagem_no_silo')) {
+    db.exec("ALTER TABLE destino_regra_plantio ADD COLUMN cobrar_secagem_no_silo INTEGER NOT NULL DEFAULT 1")
+  }
 
   // destino: remover trava_sacas (agora fica nas regras por safra+plantio)
   if (hasColumn('destino', 'trava_sacas')) {
@@ -996,6 +1014,9 @@ export function migrate() {
       tipo_plantio TEXT NOT NULL,
       sacas_contratadas REAL NOT NULL,
       preco_travado_por_saca REAL NOT NULL,
+      data_pagamento_silo TEXT,
+      responsavel_tipo TEXT,
+      responsavel_nome TEXT,
       observacoes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT,
@@ -1012,12 +1033,15 @@ export function migrate() {
       contrato_silo_id INTEGER NOT NULL,
       ordem INTEGER NOT NULL,
       data_entrega TEXT,
+      data_pagamento_silo TEXT,
+      participante_id INTEGER,
       sacas REAL NOT NULL,
       preco_por_saca REAL NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT,
       UNIQUE (contrato_silo_id, ordem),
-      FOREIGN KEY (contrato_silo_id) REFERENCES contrato_silo(id) ON DELETE CASCADE
+      FOREIGN KEY (contrato_silo_id) REFERENCES contrato_silo(id) ON DELETE CASCADE,
+      FOREIGN KEY (participante_id) REFERENCES participante(id) ON DELETE SET NULL
     );
     CREATE INDEX IF NOT EXISTS idx_contrato_silo_faixa_contrato ON contrato_silo_faixa(contrato_silo_id);
   `)

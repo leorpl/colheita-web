@@ -1,10 +1,10 @@
-# Project Context (NazcaTraker)
+# Project Context (NazcaTracker)
 
 Este documento e gerado automaticamente a partir do codigo atual. Fonte: `scripts/self-heal-context.js` (self-heal-context/v3).
 
 ## Overview
 
-- Produto (UI): NazcaTraker
+- Produto (UI): NazcaTracker
 - Stack: Node.js (ESM) + Express + SQLite (better-sqlite3) + UI em JS puro (SPA por hash) + paginas HTML isoladas (login/reset e paginas publicas)
 - Objetivo: registrar viagens de colheita (viagem/ficha), aplicar regras/contratos por safra+destino+tipo_plantio, calcular sacas/custos e gerar relatorios
 

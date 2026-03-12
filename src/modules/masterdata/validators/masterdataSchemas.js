@@ -16,6 +16,7 @@ export const SafraSchemas = {
       .preprocess((v) => normalizeDateToYMD(emptyToNull(v)), z.string().nullable().optional())
       .refine((v) => v == null || isValidDateYMD(v), 'Data invalida (YYYY-MM-DD)'),
     area_ha: z.coerce.number().min(0).max(1_000_000).optional().default(0),
+    expected_updated_at: z.preprocess(emptyToNull, z.string().trim().max(30).nullable().optional()),
   }),
   PainelBody: z.object({
     painel: z.coerce.boolean().default(true),
@@ -39,6 +40,7 @@ export const TalhaoSchemas = {
     calagem: S.OptText120,
     gessagem: S.OptText120,
     fosforo_corretivo: S.OptText120,
+    expected_updated_at: z.preprocess(emptyToNull, z.string().trim().max(30).nullable().optional()),
     geometry_geojson: z.unknown().optional().nullable(),
     geometry_props_json: z.unknown().optional().nullable(),
     geometry_source_name: z.preprocess(emptyToNull, z.string().trim().max(255).nullable().optional()),
@@ -55,6 +57,7 @@ export const DestinoSchemas = {
       .optional()
       .nullable(),
     observacoes: S.OptNotes,
+    expected_updated_at: z.preprocess(emptyToNull, z.string().trim().max(30).nullable().optional()),
   }),
 }
 
@@ -79,6 +82,7 @@ export const MotoristaSchemas = {
       .preprocess(emptyToNull, z.union([z.coerce.number().min(0).max(500_000), z.null()]))
       .optional()
       .nullable(),
+    expected_updated_at: z.preprocess(emptyToNull, z.string().trim().max(30).nullable().optional()),
   }),
 }
 
@@ -145,6 +149,7 @@ export const FreteSchemas = {
 export const TiposPlantioSchemas = {
   Body: z.object({
     nome: z.string().trim().min(1).max(MAX.short),
+    expected_updated_at: z.preprocess(emptyToNull, z.string().trim().max(30).nullable().optional()),
   }),
 }
 
@@ -198,6 +203,7 @@ export const DestinoRegrasSchemas = {
 
     custo_silo_por_saca: z.coerce.number().min(0).max(999_999).optional().nullable(),
     custo_terceiros_por_saca: z.coerce.number().min(0).max(999_999).optional().nullable(),
+    cobrar_secagem_no_silo: z.coerce.boolean().optional(),
 
     impureza_limite_pct: S.Percent100.optional().nullable(),
     ardidos_limite_pct: S.Percent100.optional().nullable(),
